@@ -1,0 +1,28 @@
+# FlashReserve Interview Notes
+
+## One-Minute Pitch
+
+FlashReserve is a flash sale system that prevents overselling by separating temporary reservations from final orders. It uses Redis for fast atomic reservation under burst traffic and PostgreSQL as the durable source of truth. A worker expires abandoned reservations, and WebSockets keep clients updated with approximate live stock.
+
+## Questions To Expect
+
+### How do you prevent overselling?
+
+The reservation API checks stock on the server and uses Redis atomic operations to reserve stock quickly. PostgreSQL records the reservation durably. Order confirmation validates the reservation state and deadline before creating an idempotent order.
+
+### Why not just lock a PostgreSQL row?
+
+PostgreSQL row locking is correct and simpler, but under a large flash-sale burst it can create heavy contention on the inventory row. Redis gives a faster front line for reservation counters, while PostgreSQL still owns durable state.
+
+### What happens if the expiry worker is down?
+
+Reservations may expire late, but confirmation still checks the reservation deadline. That means an expired reservation cannot be confirmed just because the worker has not processed it yet.
+
+### Why not microservices?
+
+The first version does not need independent deployment or scaling per domain. A modular monolith keeps boundaries clear while avoiding distributed transactions and network failure between internal modules.
+
+### How would you scale it?
+
+Start with Redis atomic scripts and per-product counters. Add rate limits and a waiting room for extreme bursts. If WebSocket fanout grows, use Redis pub/sub or a dedicated realtime gateway. If order processing grows, split workers independently before splitting the whole backend.
+
