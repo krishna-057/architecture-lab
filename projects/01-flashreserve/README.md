@@ -37,6 +37,31 @@ FlashReserve solves this by separating short-lived reservations from finalized o
 | ORM | Prisma | Fast schema iteration, typed queries, and readable data model. |
 | Local Infra | Docker Compose | Enough reproducibility without Kubernetes-level overhead. |
 
+## Local Development Infra
+
+FlashReserve now includes a minimal local infra stack at `projects/01-flashreserve/compose.yaml`.
+
+Included services:
+- PostgreSQL 17 for durable records.
+- Redis 7 with append-only persistence for reservation counters, queues, and expiry coordination.
+
+Why this shape:
+- It matches the documented architecture without forcing app scaffolding before the domain model exists.
+- It keeps state local to the project with bind mounts under `projects/01-flashreserve/.data/`, which keeps heavy Docker-backed files on `K:\AutoPilot_Projects\FlashReserve`.
+- It is easy to tear down and rebuild during rapid schema changes early in the lab.
+
+Quick start:
+
+```powershell
+Copy-Item projects/01-flashreserve/.env.example projects/01-flashreserve/.env
+docker compose -f projects/01-flashreserve/compose.yaml up -d
+docker compose -f projects/01-flashreserve/compose.yaml ps
+```
+
+Connection defaults:
+- PostgreSQL: `postgresql://flashreserve:flashreserve@localhost:5432/flashreserve`
+- Redis: `redis://localhost:6379`
+
 ## Why This Architecture
 
 The first version should be a modular monolith plus worker, not microservices.
@@ -82,4 +107,3 @@ The second bottleneck is live update fanout. We can evolve WebSocket broadcastin
 - Multi-region inventory.
 - Complex recommendation systems.
 - Marketplace seller workflows.
-

@@ -8,7 +8,7 @@ Tasks should stay small enough for one focused session.
 
 - [ ] Create FlashReserve app scaffold.
 - [ ] Define product flows and core entities.
-- [ ] Add local Docker Compose for PostgreSQL and Redis.
+- [x] Add local Docker Compose for PostgreSQL and Redis.
 - [ ] Add initial database schema for users, products, inventory, reservations, and orders.
 - [ ] Implement reservation creation API.
 - [ ] Add reservation expiry worker.
@@ -22,4 +22,3 @@ Tasks should stay small enough for one focused session.
 - [ ] Add PersonaBridge scaffold.
 - [ ] Add CollabFlow scaffold.
 - [ ] Add HookRelay scaffold.
-

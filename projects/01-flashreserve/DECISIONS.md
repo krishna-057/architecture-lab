@@ -51,3 +51,15 @@ Why:
 Rejected:
 - Stripe integration in the first slice: valuable later, distracting now.
 
+## Decision 5: Keep Local Infra State Inside The Project Workspace
+
+We will run PostgreSQL and Redis through Docker Compose with bind-mounted data directories under `projects/01-flashreserve/.data/`.
+
+Why:
+- The lab explicitly prefers keeping project-heavy files on `K:\AutoPilot_Projects`.
+- Bind mounts make it obvious where local state lives during rapid iteration.
+- Resetting local infrastructure for schema changes is simpler when the data path is visible in the repo layout.
+
+Rejected:
+- Docker named volumes by default: workable, but less explicit about where data accumulates on Windows.
+- Installing PostgreSQL and Redis directly on the host: more machine-specific setup and harder to reproduce.

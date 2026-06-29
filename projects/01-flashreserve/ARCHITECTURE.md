@@ -27,6 +27,15 @@ BullMQ worker
   +--> confirms queued order work
 ```
 
+## Local Development Topology
+
+The first infrastructure slice uses Docker Compose with two stateful services only:
+
+- PostgreSQL for durable product, reservation, and order records.
+- Redis for reservation counters, BullMQ storage, and fast expiry coordination.
+
+Both services use bind mounts under `projects/01-flashreserve/.data/` rather than Docker named volumes. That keeps large local data files inside the project workspace on `K:` and makes cleanup explicit when resetting the lab.
+
 ## Core Domain Model
 
 Initial entities:
@@ -82,6 +91,17 @@ Recommended backend modules:
 - `realtime`
 - `workers`
 
+## Local Infra Files
+
+```text
+projects/01-flashreserve/
+  compose.yaml
+  .env.example
+  .data/
+    postgres/
+    redis/
+```
+
 ## API Sketch
 
 ```text
@@ -101,4 +121,3 @@ reservation.created
 reservation.expired
 order.confirmed
 ```
-

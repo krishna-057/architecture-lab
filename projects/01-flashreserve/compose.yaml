@@ -1,0 +1,53 @@
+name: flashreserve-local
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${FLASHRESERVE_POSTGRES_DB:-flashreserve}
+      POSTGRES_USER: ${FLASHRESERVE_POSTGRES_USER:-flashreserve}
+      POSTGRES_PASSWORD: ${FLASHRESERVE_POSTGRES_PASSWORD:-flashreserve}
+    ports:
+      - "${FLASHRESERVE_POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - ./.data/postgres:/var/lib/postgresql/data
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - pg_isready -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - flashreserve
+
+  redis:
+    image: redis:7.4-alpine
+    restart: unless-stopped
+    command:
+      - redis-server
+      - --appendonly
+      - "yes"
+      - --save
+      - "60"
+      - "1"
+    ports:
+      - "${FLASHRESERVE_REDIS_PORT:-6379}:6379"
+    volumes:
+      - ./.data/redis:/data
+    healthcheck:
+      test:
+        - CMD
+        - redis-cli
+        - ping
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+    networks:
+      - flashreserve
+
+networks:
+  flashreserve:
