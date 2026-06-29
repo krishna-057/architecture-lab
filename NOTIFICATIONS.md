@@ -4,7 +4,20 @@ Codex mobile notifications are not required for this project.
 
 The fallback notification channel is GitHub Issues because the project already lives on GitHub and GitHub can notify through the mobile app or email.
 
-## Primary Fallback: GitHub Issues
+## Fast Channel: Telegram
+
+Telegram can be used for quick personal pings when a daily run completes or needs attention.
+
+Local setup:
+
+```powershell
+.\scripts\telegram-updates.ps1
+.\scripts\telegram-notify.ps1 -Message "FlashReserve notification test"
+```
+
+See `docs/telegram-notifications.md`.
+
+## Durable Fallback: GitHub Issues
 
 When the daily AI contributor needs human input, it should:
 
@@ -58,4 +71,3 @@ These can be added later if GitHub notifications are not enough:
 - Slack webhook
 
 For this project, GitHub Issues is the least extra infrastructure.
-
