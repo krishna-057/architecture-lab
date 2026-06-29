@@ -16,4 +16,4 @@ Current workspace:
 K:\AutoPilot_Projects\FlashReserve
 ```
 
-Start with `MASTER_PLAN.md`, then read `WORKFLOW.md` and `SETUP.md`.
+Start with `MASTER_PLAN.md`, then read `WORKFLOW.md`, `SETUP.md`, and `NOTIFICATIONS.md`.
