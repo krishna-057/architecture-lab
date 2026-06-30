@@ -2,6 +2,21 @@
 
 ## 2026-06-30
 
+Created the initial FlashReserve app scaffold under `projects/01-flashreserve`.
+
+Added:
+- `apps/api` as the NestJS modular monolith backend scaffold.
+- `apps/web` as the Next.js frontend shell.
+- `scripts/check-workspace.mjs` as a dependency-free scaffold sanity check.
+
+Documented the workspace split in the FlashReserve README, architecture notes, and decision log.
+
+Validated the work by running:
+- `node scripts/check-workspace.mjs`
+
+Next recommended task:
+- Implement the reservation creation API inside `apps/api/src/reservations`.
+
 Completed the initial FlashReserve PostgreSQL schema at `projects/01-flashreserve/db/schema.sql`.
 
 Added durable tables for:

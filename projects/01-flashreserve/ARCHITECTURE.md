@@ -101,12 +101,20 @@ Recommended backend modules:
 - `realtime`
 - `workers`
 
+The initial NestJS scaffold mirrors those modules under `apps/api/src`. They are empty modules for now by design: the next implementation slice can add the reservation creation controller and service without inventing folder structure during feature work.
+
 ## Local Infra Files
 
 ```text
 projects/01-flashreserve/
   compose.yaml
   .env.example
+  package.json
+  apps/
+    api/
+    web/
+  scripts/
+    check-workspace.mjs
   db/
     schema.sql
   .data/

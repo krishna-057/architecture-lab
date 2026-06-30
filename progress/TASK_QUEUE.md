@@ -6,7 +6,7 @@ Tasks should stay small enough for one focused session.
 
 ### Ready
 
-- [ ] Create FlashReserve app scaffold.
+- [x] Create FlashReserve app scaffold.
 - [ ] Define product flows and core entities.
 - [x] Add local Docker Compose for PostgreSQL and Redis.
 - [x] Add initial database schema for users, products, inventory, reservations, and orders.

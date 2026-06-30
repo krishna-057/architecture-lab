@@ -76,3 +76,18 @@ Why:
 Rejected:
 - Persisting only an `available_quantity` number: simpler at first glance, but it hides how much stock is merely held versus permanently sold.
 - One inventory movement row per reservation as the primary read model: more auditable, but heavier than needed for the first portfolio slice.
+
+## Decision 7: Use A Small NPM Workspace For The App Scaffold
+
+We will keep FlashReserve's first executable app scaffold inside `projects/01-flashreserve` as an npm workspace with `apps/api` and `apps/web`.
+
+Why:
+- The project is full-stack, so the frontend and backend need separate commands and dependencies.
+- A workspace keeps them in one portfolio project without introducing a heavier monorepo tool before it is useful.
+- The backend can stay a modular monolith in NestJS while the frontend stays a standard Next.js app.
+- The first scaffold can be verified without installing dependencies, which respects the low-disk-space constraint on the machine.
+
+Rejected:
+- A single Next.js app with API routes for everything: simpler, but weaker for the reservation worker, Redis, and backend architecture discussion.
+- Nx/Turborepo from day one: useful later, but too much tooling before there is meaningful shared build complexity.
+- Separate Git repositories for API and web: unnecessary coordination overhead for a 30-day portfolio project.

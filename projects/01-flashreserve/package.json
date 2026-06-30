@@ -1,0 +1,17 @@
+{
+  "name": "flashreserve",
+  "private": true,
+  "version": "0.1.0",
+  "description": "High-concurrency flash sale reservation system.",
+  "workspaces": [
+    "apps/*"
+  ],
+  "scripts": {
+    "check": "node scripts/check-workspace.mjs",
+    "dev:api": "npm run dev -w @flashreserve/api",
+    "dev:web": "npm run dev -w @flashreserve/web"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

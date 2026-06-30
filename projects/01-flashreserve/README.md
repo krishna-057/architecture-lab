@@ -87,6 +87,32 @@ Get-Content projects/01-flashreserve/db/schema.sql | `
   psql -U flashreserve -d flashreserve -v ON_ERROR_STOP=1
 ```
 
+## App Scaffold
+
+FlashReserve now has a minimal npm workspace scaffold at `projects/01-flashreserve`.
+
+```text
+projects/01-flashreserve/
+  apps/
+    api/  # NestJS modular monolith backend
+    web/  # Next.js frontend shell
+  scripts/
+    check-workspace.mjs
+```
+
+Why this shape:
+- It keeps the frontend and backend separate enough for realistic full-stack work.
+- It avoids a premature microservice layout while still giving the backend clear module boundaries.
+- It gives the next reservation API task a stable home under `apps/api/src/reservations`.
+- It does not install dependencies yet, so the scaffold stays lightweight and avoids unnecessary disk use before the first executable slice.
+
+Validate the scaffold:
+
+```powershell
+cd projects/01-flashreserve
+node scripts/check-workspace.mjs
+```
+
 ## Why This Architecture
 
 The first version should be a modular monolith plus worker, not microservices.
