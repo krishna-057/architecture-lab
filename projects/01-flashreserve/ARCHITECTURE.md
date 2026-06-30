@@ -47,6 +47,14 @@ Initial entities:
 - Order
 - OrderItem
 
+Initial table responsibilities:
+- `users` stores the buyer identity that owns reservations and orders.
+- `products` stores the drop window, sellable metadata, and current lifecycle status.
+- `inventory` stores one aggregate stock row per product with `total_quantity`, `reserved_quantity`, and `sold_quantity`.
+- `reservations` stores the temporary checkout hold and expiry timestamp that the worker enforces.
+- `orders` stores the durable purchase created from exactly one reservation.
+- `order_items` stores the purchased quantity and locked-in unit price for each confirmed product line.
+
 ## Reservation Flow
 
 1. User requests a reservation for a product.
@@ -80,6 +88,8 @@ Redis handles fast burst protection. PostgreSQL handles durable truth.
 
 The API must not assume that Redis alone is enough. Every order confirmation checks PostgreSQL reservation state. Expiry jobs are allowed to run late, so confirmation also checks deadline timestamps.
 
+The schema mirrors that split: Redis can answer fast "can I reserve?" questions, while PostgreSQL keeps the auditable record of who reserved what, when it expires, and whether that reservation already became an order.
+
 ## Modules
 
 Recommended backend modules:
@@ -97,6 +107,8 @@ Recommended backend modules:
 projects/01-flashreserve/
   compose.yaml
   .env.example
+  db/
+    schema.sql
   .data/
     postgres/
     redis/

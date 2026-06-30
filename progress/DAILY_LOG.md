@@ -1,5 +1,28 @@
 # Daily Log
 
+## 2026-06-30
+
+Completed the initial FlashReserve PostgreSQL schema at `projects/01-flashreserve/db/schema.sql`.
+
+Added durable tables for:
+- users
+- products
+- inventory
+- reservations
+- orders
+- order_items
+
+Documented the schema shape and the aggregate inventory decision in the FlashReserve README, architecture notes, and decision log.
+
+Validated the work by running:
+- `docker compose -f projects/01-flashreserve/compose.yaml config`
+- `docker compose -f projects/01-flashreserve/compose.yaml up -d`
+- `Get-Content db/schema.sql | docker compose -f compose.yaml exec -T postgres psql -U flashreserve -d flashreserve -v ON_ERROR_STOP=1`
+- `docker compose -f compose.yaml exec -T postgres psql -U flashreserve -d flashreserve -c "select table_name from information_schema.tables where table_schema = 'public' order by table_name;"`
+
+Next recommended task:
+- Implement the reservation creation API against Redis and PostgreSQL using this schema.
+
 ## 2026-06-29
 
 Initialized the portfolio lab planning structure.

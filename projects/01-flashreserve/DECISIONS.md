@@ -63,3 +63,16 @@ Why:
 Rejected:
 - Docker named volumes by default: workable, but less explicit about where data accumulates on Windows.
 - Installing PostgreSQL and Redis directly on the host: more machine-specific setup and harder to reproduce.
+
+## Decision 6: Model Inventory As Aggregate Counters Per Product
+
+We will store one `inventory` row per product with `total_quantity`, `reserved_quantity`, and `sold_quantity`, and derive available stock from those values instead of persisting a separate available counter.
+
+Why:
+- The reservation path needs a compact record that can be reconciled against Redis quickly.
+- The worker and confirmation flow both need to update durable inventory without scanning many rows.
+- The relationship between reserved and sold stock stays explicit, which is easier to defend in interviews than a single opaque counter.
+
+Rejected:
+- Persisting only an `available_quantity` number: simpler at first glance, but it hides how much stock is merely held versus permanently sold.
+- One inventory movement row per reservation as the primary read model: more auditable, but heavier than needed for the first portfolio slice.

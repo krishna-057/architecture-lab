@@ -62,6 +62,31 @@ Connection defaults:
 - PostgreSQL: `postgresql://flashreserve:flashreserve@localhost:5432/flashreserve`
 - Redis: `redis://localhost:6379`
 
+## Initial Database Schema
+
+The first durable schema lives at `projects/01-flashreserve/db/schema.sql`.
+
+It defines:
+- `users` for authenticated buyers and admin operators.
+- `products` for drop metadata and pricing.
+- `inventory` for per-product stock totals plus reserved and sold counters.
+- `reservations` for short-lived checkout holds.
+- `orders` and `order_items` for confirmed purchases.
+
+Why this shape:
+- Inventory stays as one aggregate row per product so the reservation path can reconcile `total`, `reserved`, and `sold` counts quickly.
+- Orders stay linked to reservations so duplicate confirmation attempts can return the same durable order instead of creating a second purchase.
+- The schema stays SQL-first for now, which keeps the core model reviewable before the NestJS and Prisma scaffolds exist.
+
+Apply it against the local PostgreSQL container:
+
+```powershell
+docker compose -f projects/01-flashreserve/compose.yaml up -d
+Get-Content projects/01-flashreserve/db/schema.sql | `
+  docker compose -f projects/01-flashreserve/compose.yaml exec -T postgres `
+  psql -U flashreserve -d flashreserve -v ON_ERROR_STOP=1
+```
+
 ## Why This Architecture
 
 The first version should be a modular monolith plus worker, not microservices.
