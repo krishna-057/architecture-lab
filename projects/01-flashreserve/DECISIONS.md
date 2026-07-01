@@ -22,10 +22,21 @@ Why:
 - Flash sale traffic is spiky.
 - Redis atomic operations or Lua scripts can protect counters quickly.
 - Redis integrates naturally with BullMQ for expiry jobs.
+- The initial design only needs one hot stock counter per product and one short-lived reservation key per reservation, which keeps Redis usage understandable in interviews.
+
+Chosen shape:
+- `flashreserve:stock:{productId}` stores the current available quantity for the hot reservation path.
+- `flashreserve:reservation:{reservationId}` stores short-lived metadata with a TTL for expiry correlation.
+- BullMQ delayed jobs remain the only expiry scheduler; we do not add a second custom Redis queue.
+- Reservation creation decrements Redis first, then writes PostgreSQL, and restores Redis immediately if the durable write fails.
+- Redis counters are warmed from PostgreSQL when the product drop opens or the service starts, and the API fails closed if the cache is unexpectedly missing during an active drop.
 
 Rejected:
 - Client-side reservation checks: unsafe.
 - PostgreSQL-only locking at first: correct but less suited to burst-heavy reservation counters.
+- Redis token lists per inventory unit: more exact in appearance, but heavier than needed for quantity-based reservations.
+- Redlock around the whole reservation flow: a larger coordination surface than a per-product atomic counter requires.
+- A custom sorted-set expiry scheduler: duplicates BullMQ without improving the first slice enough.
 
 ## Decision 3: Keep PostgreSQL As Durable Truth
 

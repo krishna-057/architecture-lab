@@ -59,11 +59,14 @@ Initial table responsibilities:
 
 1. User requests a reservation for a product.
 2. Backend validates product and drop status.
-3. Redis atomically checks and decrements available reservable stock.
-4. Backend writes a reservation record in PostgreSQL.
-5. Backend schedules an expiry job.
-6. Frontend receives reservation ID and checkout deadline.
-7. WebSocket subscribers receive updated stock count.
+3. Backend ensures the Redis product counter has been warmed from PostgreSQL for the active drop.
+4. A Redis Lua script atomically checks and decrements the product's available stock counter.
+5. Backend writes a pending reservation record in PostgreSQL.
+6. Backend stores a short-lived Redis reservation hash keyed by reservation ID.
+7. Backend schedules one BullMQ delayed expiry job for that reservation.
+8. If the PostgreSQL write fails after the Redis decrement, the backend immediately restores the Redis stock counter.
+9. Frontend receives reservation ID and checkout deadline.
+10. WebSocket subscribers receive updated stock count.
 
 ## Confirmation Flow
 
@@ -79,7 +82,7 @@ Initial table responsibilities:
 1. BullMQ expiry job runs after the reservation window.
 2. Worker checks whether the reservation is still pending.
 3. If pending, it marks it expired in PostgreSQL.
-4. Redis reservable stock is restored.
+4. Redis runs the release script to restore the product's available stock counter.
 5. WebSocket subscribers receive updated stock.
 
 ## Consistency Strategy
@@ -89,6 +92,24 @@ Redis handles fast burst protection. PostgreSQL handles durable truth.
 The API must not assume that Redis alone is enough. Every order confirmation checks PostgreSQL reservation state. Expiry jobs are allowed to run late, so confirmation also checks deadline timestamps.
 
 The schema mirrors that split: Redis can answer fast "can I reserve?" questions, while PostgreSQL keeps the auditable record of who reserved what, when it expires, and whether that reservation already became an order.
+
+Chosen Redis layout:
+
+```text
+flashreserve:stock:{productId} -> integer available quantity
+flashreserve:reservation:{reservationId} -> hash(productId, userId, quantity, expiresAt)
+bull:reservation-expiry -> delayed expiry jobs
+```
+
+The first version keeps the hot key as a single integer counter per product because that is the highest-contention read/write path during a drop. Reservation metadata stays in a separate TTL-backed key so the worker can correlate fast cache state to the durable reservation row.
+
+This is a deliberate dual-write design with a compensating action:
+
+- Reserve stock in Redis first.
+- Persist the reservation in PostgreSQL second.
+- If the durable write fails, run the inverse Redis script immediately.
+
+We accept that tradeoff because it keeps the hot path simple without pretending Redis is the source of truth. Recovery stays grounded in PostgreSQL: on service startup or product activation, the reservation module can rebuild Redis counters from `inventory.total_quantity - inventory.reserved_quantity - inventory.sold_quantity` plus currently pending reservations.
 
 ## Modules
 

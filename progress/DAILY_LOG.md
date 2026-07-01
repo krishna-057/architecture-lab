@@ -1,5 +1,20 @@
 # Daily Log
 
+## 2026-07-01
+
+Documented the concrete FlashReserve Redis reservation strategy across the project README, architecture notes, and decision log.
+
+Added:
+- The initial Redis key layout for product stock counters, reservation metadata, and BullMQ expiry jobs.
+- The compensating release rule for Redis/PostgreSQL split-write failures.
+- Rejected alternatives for Redis token lists, Redlock, and custom expiry schedulers.
+
+Validated the work by running:
+- `node scripts/check-workspace.mjs` from `projects/01-flashreserve`
+
+Next recommended task:
+- Implement the reservation creation API.
+
 ## 2026-06-30
 
 Created the initial FlashReserve app scaffold under `projects/01-flashreserve`.

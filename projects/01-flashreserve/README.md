@@ -121,11 +121,51 @@ That gives us clear boundaries without adding distributed-system overhead too ea
 
 Redis is used for fast reservation coordination, but PostgreSQL remains the durable source of truth. This avoids treating cache data as the only record of business state.
 
+## Redis Reservation Strategy
+
+The first Redis design stays intentionally small:
+
+- One counter key per product for fast reservable stock checks.
+- One short-lived reservation key per reservation ID for quick lookup and expiry correlation.
+- One BullMQ delayed job per reservation for expiration handling.
+
+Planned key shape:
+
+```text
+flashreserve:stock:{productId} -> integer available quantity
+flashreserve:reservation:{reservationId} -> hash(productId, userId, quantity, expiresAt)
+bull:reservation-expiry -> BullMQ delayed jobs keyed by reservationId
+```
+
+Why this shape:
+
+- The product counter is the hot path during a drop, so it stays as a single integer instead of a larger document.
+- Reservation metadata is kept separately with a TTL so the worker can correlate Redis state to the durable PostgreSQL row without scanning all reservations.
+- BullMQ remains the only scheduler for expirations, which avoids maintaining a second custom expiry queue in Redis.
+
+Reservation write path:
+
+1. The API reads product/drop eligibility from PostgreSQL.
+2. A Redis Lua script checks whether `flashreserve:stock:{productId}` has enough units and decrements it atomically.
+3. The API writes the pending reservation row to PostgreSQL.
+4. The API stores the short-lived Redis reservation hash and enqueues the BullMQ expiry job.
+5. If the PostgreSQL write fails after the Redis decrement, the API immediately runs the matching Redis release script to restore the stock counter.
+
+Operational rules:
+
+- Redis is warmed from PostgreSQL when a product drop opens or when the reservation service starts.
+- If the Redis stock key is missing unexpectedly during a drop, the API fails closed rather than guessing from stale in-process memory.
+- Confirmation does not increase the Redis stock counter because the stock was already removed from the available pool at reservation time.
+- Expiry is the inverse path: mark the PostgreSQL reservation expired, then increment the Redis stock counter.
+
 ## Rejected Alternatives
 
 | Alternative | Why Not |
 | --- | --- |
 | Pure PostgreSQL row locking for every reservation | Correct, but can become a bottleneck under burst traffic and is less interesting for live flash-sale behavior. |
+| Redis lists with one token per stock unit | Makes exact unit accounting easy, but wastes memory and complicates multi-quantity reservations for the first slice. |
+| Redlock or a global mutex around reservations | Adds distributed lock lifecycle problems when a per-product atomic counter is enough for the initial contention model. |
+| A custom Redis sorted-set expiry scheduler | Duplicates BullMQ's delayed-job responsibility without enough benefit in the first version. |
 | Full microservices from day one | Adds network complexity, service discovery, and distributed transactions before the project needs them. |
 | Kafka for all events | Powerful, but too heavy for this project. BullMQ is enough for expiry and async processing. |
 | Client-only stock checks | Easy to build, but unsafe. The server must own inventory decisions. |
@@ -133,6 +173,7 @@ Redis is used for fast reservation coordination, but PostgreSQL remains the dura
 ## Failure Modes
 
 - Redis unavailable: reservation creation should fail closed instead of overselling.
+- Redis/PostgreSQL write split fails mid-request: the API needs a compensating Redis release so available stock is not stranded.
 - Worker unavailable: reservations may expire late, so confirmation must still verify reservation validity.
 - User refreshes checkout page: reservation should be recoverable by reservation ID and user session.
 - Duplicate confirm request: order creation must be idempotent.
