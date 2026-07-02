@@ -47,6 +47,12 @@ Initial entities:
 - Order
 - OrderItem
 
+The first executable slice uses a single-product checkout model:
+
+- one reservation holds one product and quantity
+- one order is created from one reservation
+- `order_items` exists now so later expansion to multi-line orders does not require a new durable order table
+
 Initial table responsibilities:
 - `users` stores the buyer identity that owns reservations and orders.
 - `products` stores the drop window, sellable metadata, and current lifecycle status.
@@ -54,6 +60,41 @@ Initial table responsibilities:
 - `reservations` stores the temporary checkout hold and expiry timestamp that the worker enforces.
 - `orders` stores the durable purchase created from exactly one reservation.
 - `order_items` stores the purchased quantity and locked-in unit price for each confirmed product line.
+
+Core state transitions:
+
+- `products`: `draft -> scheduled -> live -> sold_out/closed`
+- `reservations`: `pending -> confirmed/expired/cancelled`
+- `orders`: `pending_payment -> confirmed/cancelled`
+
+## First Product Flows
+
+### Shopper Reservation Flow
+
+1. Shopper opens a live product drop page.
+2. Frontend loads product details and the currently published stock view.
+3. Shopper requests a reservation for one product and quantity.
+4. Reservation module decrements Redis stock atomically, then persists the pending reservation.
+5. API returns the reservation ID plus checkout expiry timestamp.
+
+### Shopper Confirmation Flow
+
+1. Shopper confirms checkout before the reservation deadline.
+2. Backend verifies ownership, pending status, and expiry.
+3. Order is created idempotently from that reservation.
+4. Durable inventory moves from reserved to sold.
+
+### Reservation Expiry Flow
+
+1. The BullMQ delayed job wakes up after the checkout window.
+2. The worker expires only still-pending reservations.
+3. Redis stock is restored for that same product counter.
+4. Realtime stock subscribers receive the updated stock event.
+
+### Operator Monitoring Flow
+
+1. Operators inspect product state, aggregate inventory, and reservation volume.
+2. The first slice treats operator actions as read-heavy diagnostics, not a full admin inventory editor.
 
 ## Reservation Flow
 
@@ -110,6 +151,8 @@ This is a deliberate dual-write design with a compensating action:
 - If the durable write fails, run the inverse Redis script immediately.
 
 We accept that tradeoff because it keeps the hot path simple without pretending Redis is the source of truth. Recovery stays grounded in PostgreSQL: on service startup or product activation, the reservation module can rebuild Redis counters from `inventory.total_quantity - inventory.reserved_quantity - inventory.sold_quantity` plus currently pending reservations.
+
+That recovery path is intentionally product-scoped. Because the first slice does not support carts spanning many products, the reservation and expiry logic can reconcile one hot product at a time instead of coordinating several counters in one checkout session.
 
 ## Modules
 

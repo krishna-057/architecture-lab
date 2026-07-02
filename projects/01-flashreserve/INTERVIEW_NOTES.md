@@ -22,7 +22,10 @@ Reservations may expire late, but confirmation still checks the reservation dead
 
 The first version does not need independent deployment or scaling per domain. A modular monolith keeps boundaries clear while avoiding distributed transactions and network failure between internal modules.
 
+### Why not start with a shopping cart?
+
+The hard part of a flash sale is protecting the hottest inventory path, not supporting general storefront ergonomics. Starting with one product per reservation keeps expiry, rollback, and idempotent confirmation easy to explain. The schema still keeps `order_items`, so the design can grow into carts later without replacing the order model.
+
 ### How would you scale it?
 
 Start with Redis atomic scripts and per-product counters. Add rate limits and a waiting room for extreme bursts. If WebSocket fanout grows, use Redis pub/sub or a dedicated realtime gateway. If order processing grows, split workers independently before splitting the whole backend.
-

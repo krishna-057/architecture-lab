@@ -1,5 +1,21 @@
 # Daily Log
 
+## 2026-07-02
+
+Defined the FlashReserve first-slice product flows and core entities across the project docs.
+
+Added:
+- An explicit single-product reservation flow in the FlashReserve README and architecture notes.
+- A core-entity responsibility matrix plus state transitions for products, reservations, and orders.
+- A recorded decision to start with single-product reservations instead of a cart-first checkout.
+- Interview notes that justify the cart tradeoff in flash-sale terms.
+
+Validated the work by running:
+- `node scripts/check-workspace.mjs` from `projects/01-flashreserve`
+
+Next recommended task:
+- Implement the reservation creation API.
+
 ## 2026-07-01
 
 Documented the concrete FlashReserve Redis reservation strategy across the project README, architecture notes, and decision log.

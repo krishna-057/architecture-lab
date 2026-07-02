@@ -102,3 +102,17 @@ Rejected:
 - A single Next.js app with API routes for everything: simpler, but weaker for the reservation worker, Redis, and backend architecture discussion.
 - Nx/Turborepo from day one: useful later, but too much tooling before there is meaningful shared build complexity.
 - Separate Git repositories for API and web: unnecessary coordination overhead for a 30-day portfolio project.
+
+## Decision 8: Start With Single-Product Reservations Instead Of Carts
+
+The first checkout flow will reserve one product per reservation and convert one reservation into one order.
+
+Why:
+- Flash-sale contention is concentrated on a single hot product, so product-scoped reservation logic exposes the most important consistency problems first.
+- The current durable schema already models one reservation with one `product_id` and one `quantity`, which keeps the first API slice direct.
+- Expiry, idempotent confirmation, and Redis counter reconciliation all stay simpler when one reservation touches one stock counter.
+- Keeping `order_items` in the schema now preserves a clean extension point for future multi-line orders without making the first slice cart-shaped.
+
+Rejected:
+- Multi-product cart checkout first: more user-friendly in a typical storefront, but it introduces cross-product coordination before the lab has proven the hot reservation path.
+- One reservation spanning many products: possible later, but it complicates expiry, stock rollback, and idempotent order creation too early.

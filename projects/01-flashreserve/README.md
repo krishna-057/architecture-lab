@@ -25,6 +25,22 @@ FlashReserve solves this by separating short-lived reservations from finalized o
 - Admin view for inventory and reservations.
 - Tests for concurrent reservation attempts.
 
+## Initial Product Flows
+
+The first FlashReserve slice intentionally focuses on one product reservation flow instead of a full shopping cart.
+
+1. A shopper opens a live drop page and sees current stock plus the product's drop window.
+2. The shopper requests a reservation for one product and quantity.
+3. The backend atomically holds stock, returns a reservation ID, and starts a short checkout timer.
+4. The shopper either confirms checkout before the timer ends or loses the hold when the reservation expires.
+5. An operator can inspect product inventory and reservation state, but the initial scope does not include multi-product carts, discounting, or complex backoffice workflows.
+
+Why this scope:
+
+- Flash-sale contention is concentrated on one hot product at a time, so a cart would add coordination complexity before it adds useful architecture signal.
+- The schema and Redis strategy already support one reservation per user and product, which keeps the first API slice small and defensible.
+- Orders still keep an `order_items` table so the model can grow later without rewriting the durable order shape.
+
 ## Proposed Tech Stack
 
 | Layer | Choice | Why |
@@ -86,6 +102,23 @@ Get-Content projects/01-flashreserve/db/schema.sql | `
   docker compose -f projects/01-flashreserve/compose.yaml exec -T postgres `
   psql -U flashreserve -d flashreserve -v ON_ERROR_STOP=1
 ```
+
+## Core Entities
+
+| Entity | Responsibility In The First Slice |
+| --- | --- |
+| `users` | Own reservations and confirmed orders. |
+| `products` | Define the sellable drop item, price, and drop window. |
+| `inventory` | Hold the durable aggregate counts for total, reserved, and sold stock per product. |
+| `reservations` | Represent a time-boxed hold for exactly one product and quantity. |
+| `orders` | Represent the durable checkout result for exactly one reservation. |
+| `order_items` | Lock in the purchased quantity and unit price, while leaving room for future multi-line orders. |
+
+Stateful entities and their main transitions:
+
+- `products`: `draft -> scheduled -> live -> sold_out/closed`
+- `reservations`: `pending -> confirmed/expired/cancelled`
+- `orders`: `pending_payment -> confirmed/cancelled`
 
 ## App Scaffold
 
@@ -157,6 +190,7 @@ Operational rules:
 - If the Redis stock key is missing unexpectedly during a drop, the API fails closed rather than guessing from stale in-process memory.
 - Confirmation does not increase the Redis stock counter because the stock was already removed from the available pool at reservation time.
 - Expiry is the inverse path: mark the PostgreSQL reservation expired, then increment the Redis stock counter.
+- The first version keeps each reservation tied to one product so the reserve, confirm, and expire paths do not need cart-wide distributed coordination.
 
 ## Rejected Alternatives
 
