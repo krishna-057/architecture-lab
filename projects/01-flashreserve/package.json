@@ -9,7 +9,8 @@
   "scripts": {
     "check": "node scripts/check-workspace.mjs",
     "dev:api": "npm run dev -w @flashreserve/api",
-    "dev:web": "npm run dev -w @flashreserve/web"
+    "dev:web": "npm run dev -w @flashreserve/web",
+    "test:reservations:concurrency": "npm run test:reservations:concurrency -w @flashreserve/api"
   },
   "engines": {
     "node": ">=20"

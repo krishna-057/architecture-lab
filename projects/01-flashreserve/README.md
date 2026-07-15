@@ -197,6 +197,27 @@ Behavior:
 
 The worker runs in the NestJS API process for the first portfolio slice. That keeps local development simple while preserving a clean `workers` module boundary that can become a separate process later.
 
+## Concurrency Test
+
+The first race-condition test is a Node integration test for `POST /api/reservations`.
+
+Run it from the FlashReserve project root:
+
+```powershell
+npm run test:reservations:concurrency
+```
+
+The test:
+- Builds the NestJS API.
+- Uses the documented PostgreSQL and Redis URLs.
+- Applies `db/schema.sql`.
+- Seeds one live product with three available units and ten unique buyers.
+- Boots the real API process.
+- Sends ten concurrent reservation requests.
+- Asserts that exactly three requests succeed, seven receive stock conflicts, PostgreSQL records only three pending reservations, durable reserved inventory equals three, and the Redis stock counter reaches zero.
+
+If PostgreSQL or Redis are not running locally, the test skips by default so lightweight scaffold checks can still pass. Set `FLASHRESERVE_REQUIRE_INTEGRATION=1` when CI or a local run should fail instead of skip.
+
 ## Why This Architecture
 
 The first version should be a modular monolith plus worker, not microservices.

@@ -12,7 +12,7 @@ Tasks should stay small enough for one focused session.
 - [x] Add initial database schema for users, products, inventory, reservations, and orders.
 - [x] Implement reservation creation API.
 - [x] Add reservation expiry worker.
-- [ ] Add tests for concurrent reservation attempts.
+- [x] Add tests for concurrent reservation attempts.
 - [ ] Add live stock update channel.
 - [x] Document Redis reservation strategy and rejected alternatives.
 

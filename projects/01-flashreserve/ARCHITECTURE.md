@@ -175,6 +175,18 @@ We accept that tradeoff because it keeps the hot path simple without pretending 
 
 That recovery path is intentionally product-scoped. Because the first slice does not support carts spanning many products, the reservation and expiry logic can reconcile one hot product at a time instead of coordinating several counters in one checkout session.
 
+## Concurrency Test Strategy
+
+The reservation concurrency test is an integration test instead of a mocked unit test because the main risk is the contract between Redis atomic stock decrement, PostgreSQL durable reservation writes, and the HTTP API boundary.
+
+The test runs the compiled NestJS API against local PostgreSQL and Redis, warms one product stock counter to three, then sends ten reservation requests concurrently with distinct users. The expected result is exactly three successful pending reservations and seven stock conflicts. After the requests finish, the test checks all three state surfaces that matter for the architecture:
+
+- HTTP responses expose only three successful reservation IDs.
+- PostgreSQL has three pending reservations and `inventory.reserved_quantity = 3`.
+- Redis has `flashreserve:stock:{productId} = 0`.
+
+The test skips when the local infra is unavailable by default, but `FLASHRESERVE_REQUIRE_INTEGRATION=1` turns that skip into a hard failure for CI or an intentional local verification run.
+
 ## Modules
 
 Recommended backend modules:

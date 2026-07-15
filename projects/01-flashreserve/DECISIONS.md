@@ -155,3 +155,18 @@ Why:
 Rejected:
 - Incrementing Redis stock directly on every retry: unsafe because the same reservation could restore stock more than once.
 - Adding a durable outbox table immediately: stronger for production recovery, but heavier than needed for this first local worker slice.
+
+## Decision 12: Test Reservation Concurrency Through The Real API
+
+The first contention test runs against the compiled NestJS API with local PostgreSQL and Redis instead of mocking the reservation service internals.
+
+Why:
+- The architecture risk is cross-system behavior: Redis must reject excess reservations while PostgreSQL records only the winning holds.
+- Running through HTTP catches controller parsing, service behavior, Redis Lua execution, PostgreSQL transactions, and BullMQ scheduling in one focused slice.
+- Distinct users avoid the one-pending-reservation unique index becoming the tested bottleneck.
+- The test stays dependency-light by using Node's built-in test runner and the app's existing `pg` and `ioredis` dependencies.
+
+Rejected:
+- Mock-only service tests for the first race path: useful later for edge cases, but they would not prove Redis/PostgreSQL coordination.
+- Adding Jest or another test framework immediately: more tooling than this single integration slice needs.
+- Making local infra mandatory for every `npm run check`: too heavy for quick scaffold validation, so the integration test can skip unless `FLASHRESERVE_REQUIRE_INTEGRATION=1` is set.

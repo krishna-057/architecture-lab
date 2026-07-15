@@ -5,7 +5,8 @@
   "scripts": {
     "dev": "nest start --watch",
     "build": "nest build",
-    "start": "node dist/main.js"
+    "start": "node dist/main.js",
+    "test:reservations:concurrency": "npm run build && node --test test/reservations-concurrency.test.mjs"
   },
   "dependencies": {
     "@nestjs/common": "^10.4.15",

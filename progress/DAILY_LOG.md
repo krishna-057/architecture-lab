@@ -2,6 +2,26 @@
 
 ## 2026-07-15
 
+Added the first FlashReserve concurrent reservation integration test.
+
+Added:
+- `npm run test:reservations:concurrency` from `projects/01-flashreserve`.
+- A Node test that builds and boots the compiled NestJS API, seeds one live product with three units, sends ten concurrent reservation requests, and verifies HTTP, PostgreSQL, and Redis state.
+- Documentation for why the test goes through the real API and how to require infra-backed execution.
+
+Validated the work by running:
+- `npm run test:reservations:concurrency` from `projects/01-flashreserve` (passed with 1 skipped test because local PostgreSQL/Redis were not available with the documented credentials)
+- `npm run check` from `projects/01-flashreserve`
+- `npm run build -w @flashreserve/api` from `projects/01-flashreserve`
+
+Notes:
+- Docker Compose could not start because Docker Desktop's Linux engine pipe was unavailable.
+- The integration test now skips by default when PostgreSQL/Redis are unavailable; set `FLASHRESERVE_REQUIRE_INTEGRATION=1` to make missing infra fail the run.
+- `WORKFLOW.md` appears to contain binary/corrupted content in the current checkout, so it could not be meaningfully read as Markdown.
+
+Next recommended task:
+- Add live stock update channel.
+
 Implemented the first FlashReserve reservation expiry worker slice.
 
 Added:
