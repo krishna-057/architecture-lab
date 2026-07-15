@@ -51,6 +51,17 @@ Planned local ports:
 - Dashboard: `http://localhost:3101`
 - FastAPI service: `http://localhost:8100`
 
+## WebRTC Pairing Contract
+
+The first signaling slice is now defined in `SIGNALING.md` and implemented as an in-memory FastAPI contract:
+
+- Dashboard creates a session with `POST /api/sessions`.
+- API returns a six-character `pairing_code`, 10-minute expiry, and `signaling_path`.
+- Camera claims the code with `POST /api/pairings/{pairing_code}/claim`.
+- Camera and dashboard exchange `offer`, `answer`, `ice-candidate`, `ready`, and `bye` messages through `/api/sessions/{session_id}/signal`.
+
+This keeps video peer-to-peer through WebRTC while the API owns only session identity and negotiation messages.
+
 ## Why This Project Matters
 
 This project combines product creativity with real networking and AI inference. It is intentionally more than a CRUD app, but still small enough to build as a focused prototype.

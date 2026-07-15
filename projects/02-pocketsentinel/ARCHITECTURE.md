@@ -27,6 +27,14 @@ Detection events stored in PostgreSQL
 
 The first API implementation uses in-memory dictionaries only to make the boundary executable without pulling in PostgreSQL before the signaling flow is defined. PostgreSQL remains the planned durable store for device sessions and detection timelines.
 
+## WebRTC Signaling Boundary
+
+The dashboard is the session owner for the first slice. It creates a session, shows a short pairing code, and waits for camera-originated WebRTC negotiation messages. The phone camera claims the code, asks the browser for media permission, creates the offer, and sends SDP plus ICE candidates through FastAPI.
+
+The API stores ordered signaling messages with a per-session sequence number. Each browser polls for messages addressed to its role by passing `recipient_role` and `after_sequence`. This avoids adding a separate WebSocket signaling server before the stream contract is stable, while still preserving the important architecture boundary: video moves over WebRTC, not through the API.
+
+Detailed flow and payload shapes live in `SIGNALING.md`.
+
 ## Local Development
 
 The scaffold uses separate ports so all three surfaces can run together:

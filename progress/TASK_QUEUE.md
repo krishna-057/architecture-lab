@@ -7,7 +7,7 @@ Tasks should stay small enough for one focused session.
 ### Ready
 
 - [x] Add PocketSentinel scaffold.
-- [ ] Define WebRTC signaling and pairing flow.
+- [x] Define WebRTC signaling and pairing flow.
 - [ ] Add local development stack for API and event storage.
 - [ ] Implement camera capture permission flow.
 - [ ] Implement dashboard stream pairing shell.

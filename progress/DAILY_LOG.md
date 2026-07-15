@@ -2,6 +2,26 @@
 
 ## 2026-07-16
 
+Defined the first PocketSentinel WebRTC signaling and pairing flow.
+
+Added:
+- `projects/02-pocketsentinel/SIGNALING.md` with the dashboard-created pairing flow, role responsibilities, message types, and first-slice constraints.
+- In-memory FastAPI pairing support with six-character pairing codes and `POST /api/pairings/{pairing_code}/claim`.
+- In-memory ordered signaling messages through `POST /api/sessions/{session_id}/signal` and `GET /api/sessions/{session_id}/signal`.
+- Session status transitions from `waiting_for_camera` to `pairing`, `streaming`, and `ended`.
+- Architecture, decision, README, and interview-note updates explaining REST-polling signaling and why video stays peer-to-peer.
+
+Validated the work by running:
+- `node scripts/check-workspace.mjs` from `projects/02-pocketsentinel`
+- `python -c "import ast, pathlib; ast.parse(pathlib.Path('services/api/app/main.py').read_text()) ; print('PocketSentinel API syntax check passed.')"` from `projects/02-pocketsentinel`
+
+Notes:
+- A deeper FastAPI `TestClient` smoke test could not run because the current Python environment does not have `fastapi` installed. No global dependency install was performed.
+- `WORKFLOW.md` still appears to contain binary/corrupted content in the current checkout, so it could not be meaningfully read as Markdown.
+
+Next recommended task:
+- Add the PocketSentinel local development stack for API and event storage.
+
 Started PocketSentinel as the active project and implemented its first full-stack scaffold.
 
 Added:
