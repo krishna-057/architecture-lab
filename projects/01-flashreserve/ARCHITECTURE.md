@@ -109,6 +109,15 @@ Core state transitions:
 9. Frontend receives reservation ID and checkout deadline.
 10. WebSocket subscribers receive updated stock count.
 
+Implemented API slice:
+
+- `POST /api/reservations` accepts `userId`, `productId`, and optional `quantity`.
+- The controller performs small manual validation instead of introducing a validation library before the API surface grows.
+- The service uses a Redis Lua script so a stock counter can reach exactly zero on a successful final reservation while still distinguishing insufficient stock.
+- PostgreSQL records the pending reservation and increments `inventory.reserved_quantity` in one transaction.
+- BullMQ receives a delayed `expire-reservation` job keyed by reservation ID.
+- The endpoint fails closed if `flashreserve:stock:{productId}` is missing, because Redis warmup should be explicit and product-scoped.
+
 ## Confirmation Flow
 
 1. User confirms checkout before expiry.

@@ -1,5 +1,31 @@
 # Daily Log
 
+## 2026-07-15
+
+Implemented the first FlashReserve reservation creation API slice.
+
+Added:
+- `POST /api/reservations` in the NestJS API.
+- A small PostgreSQL database service using `pg`.
+- Redis atomic stock decrement logic for warmed `flashreserve:stock:{productId}` counters.
+- Durable pending reservation creation with `inventory.reserved_quantity` updates.
+- Redis reservation metadata TTL storage and BullMQ delayed expiry job scheduling.
+- Compensation paths for Redis/PostgreSQL split failures and expiry scheduling failures.
+- Documentation for the implemented endpoint, configuration, and manual validation decision.
+
+Validated the work by running:
+- `npm run check` from `projects/01-flashreserve`
+- `npm run build -w @flashreserve/api` from `projects/01-flashreserve`
+
+Notes:
+- `git pull --ff-only` and pushing are blocked because GitHub returned `Repository not found` for `https://github.com/krishna-057/architecture-lab.git`.
+- Created GitHub issue #2, `Human needed: Git push auth`, with the required human action.
+- Sent the Telegram completion/blocker notification.
+- `npm install` reported existing dependency audit findings: 3 low, 14 moderate, and 7 high.
+
+Next recommended task:
+- Add the reservation expiry worker.
+
 ## 2026-07-02
 
 Defined the FlashReserve first-slice product flows and core entities across the project docs.

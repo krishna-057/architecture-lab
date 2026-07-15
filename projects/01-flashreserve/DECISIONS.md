@@ -116,3 +116,16 @@ Why:
 Rejected:
 - Multi-product cart checkout first: more user-friendly in a typical storefront, but it introduces cross-product coordination before the lab has proven the hot reservation path.
 - One reservation spanning many products: possible later, but it complicates expiry, stock rollback, and idempotent order creation too early.
+
+## Decision 9: Keep Reservation API Validation Manual For The First Slice
+
+The first `POST /api/reservations` implementation validates request shape directly in a small parser instead of adding `class-validator` and global pipes immediately.
+
+Why:
+- The current endpoint accepts only three fields, so a local parser is easier to audit than framework-wide validation configuration.
+- It keeps the reservation path focused on the architecture signal: Redis atomic stock, PostgreSQL durability, and BullMQ expiry scheduling.
+- The parser can be replaced with Nest validation pipes when the public API surface grows.
+
+Rejected:
+- Adding a full validation stack now: useful later, but unnecessary for one narrow endpoint.
+- Trusting raw request bodies in the service: too easy to turn bad input into misleading reservation failures.

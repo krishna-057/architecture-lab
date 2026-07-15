@@ -146,6 +146,41 @@ cd projects/01-flashreserve
 node scripts/check-workspace.mjs
 ```
 
+## Reservation Creation API
+
+The first executable backend slice is `POST /api/reservations`.
+
+Request shape:
+
+```json
+{
+  "userId": "00000000-0000-4000-8000-000000000001",
+  "productId": "00000000-0000-4000-8000-000000000002",
+  "quantity": 1
+}
+```
+
+Behavior:
+
+- Validates UUIDs and a positive integer quantity at the controller boundary.
+- Requires the product to exist, be `live`, and be inside its drop window.
+- Uses the warmed Redis key `flashreserve:stock:{productId}` as the atomic reservation counter.
+- Inserts the pending PostgreSQL reservation and increments durable `inventory.reserved_quantity`.
+- Stores `flashreserve:reservation:{reservationId}` metadata with a checkout-window TTL.
+- Enqueues one BullMQ `reservation-expiry` delayed job using the reservation ID as the job ID.
+- Restores Redis stock if the durable reservation write fails.
+- Cancels the durable reservation, restores inventory, deletes Redis metadata, and restores Redis stock if expiry scheduling fails.
+
+Configuration:
+
+```text
+DATABASE_URL=postgresql://flashreserve:flashreserve@localhost:5432/flashreserve
+REDIS_URL=redis://localhost:6379
+RESERVATION_CHECKOUT_WINDOW_MS=300000
+```
+
+The API intentionally fails closed when the Redis stock counter is missing. Stock warmup remains a separate task so the creation endpoint does not guess from stale in-process state during a flash sale.
+
 ## Why This Architecture
 
 The first version should be a modular monolith plus worker, not microservices.
