@@ -1,0 +1,132 @@
+:root {
+  color-scheme: light;
+  --ink: #1d252c;
+  --muted: #64717d;
+  --line: #d4dde4;
+  --surface: #f5f7f9;
+  --primary: #176b5b;
+  --accent: #c6532f;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: Arial, Helvetica, sans-serif;
+  color: var(--ink);
+  background: var(--surface);
+}
+
+button {
+  min-height: 40px;
+  border: 0;
+  border-radius: 8px;
+  padding: 0 16px;
+  color: #ffffff;
+  background: var(--primary);
+  font: inherit;
+  font-weight: 700;
+}
+
+.dashboard-shell {
+  min-height: 100vh;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 360px;
+  gap: 18px;
+  padding: 18px;
+}
+
+.viewer,
+.timeline {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.viewer {
+  display: grid;
+  grid-template-rows: auto 1fr;
+  gap: 14px;
+  padding: 16px;
+}
+
+.viewer-header,
+.timeline-header,
+.event-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.viewer-header span,
+.timeline-header span,
+.event-row time,
+.event-row span {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.viewer-header strong,
+.timeline-header strong {
+  display: block;
+  margin-top: 4px;
+}
+
+.video-frame {
+  display: grid;
+  place-items: center;
+  min-height: 520px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background:
+    linear-gradient(90deg, rgba(23, 107, 91, 0.12) 1px, transparent 1px),
+    linear-gradient(rgba(23, 107, 91, 0.12) 1px, transparent 1px),
+    #edf3f1;
+  background-size: 42px 42px;
+}
+
+.video-frame p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 16px;
+}
+
+.timeline {
+  align-self: start;
+  padding: 16px;
+}
+
+.event-row {
+  min-height: 72px;
+  border-top: 1px solid var(--line);
+}
+
+.event-row:first-of-type {
+  margin-top: 14px;
+}
+
+.event-row div {
+  text-align: right;
+}
+
+.event-row strong,
+.event-row span {
+  display: block;
+}
+
+.event-row strong {
+  color: var(--accent);
+}
+
+@media (max-width: 920px) {
+  .dashboard-shell {
+    grid-template-columns: 1fr;
+  }
+
+  .timeline {
+    align-self: stretch;
+  }
+}

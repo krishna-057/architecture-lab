@@ -2,9 +2,25 @@
 
 Tasks should stay small enough for one focused session.
 
-## Active Project: FlashReserve
+## Active Project: PocketSentinel
 
 ### Ready
+
+- [x] Add PocketSentinel scaffold.
+- [ ] Define WebRTC signaling and pairing flow.
+- [ ] Add local development stack for API and event storage.
+- [ ] Implement camera capture permission flow.
+- [ ] Implement dashboard stream pairing shell.
+
+### Later
+
+- [ ] Add PersonaBridge scaffold.
+- [ ] Add CollabFlow scaffold.
+- [ ] Add HookRelay scaffold.
+
+## Completed Project: FlashReserve
+
+### Completed
 
 - [x] Create FlashReserve app scaffold.
 - [x] Define product flows and core entities.
@@ -17,10 +33,3 @@ Tasks should stay small enough for one focused session.
 - [x] Implement order confirmation API.
 - [x] Add admin inventory diagnostics API.
 - [x] Document Redis reservation strategy and rejected alternatives.
-
-### Later
-
-- [ ] Add PocketSentinel scaffold.
-- [ ] Add PersonaBridge scaffold.
-- [ ] Add CollabFlow scaffold.
-- [ ] Add HookRelay scaffold.

@@ -2,6 +2,25 @@
 
 ## 2026-07-16
 
+Started PocketSentinel as the active project and implemented its first full-stack scaffold.
+
+Added:
+- `apps/camera` as the phone-facing Next.js PWA shell.
+- `apps/dashboard` as the viewer and detection timeline Next.js shell.
+- `services/api` as the FastAPI boundary for sessions and detection events.
+- `scripts/check-workspace.mjs` for dependency-free scaffold validation.
+- Documentation for why model downloads, PostgreSQL persistence, and heavier runtime setup are deferred until the WebRTC and event contracts are defined.
+
+Validated the work by running:
+- `node scripts/check-workspace.mjs` from `projects/02-pocketsentinel`
+
+Notes:
+- FlashReserve's Ready queue was complete, so the active project queue moved to PocketSentinel per the 30-day plan.
+- `WORKFLOW.md` still appears to contain binary/corrupted content in the current checkout, so it could not be meaningfully read as Markdown.
+
+Next recommended task:
+- Define the WebRTC signaling and pairing flow.
+
 Implemented the first FlashReserve admin inventory diagnostics API.
 
 Added:
