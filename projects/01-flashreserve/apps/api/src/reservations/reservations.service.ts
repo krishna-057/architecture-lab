@@ -8,9 +8,16 @@ import {
 } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { Queue } from "bullmq";
-import Redis, { RedisOptions } from "ioredis";
+import Redis from "ioredis";
 import { DatabaseService } from "../database/database.service";
+import { buildRedisConnectionOptions } from "../redis/redis-connection";
 import { CreateReservationCommand } from "./create-reservation.dto";
+import {
+  expireReservationJobName,
+  reservationExpiryQueueName,
+  reservationKey,
+  stockCounterKey
+} from "./reservation-keys";
 
 interface ProductDropRow {
   id: string;
@@ -55,7 +62,7 @@ export class ReservationsService implements OnModuleDestroy {
     this.redis = new Redis(redisUrl, {
       maxRetriesPerRequest: null
     });
-    this.expiryQueue = new Queue("reservation-expiry", {
+    this.expiryQueue = new Queue(reservationExpiryQueueName, {
       connection: buildRedisConnectionOptions(redisUrl)
     });
     this.checkoutWindowMs = Number(
@@ -259,7 +266,7 @@ export class ReservationsService implements OnModuleDestroy {
     );
 
     await this.expiryQueue.add(
-      "expire-reservation",
+      expireReservationJobName,
       { reservationId: reservation.id },
       {
         delay,
@@ -295,27 +302,6 @@ function assertDropIsOpen(product: ProductDropRow) {
   if (product.drop_ends_at && product.drop_ends_at.getTime() <= now) {
     throw new UnprocessableEntityException("Product drop has ended.");
   }
-}
-
-function stockCounterKey(productId: string) {
-  return `flashreserve:stock:${productId}`;
-}
-
-function reservationKey(reservationId: string) {
-  return `flashreserve:reservation:${reservationId}`;
-}
-
-function buildRedisConnectionOptions(redisUrl: string): RedisOptions {
-  const url = new URL(redisUrl);
-
-  return {
-    host: url.hostname,
-    port: url.port ? Number(url.port) : 6379,
-    username: url.username ? decodeURIComponent(url.username) : undefined,
-    password: url.password ? decodeURIComponent(url.password) : undefined,
-    db: url.pathname.length > 1 ? Number(url.pathname.slice(1)) : 0,
-    maxRetriesPerRequest: null
-  };
 }
 
 function isUniquePendingReservationError(error: unknown) {

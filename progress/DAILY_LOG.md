@@ -2,6 +2,25 @@
 
 ## 2026-07-15
 
+Implemented the first FlashReserve reservation expiry worker slice.
+
+Added:
+- `ReservationExpiryWorker` for BullMQ `expire-reservation` jobs.
+- Transactional PostgreSQL expiry that marks due pending reservations as `expired` and releases durable reserved inventory.
+- Idempotent Redis stock release using `flashreserve:reservation-release:{reservationId}` markers.
+- Shared Redis connection and reservation key helpers for the API and worker.
+- Documentation for the worker process boundary and retry-safety decision.
+
+Validated the work by running:
+- `npm run check` from `projects/01-flashreserve`
+- `npm run build -w @flashreserve/api` from `projects/01-flashreserve`
+
+Notes:
+- `git pull --ff-only` is still blocked because GitHub returned `Repository not found` for `https://github.com/krishna-057/architecture-lab.git`.
+
+Next recommended task:
+- Add tests for concurrent reservation attempts.
+
 Implemented the first FlashReserve reservation creation API slice.
 
 Added:

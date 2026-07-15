@@ -88,8 +88,9 @@ Core state transitions:
 
 1. The BullMQ delayed job wakes up after the checkout window.
 2. The worker expires only still-pending reservations.
-3. Redis stock is restored for that same product counter.
-4. Realtime stock subscribers receive the updated stock event.
+3. Durable reserved inventory is decremented in the same PostgreSQL transaction.
+4. Redis stock is restored for that same product counter through an idempotent release script.
+5. Realtime stock subscribers receive the updated stock event.
 
 ### Operator Monitoring Flow
 
@@ -132,8 +133,17 @@ Implemented API slice:
 1. BullMQ expiry job runs after the reservation window.
 2. Worker checks whether the reservation is still pending.
 3. If pending, it marks it expired in PostgreSQL.
-4. Redis runs the release script to restore the product's available stock counter.
-5. WebSocket subscribers receive updated stock.
+4. PostgreSQL releases the durable reserved inventory count in the same transaction.
+5. Redis runs the release script to restore the product's available stock counter once.
+6. WebSocket subscribers receive updated stock.
+
+Implemented worker slice:
+
+- `ReservationExpiryWorker` consumes `expire-reservation` jobs from the `reservation-expiry` BullMQ queue.
+- The worker currently runs inside the NestJS API process to keep local development simple.
+- Due pending reservations are changed to `expired` and release `inventory.reserved_quantity` transactionally.
+- Redis stock release uses `flashreserve:reservation-release:{reservationId}` as an idempotency marker, so retries after a crash or Redis outage do not double-increment stock.
+- If Redis is unavailable after PostgreSQL commits, BullMQ retries can still release stock because the worker also handles already-expired reservations.
 
 ## Consistency Strategy
 
@@ -148,6 +158,7 @@ Chosen Redis layout:
 ```text
 flashreserve:stock:{productId} -> integer available quantity
 flashreserve:reservation:{reservationId} -> hash(productId, userId, quantity, expiresAt)
+flashreserve:reservation-release:{reservationId} -> short-lived idempotency marker for expiry stock release
 bull:reservation-expiry -> delayed expiry jobs
 ```
 
@@ -158,6 +169,7 @@ This is a deliberate dual-write design with a compensating action:
 - Reserve stock in Redis first.
 - Persist the reservation in PostgreSQL second.
 - If the durable write fails, run the inverse Redis script immediately.
+- For expiry, persist the durable state change first, then use an idempotent Redis marker so queue retries can safely finish cache release.
 
 We accept that tradeoff because it keeps the hot path simple without pretending Redis is the source of truth. Recovery stays grounded in PostgreSQL: on service startup or product activation, the reservation module can rebuild Redis counters from `inventory.total_quantity - inventory.reserved_quantity - inventory.sold_quantity` plus currently pending reservations.
 

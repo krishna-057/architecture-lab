@@ -177,9 +177,25 @@ Configuration:
 DATABASE_URL=postgresql://flashreserve:flashreserve@localhost:5432/flashreserve
 REDIS_URL=redis://localhost:6379
 RESERVATION_CHECKOUT_WINDOW_MS=300000
+RESERVATION_EXPIRY_WORKER_CONCURRENCY=5
+RESERVATION_REDIS_RELEASE_MARKER_TTL_MS=86400000
 ```
 
 The API intentionally fails closed when the Redis stock counter is missing. Stock warmup remains a separate task so the creation endpoint does not guess from stale in-process state during a flash sale.
+
+## Reservation Expiry Worker
+
+The first worker slice consumes BullMQ `expire-reservation` jobs from the `reservation-expiry` queue.
+
+Behavior:
+
+- Ignores reservations that are missing, not due yet, confirmed, or cancelled.
+- Marks due pending reservations as `expired` in PostgreSQL and decrements `inventory.reserved_quantity` in the same transaction.
+- Releases the Redis stock counter with a Lua script after the durable expiry succeeds.
+- Uses `flashreserve:reservation-release:{reservationId}` as a short-lived idempotency marker so BullMQ retries do not restore the same stock twice.
+- Also attempts the Redis release for reservations already marked `expired`, which lets a retry recover if PostgreSQL committed but Redis was temporarily unavailable.
+
+The worker runs in the NestJS API process for the first portfolio slice. That keeps local development simple while preserving a clean `workers` module boundary that can become a separate process later.
 
 ## Why This Architecture
 
@@ -224,7 +240,8 @@ Operational rules:
 - Redis is warmed from PostgreSQL when a product drop opens or when the reservation service starts.
 - If the Redis stock key is missing unexpectedly during a drop, the API fails closed rather than guessing from stale in-process memory.
 - Confirmation does not increase the Redis stock counter because the stock was already removed from the available pool at reservation time.
-- Expiry is the inverse path: mark the PostgreSQL reservation expired, then increment the Redis stock counter.
+- Expiry is the inverse path: mark the PostgreSQL reservation expired, release durable reserved inventory, then increment the Redis stock counter once.
+- The expiry worker keeps a Redis release marker per reservation so delayed job retries are safe after partial failures.
 - The first version keeps each reservation tied to one product so the reserve, confirm, and expire paths do not need cart-wide distributed coordination.
 
 ## Rejected Alternatives

@@ -129,3 +129,29 @@ Why:
 Rejected:
 - Adding a full validation stack now: useful later, but unnecessary for one narrow endpoint.
 - Trusting raw request bodies in the service: too easy to turn bad input into misleading reservation failures.
+
+## Decision 10: Run The First Expiry Worker Inside The API Process
+
+The first reservation expiry worker will run as a Nest provider in the existing API process.
+
+Why:
+- The project needs the expiry behavior before it needs separate process orchestration.
+- The module boundary is still explicit under `workers`, so the worker can move to a separate process later without changing queue semantics.
+- Local development stays small: one API command can exercise the reservation endpoint and delayed expiry.
+
+Rejected:
+- A separate worker package immediately: cleaner operationally, but extra scripts and process management before there is more than one worker.
+- PostgreSQL cron or polling-only expiry: simpler to start, but it ignores the BullMQ delayed-job strategy already chosen for reservation timers.
+
+## Decision 11: Make Expiry Redis Release Idempotent
+
+Expiry uses `flashreserve:reservation-release:{reservationId}` as a short-lived Redis marker before incrementing the product stock counter.
+
+Why:
+- BullMQ can retry jobs after crashes or transient Redis failures.
+- PostgreSQL may already have committed the reservation as expired when Redis release fails.
+- The marker lets retries finish Redis release without double-incrementing stock.
+
+Rejected:
+- Incrementing Redis stock directly on every retry: unsafe because the same reservation could restore stock more than once.
+- Adding a durable outbox table immediately: stronger for production recovery, but heavier than needed for this first local worker slice.

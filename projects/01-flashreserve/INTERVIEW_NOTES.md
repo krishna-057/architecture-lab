@@ -18,6 +18,8 @@ PostgreSQL row locking is correct and simpler, but under a large flash-sale burs
 
 Reservations may expire late, but confirmation still checks the reservation deadline. That means an expired reservation cannot be confirmed just because the worker has not processed it yet.
 
+The worker is also retry-safe: PostgreSQL records the durable expired state, and Redis stock release uses a per-reservation marker so a retried BullMQ job cannot restore the same stock twice.
+
 ### Why not microservices?
 
 The first version does not need independent deployment or scaling per domain. A modular monolith keeps boundaries clear while avoiding distributed transactions and network failure between internal modules.
