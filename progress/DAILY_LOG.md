@@ -1,5 +1,27 @@
 # Daily Log
 
+## 2026-07-16
+
+Implemented the first FlashReserve live stock update channel.
+
+Added:
+- Socket.IO WebSocket support for the NestJS API.
+- A `/stock` namespace with `stock.subscribe` and `stock.unsubscribe` product-room messages.
+- `stock.updated` broadcasts after successful reservation creation and after idempotent reservation expiry stock release.
+- Realtime docs covering the event contract, product room shape, and why Redis pub/sub is deferred until multiple API or worker processes exist.
+
+Validated the work by running:
+- `npm run check` from `projects/01-flashreserve`
+- `npm run build -w @flashreserve/api` from `projects/01-flashreserve`
+- `npm run test:reservations:concurrency` from `projects/01-flashreserve` (passed with 1 skipped test because local PostgreSQL rejected the documented `flashreserve` password)
+
+Notes:
+- `WORKFLOW.md` still appears to contain binary/corrupted content in the current checkout, so it could not be meaningfully read as Markdown.
+- `npm install` reported existing dependency audit findings: 3 low, 14 moderate, and 7 high.
+
+Next recommended task:
+- Move to the next project queue item or add FlashReserve order confirmation tasks before starting PocketSentinel.
+
 ## 2026-07-15
 
 Added the first FlashReserve concurrent reservation integration test.

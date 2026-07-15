@@ -11,6 +11,7 @@ import { Queue } from "bullmq";
 import Redis from "ioredis";
 import { DatabaseService } from "../database/database.service";
 import { buildRedisConnectionOptions } from "../redis/redis-connection";
+import { RealtimeStockPublisher } from "../realtime/realtime-stock.publisher";
 import { CreateReservationCommand } from "./create-reservation.dto";
 import {
   expireReservationJobName,
@@ -55,6 +56,7 @@ export class ReservationsService implements OnModuleDestroy {
 
   constructor(
     private readonly database: DatabaseService,
+    private readonly realtimeStockPublisher: RealtimeStockPublisher,
     config: ConfigService
   ) {
     const redisUrl = config.get<string>("REDIS_URL") ?? "redis://localhost:6379";
@@ -106,6 +108,13 @@ export class ReservationsService implements OnModuleDestroy {
         "Reservation expiry scheduling is unavailable."
       );
     }
+
+    this.realtimeStockPublisher.publishStockUpdated({
+      productId: reservation.product_id,
+      availableStock: remainingStock,
+      source: "reservation_created",
+      reservationId: reservation.id
+    });
 
     return {
       reservationId: reservation.id,

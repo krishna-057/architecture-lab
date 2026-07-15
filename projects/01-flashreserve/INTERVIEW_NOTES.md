@@ -31,3 +31,7 @@ The hard part of a flash sale is protecting the hottest inventory path, not supp
 ### How would you scale it?
 
 Start with Redis atomic scripts and per-product counters. Add rate limits and a waiting room for extreme bursts. If WebSocket fanout grows, use Redis pub/sub or a dedicated realtime gateway. If order processing grows, split workers independently before splitting the whole backend.
+
+### How are live stock updates delivered?
+
+Clients join a product-scoped Socket.IO room on the `/stock` namespace. The reservation path emits `stock.updated` after the reservation is durable and the expiry job is scheduled. The expiry worker emits the same event only when it actually restores Redis stock, so retries do not duplicate updates.

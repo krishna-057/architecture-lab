@@ -197,6 +197,30 @@ Behavior:
 
 The worker runs in the NestJS API process for the first portfolio slice. That keeps local development simple while preserving a clean `workers` module boundary that can become a separate process later.
 
+## Live Stock Updates
+
+The first realtime slice exposes a Socket.IO WebSocket namespace at `/stock`.
+
+Client messages:
+
+```text
+stock.subscribe   { "productId": "<uuid>" }
+stock.unsubscribe { "productId": "<uuid>" }
+```
+
+Server messages:
+
+```text
+stock.subscribed   { "productId": "<uuid>" }
+stock.unsubscribed { "productId": "<uuid>" }
+stock.error        { "message": "A valid productId is required." }
+stock.updated      { "productId": "<uuid>", "availableStock": 2, "source": "reservation_created", "reservationId": "<uuid>", "occurredAt": "<iso-date>" }
+```
+
+The channel is intentionally product-room based. A reservation creation broadcast happens only after Redis stock is decremented, PostgreSQL has recorded the pending reservation, and the expiry job has been scheduled. An expiry broadcast happens only when the worker successfully releases Redis stock for that reservation. BullMQ retries that find an already-released reservation do not broadcast duplicate stock events.
+
+This first version runs the WebSocket gateway in the API process and publishes directly from reservation and worker modules. Redis pub/sub or a dedicated realtime gateway can be added later if one API process is no longer enough for fanout.
+
 ## Concurrency Test
 
 The first race-condition test is a Node integration test for `POST /api/reservations`.

@@ -9,6 +9,7 @@ import { Job, Worker } from "bullmq";
 import Redis from "ioredis";
 import { DatabaseService } from "../database/database.service";
 import { buildRedisConnectionOptions } from "../redis/redis-connection";
+import { RealtimeStockPublisher } from "../realtime/realtime-stock.publisher";
 import {
   expireReservationJobName,
   reservationExpiryQueueName,
@@ -29,19 +30,24 @@ interface ReservationExpiryRow {
   checkout_expires_at: Date;
 }
 
+interface RedisStockReleaseResult {
+  status: "released" | "already_released";
+  availableStock: number | null;
+}
+
 const releaseExpiredReservationStockScript = `
 if redis.call("EXISTS", KEYS[2]) == 0 then
-  return -1
+  return {-1, -1}
 end
 
 local marked = redis.call("SET", KEYS[3], "released", "NX", "PX", ARGV[2])
 if not marked then
-  return 0
+  return {0, tonumber(redis.call("GET", KEYS[2])) or -1}
 end
 
-redis.call("INCRBY", KEYS[2], ARGV[1])
+local availableStock = redis.call("INCRBY", KEYS[2], ARGV[1])
 redis.call("DEL", KEYS[1])
-return 1
+return {1, availableStock}
 `;
 
 @Injectable()
@@ -53,6 +59,7 @@ export class ReservationExpiryWorker implements OnModuleInit, OnModuleDestroy {
 
   constructor(
     private readonly database: DatabaseService,
+    private readonly realtimeStockPublisher: RealtimeStockPublisher,
     config: ConfigService
   ) {
     const redisUrl = config.get<string>("REDIS_URL") ?? "redis://localhost:6379";
@@ -118,13 +125,15 @@ export class ReservationExpiryWorker implements OnModuleInit, OnModuleDestroy {
 
       if (expiredReservation) {
         const redisRelease = await this.releaseRedisStock(expiredReservation);
-        return { status: "expired", redisRelease };
+        this.publishExpiryStockUpdate(expiredReservation, redisRelease);
+        return { status: "expired", redisRelease: redisRelease.status };
       }
 
       const latestReservation = await this.loadReservation(reservation.id);
       if (latestReservation?.status === "expired") {
         const redisRelease = await this.releaseRedisStock(latestReservation);
-        return { status: "already_expired", redisRelease };
+        this.publishExpiryStockUpdate(latestReservation, redisRelease);
+        return { status: "already_expired", redisRelease: redisRelease.status };
       }
 
       return { status: "ignored", reason: "reservation_changed" };
@@ -132,7 +141,8 @@ export class ReservationExpiryWorker implements OnModuleInit, OnModuleDestroy {
 
     if (reservation.status === "expired") {
       const redisRelease = await this.releaseRedisStock(reservation);
-      return { status: "already_expired", redisRelease };
+      this.publishExpiryStockUpdate(reservation, redisRelease);
+      return { status: "already_expired", redisRelease: redisRelease.status };
     }
 
     return { status: "ignored", reason: `reservation_${reservation.status}` };
@@ -191,7 +201,9 @@ export class ReservationExpiryWorker implements OnModuleInit, OnModuleDestroy {
     });
   }
 
-  private async releaseRedisStock(reservation: ReservationExpiryRow) {
+  private async releaseRedisStock(
+    reservation: ReservationExpiryRow
+  ): Promise<RedisStockReleaseResult> {
     const result = await this.redis.eval(
       releaseExpiredReservationStockScript,
       3,
@@ -202,12 +214,42 @@ export class ReservationExpiryWorker implements OnModuleInit, OnModuleDestroy {
       this.releaseMarkerTtlMs
     );
 
-    const releaseResult = Number(result);
+    const [releaseCode, availableStock] = parseRedisReleaseResult(result);
 
-    if (releaseResult === -1) {
+    if (releaseCode === -1) {
       throw new Error("Redis stock counter is unavailable for expiry release.");
     }
 
-    return releaseResult === 1 ? "released" : "already_released";
+    return {
+      status: releaseCode === 1 ? "released" : "already_released",
+      availableStock: availableStock >= 0 ? availableStock : null
+    };
   }
+
+  private publishExpiryStockUpdate(
+    reservation: ReservationExpiryRow,
+    redisRelease: RedisStockReleaseResult
+  ) {
+    if (
+      redisRelease.status !== "released" ||
+      redisRelease.availableStock === null
+    ) {
+      return;
+    }
+
+    this.realtimeStockPublisher.publishStockUpdated({
+      productId: reservation.product_id,
+      availableStock: redisRelease.availableStock,
+      source: "reservation_expired",
+      reservationId: reservation.id
+    });
+  }
+}
+
+function parseRedisReleaseResult(result: unknown): [number, number] {
+  if (!Array.isArray(result)) {
+    return [Number(result), -1];
+  }
+
+  return [Number(result[0]), Number(result[1])];
 }

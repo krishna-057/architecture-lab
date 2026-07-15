@@ -170,3 +170,18 @@ Rejected:
 - Mock-only service tests for the first race path: useful later for edge cases, but they would not prove Redis/PostgreSQL coordination.
 - Adding Jest or another test framework immediately: more tooling than this single integration slice needs.
 - Making local infra mandatory for every `npm run check`: too heavy for quick scaffold validation, so the integration test can skip unless `FLASHRESERVE_REQUIRE_INTEGRATION=1` is set.
+
+## Decision 13: Start Realtime Stock With Product-Scoped WebSocket Rooms
+
+The first live stock update channel uses Socket.IO through NestJS WebSocket gateways. Clients connect to the `/stock` namespace and subscribe to one product room at a time with `stock.subscribe`.
+
+Why:
+- The first product flow is already single-product, so product-scoped rooms match the reservation model.
+- The reservation service and expiry worker know the exact stock count after Redis changes, so they can publish compact `stock.updated` events without polling PostgreSQL.
+- Socket.IO keeps the browser integration small while preserving a WebSocket-shaped architecture for interview discussion.
+- Publishing in-process is enough while the worker runs in the API process.
+
+Rejected:
+- Polling the product endpoint for stock: simpler, but it hides the realtime architecture signal.
+- Broadcasting every stock event to every connected client: easy to implement, but wasteful once multiple products exist.
+- Redis pub/sub immediately: the right next step for multiple API processes, but unnecessary before there is more than one process to bridge.

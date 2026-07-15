@@ -238,3 +238,15 @@ reservation.created
 reservation.expired
 order.confirmed
 ```
+
+Implemented first realtime slice:
+
+- Socket.IO namespace: `/stock`
+- Subscription message: `stock.subscribe` with `{ productId }`
+- Unsubscription message: `stock.unsubscribe` with `{ productId }`
+- Broadcast message: `stock.updated`
+- Room shape: `product:{productId}`
+
+`stock.updated` is emitted from the reservation service after a successful reservation has decremented Redis stock, persisted PostgreSQL state, and scheduled expiry. It is emitted from the expiry worker only when the worker actually restores Redis stock for an expired reservation. Already-released retries are treated as idempotent no-ops for realtime fanout.
+
+The first implementation publishes in-process because the API and worker currently run inside the same NestJS app. If API replicas or a separate worker process are added later, this boundary should move behind Redis pub/sub or a dedicated realtime gateway so every connected client sees stock events regardless of which process handled the reservation.
