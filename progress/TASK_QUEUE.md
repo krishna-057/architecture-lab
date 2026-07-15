@@ -15,6 +15,7 @@ Tasks should stay small enough for one focused session.
 - [x] Add tests for concurrent reservation attempts.
 - [x] Add live stock update channel.
 - [x] Implement order confirmation API.
+- [x] Add admin inventory diagnostics API.
 - [x] Document Redis reservation strategy and rejected alternatives.
 
 ### Later

@@ -2,6 +2,25 @@
 
 ## 2026-07-16
 
+Implemented the first FlashReserve admin inventory diagnostics API.
+
+Added:
+- `GET /api/admin/products/:productId/inventory` in the NestJS API.
+- Product drop metadata, durable inventory counters, derived available stock, reservation status counts, and the 10 most recent reservations in one read-only operator response.
+- Documentation for why this endpoint uses PostgreSQL as the durable admin view and defers auth/mutation workflows until an admin identity model exists.
+
+Validated the work by running:
+- `npm run check` from `projects/01-flashreserve`
+- `npm run build -w @flashreserve/api` from `projects/01-flashreserve`
+- `npm run test:reservations:concurrency` from `projects/01-flashreserve` (passed with 2 skipped tests because local PostgreSQL rejected the documented `flashreserve` password)
+
+Notes:
+- The Ready queue was fully checked, but the active project docs still listed an admin inventory/reservation view as a core FlashReserve feature. Added that missing task to the Ready list and completed it as today's single task.
+- `WORKFLOW.md` still appears to contain binary/corrupted content in the current checkout, so it could not be meaningfully read as Markdown.
+
+Next recommended task:
+- Move the active queue to PocketSentinel or add FlashReserve frontend wiring for the completed APIs.
+
 Implemented the first FlashReserve order confirmation API slice.
 
 Added:

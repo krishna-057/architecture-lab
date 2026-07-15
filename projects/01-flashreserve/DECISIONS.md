@@ -200,3 +200,18 @@ Rejected:
 - Creating an order asynchronously before returning to the shopper: useful later for payments and fulfillment, but too much ceremony for the simulated first checkout slice.
 - Incrementing or decrementing Redis during confirmation: it would double-count stock movement because reservation creation already removed units from the available pool.
 - Adding a durable outbox immediately for `order.confirmed`: reasonable when notifications or fulfillment exist, but unnecessary before there is a downstream consumer.
+
+## Decision 15: Start Admin Monitoring As Read-Only Diagnostics
+
+The first operator surface is a read-only `GET /api/admin/products/:productId/inventory` endpoint.
+
+Why:
+- Operators need to inspect product state, durable inventory counters, and reservation volume before they need inventory mutation workflows.
+- The current architecture already treats PostgreSQL as durable truth, so the diagnostics endpoint derives available stock from `inventory.total_quantity - inventory.reserved_quantity - inventory.sold_quantity`.
+- Returning recent reservations beside status counts gives enough operational context to debug stuck holds, late expiry, and confirmation flow issues.
+- Authentication and role checks should be added with a real admin identity model, not a hard-coded header or fake local-only guard.
+
+Rejected:
+- Building a full admin UI first: useful later, but the backend contract is the more important architecture slice.
+- Adding inventory edit endpoints now: risky without audit, authorization, and reconciliation rules.
+- Reading Redis as the primary admin view: Redis is the hot-path counter, but PostgreSQL is the operator's durable source of truth.

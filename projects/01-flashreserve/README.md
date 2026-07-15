@@ -219,6 +219,53 @@ Behavior:
 - Returns the existing order when the same confirmed reservation is submitted again.
 - Does not increment Redis stock on confirmation because the available stock was already removed when the reservation was created.
 
+## Admin Inventory Diagnostics API
+
+The first operator monitoring slice is `GET /api/admin/products/:productId/inventory`.
+
+Response shape:
+
+```json
+{
+  "product": {
+    "id": "00000000-0000-4000-8000-000000000001",
+    "slug": "launch-drop",
+    "name": "Launch Drop",
+    "status": "live",
+    "unitPriceCents": 12900,
+    "currencyCode": "USD",
+    "dropStartsAt": "2026-07-16T12:00:00.000Z",
+    "dropEndsAt": "2026-07-16T13:00:00.000Z"
+  },
+  "inventory": {
+    "totalQuantity": 250,
+    "reservedQuantity": 61,
+    "soldQuantity": 124,
+    "availableQuantity": 65,
+    "version": 12,
+    "lastReconciledAt": "2026-07-16T12:15:00.000Z",
+    "updatedAt": "2026-07-16T12:15:00.000Z"
+  },
+  "reservations": {
+    "counts": {
+      "total": 185,
+      "pending": 61,
+      "confirmed": 124,
+      "expired": 0,
+      "cancelled": 0
+    },
+    "recent": []
+  }
+}
+```
+
+Behavior:
+
+- Validates the product ID at the controller boundary.
+- Returns the product, durable inventory counters, derived available stock, reservation status counts, and the 10 most recent reservations for that product.
+- Returns `inventory: null` if a product exists without an inventory row, which keeps missing setup visible to operators instead of hiding it behind a generic 404.
+- Stays read-only for the first slice. Authentication and inventory mutation workflows are intentionally deferred until the lab introduces an admin identity and permission model.
+
 ## Live Stock Updates
 
 The first realtime slice exposes a Socket.IO WebSocket namespace at `/stock`.

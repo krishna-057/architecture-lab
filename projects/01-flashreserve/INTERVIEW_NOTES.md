@@ -39,3 +39,7 @@ Clients join a product-scoped Socket.IO room on the `/stock` namespace. The rese
 ### How is order confirmation idempotent?
 
 Confirmation locks the reservation row in PostgreSQL, checks ownership, status, and deadline, then marks the reservation confirmed while creating the order and order item in the same transaction. If the client retries after success, the API sees the reservation is already confirmed and returns the existing order instead of creating a duplicate.
+
+### What does the admin inventory endpoint show?
+
+The read-only admin endpoint returns product drop metadata, durable inventory counters, derived available stock, reservation status counts, and recent reservations for one product. It intentionally uses PostgreSQL instead of Redis so operators see the auditable source of truth, while Redis remains the fast reservation counter.

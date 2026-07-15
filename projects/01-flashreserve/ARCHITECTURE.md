@@ -97,6 +97,13 @@ Core state transitions:
 1. Operators inspect product state, aggregate inventory, and reservation volume.
 2. The first slice treats operator actions as read-heavy diagnostics, not a full admin inventory editor.
 
+Implemented API slice:
+
+- `GET /api/admin/products/:productId/inventory` returns product drop metadata, durable inventory counters, reservation status counts, and the 10 most recent reservations for one product.
+- Available stock is derived from PostgreSQL as `total_quantity - reserved_quantity - sold_quantity`, which gives operators the durable view rather than the Redis hot-counter view.
+- A missing inventory row is returned as `inventory: null` for an existing product so setup gaps are explicit during local development.
+- The endpoint does not add admin authentication yet because the current schema has no role or permission model; the route shape preserves the boundary for a later protected admin surface.
+
 ## Reservation Flow
 
 1. User requests a reservation for a product.
@@ -206,7 +213,7 @@ Recommended backend modules:
 - `realtime`
 - `workers`
 
-The initial NestJS scaffold mirrors those modules under `apps/api/src`. They are empty modules for now by design: the next implementation slice can add the reservation creation controller and service without inventing folder structure during feature work.
+The NestJS implementation mirrors those modules under `apps/api/src`. Reservation, order, realtime, worker, and inventory diagnostics behavior now live behind those module boundaries while the app remains one deployable backend.
 
 ## Local Infra Files
 
@@ -237,6 +244,10 @@ GET    /reservations/:id
 POST   /orders/confirm
 GET    /admin/products/:id/inventory
 ```
+
+Implemented admin diagnostics endpoint:
+
+- `GET /api/admin/products/:productId/inventory`
 
 ## Realtime Events
 
