@@ -2,6 +2,27 @@
 
 ## 2026-07-16
 
+Implemented the first FlashReserve order confirmation API slice.
+
+Added:
+- `POST /api/orders/confirm` in the NestJS API.
+- Manual request parsing for `userId` and `reservationId`.
+- Transactional reservation confirmation that locks the reservation, creates one confirmed order, inserts the order item, and moves inventory from reserved to sold.
+- Idempotent duplicate confirmation behavior that returns the existing order for an already confirmed reservation.
+- Integration coverage in the existing API test command for the confirm path and duplicate confirm request.
+
+Validated the work by running:
+- `npm run check` from `projects/01-flashreserve`
+- `npm run build -w @flashreserve/api` from `projects/01-flashreserve`
+- `npm run test:reservations:concurrency` from `projects/01-flashreserve` (passed with 2 skipped tests because local PostgreSQL rejected the documented `flashreserve` password)
+
+Notes:
+- The Ready queue had all original FlashReserve items checked, but the active project docs still listed order confirmation as a core deliverable. Added that missing task to the Ready list and completed it as today's single task.
+- `WORKFLOW.md` still appears to contain binary/corrupted content in the current checkout, so it could not be meaningfully read as Markdown.
+
+Next recommended task:
+- Add a product stock warmup/admin inventory view or move the active queue to PocketSentinel.
+
 Implemented the first FlashReserve live stock update channel.
 
 Added:

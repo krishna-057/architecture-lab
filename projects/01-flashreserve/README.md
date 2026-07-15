@@ -197,6 +197,28 @@ Behavior:
 
 The worker runs in the NestJS API process for the first portfolio slice. That keeps local development simple while preserving a clean `workers` module boundary that can become a separate process later.
 
+## Order Confirmation API
+
+The first checkout completion slice is `POST /api/orders/confirm`.
+
+Request shape:
+
+```json
+{
+  "userId": "00000000-0000-4000-8000-000000000001",
+  "reservationId": "00000000-0000-4000-8000-000000000002"
+}
+```
+
+Behavior:
+
+- Validates UUIDs at the controller boundary.
+- Locks the reservation row in PostgreSQL before changing checkout state.
+- Requires the reservation to belong to the requesting user, still be `pending`, and still be inside its checkout window.
+- Marks the reservation `confirmed`, creates one confirmed order, inserts the matching order item, and moves durable inventory from reserved to sold in one transaction.
+- Returns the existing order when the same confirmed reservation is submitted again.
+- Does not increment Redis stock on confirmation because the available stock was already removed when the reservation was created.
+
 ## Live Stock Updates
 
 The first realtime slice exposes a Socket.IO WebSocket namespace at `/stock`.

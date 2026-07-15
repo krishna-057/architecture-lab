@@ -35,3 +35,7 @@ Start with Redis atomic scripts and per-product counters. Add rate limits and a 
 ### How are live stock updates delivered?
 
 Clients join a product-scoped Socket.IO room on the `/stock` namespace. The reservation path emits `stock.updated` after the reservation is durable and the expiry job is scheduled. The expiry worker emits the same event only when it actually restores Redis stock, so retries do not duplicate updates.
+
+### How is order confirmation idempotent?
+
+Confirmation locks the reservation row in PostgreSQL, checks ownership, status, and deadline, then marks the reservation confirmed while creating the order and order item in the same transaction. If the client retries after success, the API sees the reservation is already confirmed and returns the existing order instead of creating a duplicate.

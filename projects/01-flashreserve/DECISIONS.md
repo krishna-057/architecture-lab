@@ -185,3 +185,18 @@ Rejected:
 - Polling the product endpoint for stock: simpler, but it hides the realtime architecture signal.
 - Broadcasting every stock event to every connected client: easy to implement, but wasteful once multiple products exist.
 - Redis pub/sub immediately: the right next step for multiple API processes, but unnecessary before there is more than one process to bridge.
+
+## Decision 14: Confirm Orders In One PostgreSQL Transaction
+
+The first order confirmation flow converts a pending reservation into one confirmed order inside a single PostgreSQL transaction.
+
+Why:
+- The reservation row is the checkout authority, so confirmation should lock it before creating durable order state.
+- Moving inventory from reserved to sold belongs in the same transaction as marking the reservation confirmed.
+- Duplicate confirmation attempts are expected in real checkout flows, so an already confirmed reservation returns its existing order.
+- Redis stock should not change at confirmation time because the available counter was already decremented when the reservation was created.
+
+Rejected:
+- Creating an order asynchronously before returning to the shopper: useful later for payments and fulfillment, but too much ceremony for the simulated first checkout slice.
+- Incrementing or decrementing Redis during confirmation: it would double-count stock movement because reservation creation already removed units from the available pool.
+- Adding a durable outbox immediately for `order.confirmed`: reasonable when notifications or fulfillment exist, but unnecessary before there is a downstream consumer.

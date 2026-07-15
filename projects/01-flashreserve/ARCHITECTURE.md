@@ -128,6 +128,14 @@ Implemented API slice:
 5. Inventory is finalized in PostgreSQL.
 6. Duplicate confirmation attempts return the existing order.
 
+Implemented API slice:
+
+- `POST /api/orders/confirm` accepts `userId` and `reservationId`.
+- The service locks the reservation row with `FOR UPDATE` so two confirmation requests for the same hold serialize through PostgreSQL.
+- The confirmation transaction marks the reservation confirmed, inserts the order and order item, and moves inventory from `reserved_quantity` to `sold_quantity`.
+- Duplicate confirmation requests for an already confirmed reservation return the existing order instead of creating a second one.
+- Redis stock is not changed during confirmation because the reservation path already removed those units from the available counter.
+
 ## Expiry Flow
 
 1. BullMQ expiry job runs after the reservation window.

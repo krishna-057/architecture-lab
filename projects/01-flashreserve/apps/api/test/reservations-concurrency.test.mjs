@@ -147,6 +147,150 @@ test(
   }
 );
 
+test(
+  "POST /api/orders/confirm creates one idempotent order from a reservation",
+  { timeout: 45_000 },
+  async (t) => {
+    const pool = new Pool({ connectionString: databaseUrl });
+    const redis = new Redis(redisUrl, { maxRetriesPerRequest: null });
+    redis.on("error", () => undefined);
+    let apiProcess;
+
+    const runId = randomUUID();
+    const productId = randomUUID();
+    const userIds = [randomUUID()];
+    const [userId] = userIds;
+    const stockKey = `flashreserve:stock:${productId}`;
+    const initialStock = 2;
+    let infrastructureReady = false;
+
+    try {
+      const infrastructureError = await checkInfrastructure(pool, redis);
+      if (infrastructureError) {
+        t.skip(
+          `PostgreSQL and Redis must be running for this integration test: ${infrastructureError.message}`
+        );
+        return;
+      }
+      infrastructureReady = true;
+
+      await applySchema(pool);
+      await seedDrop(pool, {
+        runId,
+        productId,
+        userIds,
+        initialStock
+      });
+      await redis.set(stockKey, initialStock);
+
+      apiProcess = await startApiServer();
+
+      const reservationResponse = await fetch(`${apiBaseUrl}/reservations`, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json"
+        },
+        body: JSON.stringify({
+          userId,
+          productId,
+          quantity: initialStock
+        })
+      });
+      const reservationBody = await reservationResponse.json();
+
+      assert.equal(reservationResponse.status, 201);
+      assert.equal(reservationBody.remainingStock, 0);
+
+      const confirmPayload = {
+        userId,
+        reservationId: reservationBody.reservationId
+      };
+      const firstConfirmResponse = await fetch(`${apiBaseUrl}/orders/confirm`, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json"
+        },
+        body: JSON.stringify(confirmPayload)
+      });
+      const secondConfirmResponse = await fetch(`${apiBaseUrl}/orders/confirm`, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json"
+        },
+        body: JSON.stringify(confirmPayload)
+      });
+
+      const firstConfirm = await firstConfirmResponse.json();
+      const secondConfirm = await secondConfirmResponse.json();
+
+      assert.equal(firstConfirmResponse.status, 201);
+      assert.equal(secondConfirmResponse.status, 201);
+      assert.equal(firstConfirm.orderId, secondConfirm.orderId);
+      assert.equal(firstConfirm.reservationId, reservationBody.reservationId);
+      assert.equal(firstConfirm.status, "confirmed");
+      assert.equal(firstConfirm.subtotalAmountCents, 25998);
+      assert.deepEqual(firstConfirm.items, [
+        {
+          productId,
+          quantity: initialStock,
+          unitPriceCents: 12999
+        }
+      ]);
+
+      const inventory = await pool.query(
+        `
+          SELECT total_quantity, reserved_quantity, sold_quantity
+          FROM inventory
+          WHERE product_id = $1
+        `,
+        [productId]
+      );
+      assert.deepEqual(inventory.rows[0], {
+        total_quantity: initialStock,
+        reserved_quantity: 0,
+        sold_quantity: initialStock
+      });
+
+      const reservations = await pool.query(
+        `
+          SELECT status, confirmed_at IS NOT NULL AS has_confirmed_at
+          FROM reservations
+          WHERE id = $1
+        `,
+        [reservationBody.reservationId]
+      );
+      assert.deepEqual(reservations.rows[0], {
+        status: "confirmed",
+        has_confirmed_at: true
+      });
+
+      const orders = await pool.query(
+        `
+          SELECT count(*)::int AS count
+          FROM orders
+          WHERE reservation_id = $1
+        `,
+        [reservationBody.reservationId]
+      );
+      assert.equal(orders.rows[0].count, 1);
+      assert.equal(Number(await redis.get(stockKey)), 0);
+    } finally {
+      if (apiProcess) {
+        apiProcess.kill();
+        await new Promise((resolveProcess) =>
+          apiProcess.once("exit", resolveProcess)
+        );
+      }
+      if (infrastructureReady) {
+        await redis.del(stockKey);
+        await cleanupDrop(pool, productId, userIds);
+      }
+      redis.disconnect();
+      await pool.end();
+    }
+  }
+);
+
 async function checkInfrastructure(pool, redis) {
   try {
     await pool.query("SELECT 1");

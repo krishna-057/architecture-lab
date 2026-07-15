@@ -14,6 +14,7 @@ Tasks should stay small enough for one focused session.
 - [x] Add reservation expiry worker.
 - [x] Add tests for concurrent reservation attempts.
 - [x] Add live stock update channel.
+- [x] Implement order confirmation API.
 - [x] Document Redis reservation strategy and rejected alternatives.
 
 ### Later
