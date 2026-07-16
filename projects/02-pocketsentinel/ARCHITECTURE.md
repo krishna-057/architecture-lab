@@ -63,6 +63,14 @@ Remote media is rendered directly from `ontrack` into the dashboard video elemen
 
 STUN/TURN configuration is still deferred. The first complete offer/answer slice should prove local and same-LAN behavior before introducing external traversal infrastructure or credentials.
 
+## Detection Ingestion Boundary
+
+The dashboard now owns the first event ingestion loop because it already receives the remote WebRTC media and can sample frames without sending raw video to FastAPI. Once the remote stream is connected, the dashboard draws low-resolution frames into a hidden canvas, runs a small detector adapter, and posts rate-limited detection events to the API.
+
+The current adapter detects meaningful frame changes and labels them as `moving object`. This is intentionally a temporary detector, not the final AI model. The durable contract is the event pipeline: detector output becomes `{ label, confidence, occurred_at }`, FastAPI validates it, and PostgreSQL stores it when `DATABASE_URL` is configured.
+
+This keeps video private to the browser peer while still exercising the dashboard-to-API ingestion path that YOLO or ONNX Runtime will use later.
+
 ## Local Development
 
 The scaffold uses separate ports so all three surfaces can run together:

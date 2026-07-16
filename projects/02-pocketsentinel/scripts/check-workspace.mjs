@@ -39,4 +39,9 @@ if (!schemaFile.includes("detection_events")) {
   throw new Error("db/schema.sql must define detection_events.");
 }
 
+const dashboardPage = readFileSync("apps/dashboard/src/app/page.tsx", "utf8");
+if (!dashboardPage.includes("/detections") || !dashboardPage.includes("sampleRemoteFrame")) {
+  throw new Error("Dashboard must include detection event ingestion from sampled video frames.");
+}
+
 console.log("PocketSentinel scaffold check passed.");

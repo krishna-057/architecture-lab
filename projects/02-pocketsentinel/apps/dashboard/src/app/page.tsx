@@ -33,8 +33,13 @@ type DetectionEvent = {
 };
 
 type StreamState = "empty" | "waiting_offer" | "answering" | "connecting" | "streaming" | "error";
+type DetectionPipelineState = "idle" | "watching" | "posting" | "error";
 
 const apiBaseUrl = (process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8100").replace(/\/$/, "");
+const detectionCanvasWidth = 160;
+const detectionCanvasHeight = 90;
+const detectionSampleIntervalMs = 2200;
+const detectionPostCooldownMs = 8500;
 
 async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`${apiBaseUrl}${path}`, {
@@ -94,16 +99,21 @@ function isIceCandidate(payload: unknown): payload is RTCIceCandidateInit {
 
 export default function DashboardHome() {
   const remoteVideoRef = useRef<HTMLVideoElement | null>(null);
+  const detectionCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const remoteStreamRef = useRef<MediaStream | null>(null);
   const peerConnectionRef = useRef<RTCPeerConnection | null>(null);
   const processedSignalIdsRef = useRef<Set<string>>(new Set());
   const queuedIceCandidatesRef = useRef<RTCIceCandidateInit[]>([]);
   const messageCounterRef = useRef(0);
+  const previousFrameRef = useRef<Uint8ClampedArray | null>(null);
+  const lastDetectionPostAtRef = useRef(0);
   const [session, setSession] = useState<SessionResponse | null>(null);
   const [signals, setSignals] = useState<SignalMessage[]>([]);
   const [detections, setDetections] = useState<DetectionEvent[]>([]);
   const [status, setStatus] = useState<ShellStatus>("idle");
   const [streamState, setStreamState] = useState<StreamState>("empty");
+  const [detectionPipelineState, setDetectionPipelineState] = useState<DetectionPipelineState>("idle");
+  const [detectionPipelineMessage, setDetectionPipelineMessage] = useState("Waiting for live stream");
   const [message, setMessage] = useState("Create a viewing session to receive a camera pairing code.");
 
   const lastSignalSequence = useMemo(
@@ -118,6 +128,8 @@ export default function DashboardHome() {
     peerConnectionRef.current = null;
     queuedIceCandidatesRef.current = [];
     remoteStreamRef.current = null;
+    previousFrameRef.current = null;
+    lastDetectionPostAtRef.current = 0;
 
     if (remoteVideoRef.current) {
       remoteVideoRef.current.srcObject = null;
@@ -143,6 +155,65 @@ export default function DashboardHome() {
     },
     []
   );
+
+  const postDetection = useCallback(
+    async (targetSessionId: string, label: string, confidence: number) => {
+      return requestJson<DetectionEvent>(`/api/sessions/${targetSessionId}/detections`, {
+        method: "POST",
+        body: JSON.stringify({
+          label,
+          confidence,
+          occurred_at: new Date().toISOString()
+        })
+      });
+    },
+    []
+  );
+
+  const sampleRemoteFrame = useCallback(() => {
+    const video = remoteVideoRef.current;
+    const canvas = detectionCanvasRef.current;
+    const context = canvas?.getContext("2d", { willReadFrequently: true });
+
+    if (!video || !canvas || !context || video.readyState < 2) {
+      return null;
+    }
+
+    if (video.videoWidth === 0 || video.videoHeight === 0) {
+      return null;
+    }
+
+    context.drawImage(video, 0, 0, detectionCanvasWidth, detectionCanvasHeight);
+    const currentFrame = context.getImageData(0, 0, detectionCanvasWidth, detectionCanvasHeight).data;
+    const previousFrame = previousFrameRef.current;
+    previousFrameRef.current = new Uint8ClampedArray(currentFrame);
+
+    if (!previousFrame) {
+      return null;
+    }
+
+    let totalDelta = 0;
+    let comparedPixels = 0;
+
+    for (let index = 0; index < currentFrame.length; index += 16) {
+      const currentLuma =
+        currentFrame[index] * 0.299 + currentFrame[index + 1] * 0.587 + currentFrame[index + 2] * 0.114;
+      const previousLuma =
+        previousFrame[index] * 0.299 + previousFrame[index + 1] * 0.587 + previousFrame[index + 2] * 0.114;
+      totalDelta += Math.abs(currentLuma - previousLuma);
+      comparedPixels += 1;
+    }
+
+    const averageDelta = totalDelta / comparedPixels;
+    if (averageDelta < 18) {
+      return null;
+    }
+
+    return {
+      label: "moving object",
+      confidence: Math.min(0.95, 0.35 + averageDelta / 90)
+    };
+  }, []);
 
   const ensurePeerConnection = useCallback(
     (targetSessionId: string) => {
@@ -275,6 +346,54 @@ export default function DashboardHome() {
   }, [closePeerConnection]);
 
   useEffect(() => {
+    if (!sessionId || streamState !== "streaming") {
+      previousFrameRef.current = null;
+      setDetectionPipelineState("idle");
+      setDetectionPipelineMessage(sessionId ? "Waiting for live stream" : "No active session");
+      return;
+    }
+
+    setDetectionPipelineState("watching");
+    setDetectionPipelineMessage("Watching remote frames");
+
+    const interval = window.setInterval(async () => {
+      try {
+        const detection = sampleRemoteFrame();
+        if (!detection) {
+          return;
+        }
+
+        const now = Date.now();
+        if (now - lastDetectionPostAtRef.current < detectionPostCooldownMs) {
+          return;
+        }
+
+        lastDetectionPostAtRef.current = now;
+        setDetectionPipelineState("posting");
+        setDetectionPipelineMessage("Posting detection event");
+
+        const event = await postDetection(sessionId, detection.label, detection.confidence);
+        setDetections((current) => {
+          if (current.some((existing) => existing.event_id === event.event_id)) {
+            return current;
+          }
+
+          return [...current, event].sort(
+            (left, right) => new Date(left.occurred_at).getTime() - new Date(right.occurred_at).getTime()
+          );
+        });
+        setDetectionPipelineState("watching");
+        setDetectionPipelineMessage("Watching remote frames");
+      } catch (error) {
+        setDetectionPipelineState("error");
+        setDetectionPipelineMessage(error instanceof Error ? error.message : "Detection event ingestion failed.");
+      }
+    }, detectionSampleIntervalMs);
+
+    return () => window.clearInterval(interval);
+  }, [postDetection, sampleRemoteFrame, sessionId, streamState]);
+
+  useEffect(() => {
     if (!sessionId || status === "ended" || status === "error") {
       return;
     }
@@ -332,8 +451,12 @@ export default function DashboardHome() {
     setDetections([]);
     processedSignalIdsRef.current = new Set();
     messageCounterRef.current = 0;
+    previousFrameRef.current = null;
+    lastDetectionPostAtRef.current = 0;
     closePeerConnection();
     setStreamState("waiting_offer");
+    setDetectionPipelineState("idle");
+    setDetectionPipelineMessage("Waiting for live stream");
 
     try {
       const created = await requestJson<SessionResponse>("/api/sessions", {
@@ -403,6 +526,13 @@ export default function DashboardHome() {
         </div>
         <div className="video-frame" data-active={hasOffer || status === "streaming"}>
           <video ref={remoteVideoRef} aria-label="Remote camera stream" autoPlay playsInline />
+          <canvas
+            ref={detectionCanvasRef}
+            className="analysis-canvas"
+            width={detectionCanvasWidth}
+            height={detectionCanvasHeight}
+            aria-hidden="true"
+          />
           {streamState !== "streaming" ? <p>{message}</p> : null}
         </div>
         <div className="signal-log" aria-label="Signaling messages">
@@ -424,6 +554,10 @@ export default function DashboardHome() {
         <div className="timeline-header">
           <span>Detections</span>
           <strong>{detections.length} events</strong>
+        </div>
+        <div className="pipeline-status" data-status={detectionPipelineState}>
+          <span>Pipeline</span>
+          <strong>{detectionPipelineMessage}</strong>
         </div>
         {detections.length === 0 ? <p className="empty-state">No detection events yet.</p> : null}
         {detections.map((event) => (

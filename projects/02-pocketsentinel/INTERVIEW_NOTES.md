@@ -20,4 +20,5 @@ Key topics:
 - The dashboard pairing shell creates sessions and polls for messages before it upgrades the reserved viewer surface into a remote WebRTC video element.
 - The camera now claims a pairing code and creates the SDP offer from real local tracks, then applies the dashboard answer and dashboard ICE candidates through the same signaling API.
 - The dashboard now creates the SDP answer, exchanges ICE candidates through the same FastAPI polling boundary, and renders remote tracks directly in the browser. This completes the first peer-to-peer video loop without sending raw frames through the API.
+- The dashboard now has the first detector ingestion loop: it samples remote frames locally, emits rate-limited `moving object` events, and posts them to FastAPI so the same timeline path can later receive YOLO/ONNX outputs.
 - STUN/TURN remains deferred until local and same-LAN negotiation are proven. That keeps traversal credentials and relay costs out of the prototype until there is a real connectivity problem to solve.

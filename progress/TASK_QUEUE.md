@@ -2,9 +2,20 @@
 
 Tasks should stay small enough for one focused session.
 
-## Active Project: PocketSentinel
+## Active Project: PersonaBridge
 
 ### Ready
+
+- [ ] Add PersonaBridge scaffold.
+
+### Later
+
+- [ ] Add CollabFlow scaffold.
+- [ ] Add HookRelay scaffold.
+
+## Completed Project: PocketSentinel
+
+### Completed
 
 - [x] Add PocketSentinel scaffold.
 - [x] Define WebRTC signaling and pairing flow.
@@ -13,13 +24,7 @@ Tasks should stay small enough for one focused session.
 - [x] Implement dashboard stream pairing shell.
 - [x] Implement camera pairing claim and WebRTC offer creation.
 - [x] Implement dashboard WebRTC answer creation and remote video rendering.
-- [ ] Add dashboard object detection event ingestion pipeline.
-
-### Later
-
-- [ ] Add PersonaBridge scaffold.
-- [ ] Add CollabFlow scaffold.
-- [ ] Add HookRelay scaffold.
+- [x] Add dashboard object detection event ingestion pipeline.
 
 ## Completed Project: FlashReserve
 

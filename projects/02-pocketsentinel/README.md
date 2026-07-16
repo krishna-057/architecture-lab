@@ -127,6 +127,17 @@ The dashboard completes the first local WebRTC happy path:
 
 This slice still uses no STUN/TURN servers. Local-host and same-LAN development can now validate the full offer/answer and media rendering path before NAT traversal is introduced.
 
+## Dashboard Detection Ingestion Flow
+
+The dashboard now has the first detection event ingestion pipeline:
+
+- Remote video frames are sampled in-browser through a hidden downscaled canvas after the WebRTC stream reaches `streaming`.
+- A small detector adapter compares frame luminance changes and emits a rate-limited `moving object` event for the first prototype.
+- Events are posted to `POST /api/sessions/{session_id}/detections` and then displayed through the existing timeline polling path.
+- The API receives labels, confidence, and timestamps only; raw video frames remain in the browser.
+
+This keeps the ingestion contract real without adding large model downloads or GPU/runtime setup before the stream lifecycle is stable. A later YOLO/ONNX detector can replace the current adapter while keeping the same event ingestion API.
+
 ## Why This Project Matters
 
 This project combines product creativity with real networking and AI inference. It is intentionally more than a CRUD app, but still small enough to build as a focused prototype.

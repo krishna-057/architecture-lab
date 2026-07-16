@@ -2,6 +2,30 @@
 
 ## 2026-07-16
 
+Implemented the PocketSentinel dashboard object detection event ingestion pipeline.
+
+Added:
+- Dashboard-side hidden canvas frame sampling from the connected remote WebRTC video.
+- A lightweight detector adapter that emits rate-limited `moving object` events from meaningful frame changes.
+- Posting of detection events to the existing FastAPI `POST /api/sessions/{session_id}/detections` endpoint.
+- Immediate timeline insertion after successful event ingestion, while retaining the existing polling refresh path.
+- Pipeline status UI in the dashboard detection panel.
+- Workspace validation that checks for the dashboard detection ingestion path.
+- Documentation for why YOLO/ONNX model runtime remains deferred behind the detector adapter boundary.
+
+Validated the work by running:
+- `node scripts/check-workspace.mjs` from `projects/02-pocketsentinel`
+- `npm run build -w @pocketsentinel/dashboard` from `projects/02-pocketsentinel`
+- `python -m compileall services\api\app` from `projects/02-pocketsentinel`
+
+Notes:
+- The first detector is intentionally lightweight and browser-local; it proves event ingestion without adding large model downloads or server-side frame handling.
+- Raw video frames still stay in the dashboard browser and are not posted to FastAPI.
+- `WORKFLOW.md` still appears to contain binary/corrupted content in the current checkout, so it could not be meaningfully read as Markdown.
+
+Next recommended task:
+- Start PersonaBridge with the first app scaffold.
+
 Implemented the PocketSentinel dashboard WebRTC answer and remote rendering slice.
 
 Added:

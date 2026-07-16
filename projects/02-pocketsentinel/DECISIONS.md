@@ -104,3 +104,18 @@ Rejected:
 - Adding SimplePeer or another wrapper now: useful for ergonomics, but it hides the WebRTC offer/answer mechanics this project is meant to demonstrate.
 - Adding STUN/TURN servers immediately: needed for broader network traversal, but local and same-LAN negotiation should work before external credentials are introduced.
 - Relaying media through FastAPI: easier to reason about from one backend process, but it violates the privacy and latency boundary established for the project.
+
+## Decision 8: Add Dashboard-Side Detection Ingestion Before Model Runtime
+
+The dashboard now samples the connected remote video and posts detection events through the existing FastAPI endpoint.
+
+Why:
+- The dashboard already receives the WebRTC stream, so it can sample frames without sending raw video through the API.
+- The important next contract is event ingestion: detector output should become durable timeline data with label, confidence, and timestamp fields.
+- A lightweight frame-delta adapter proves the ingestion loop and rate limiting without adding model downloads, GPU assumptions, or large npm/Python dependencies.
+- The adapter boundary leaves room for YOLO or ONNX Runtime to replace the current `moving object` detector while preserving the same API contract.
+
+Rejected:
+- Adding YOLO/ONNX Runtime immediately: useful soon, but too heavy before the browser stream lifecycle and ingestion API are exercised end to end.
+- Sending frames to FastAPI for detection now: this would weaken the privacy boundary and require server-side image handling before the first event pipeline needs it.
+- Manually creating fake timeline rows: easier visually, but it would not validate the dashboard-to-API ingestion path.

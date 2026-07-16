@@ -143,6 +143,10 @@ button:disabled {
   background: #101417;
 }
 
+.analysis-canvas {
+  display: none;
+}
+
 .video-frame[data-active="true"] {
   background:
     linear-gradient(90deg, rgba(198, 83, 47, 0.14) 1px, transparent 1px),
@@ -178,6 +182,35 @@ button:disabled {
   margin: 12px 0 0;
   color: var(--muted);
   font-size: 14px;
+}
+
+.pipeline-status {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 42px;
+  margin-top: 14px;
+  border-top: 1px solid var(--line);
+}
+
+.pipeline-status span {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.pipeline-status strong {
+  color: var(--primary);
+  font-size: 13px;
+  text-align: right;
+}
+
+.pipeline-status[data-status="idle"] strong {
+  color: var(--muted);
+}
+
+.pipeline-status[data-status="error"] strong {
+  color: var(--accent);
 }
 
 .signal-row {
