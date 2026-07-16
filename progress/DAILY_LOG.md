@@ -2,6 +2,28 @@
 
 ## 2026-07-16
 
+Defined the PersonaBridge realtime session and memory contracts.
+
+Added:
+- `projects/03-personabridge/CONTRACTS.md` with the provider-neutral room, event, token, transcript, approval, and memory-candidate rules.
+- `GET /api/sessions/{session_id}/realtime-contract` and `GET /api/sessions/{session_id}/memory-contract` in the FastAPI API.
+- Web console contract panels that show realtime room status, event counts, token deferral, memory capture mode, excluded source count, and storage target.
+- Workspace validation that requires the new contract document and API/UI contract markers.
+- Architecture, decision, README, and interview-note updates explaining why provider integration, durable memory rows, and embeddings remain deferred behind the contract.
+
+Validated the work by running:
+- `npm run check` from `projects/03-personabridge`
+- `npm run build -w @personabridge/web` from `projects/03-personabridge`
+- `python -m compileall services\api\app` from `projects/03-personabridge`
+- `git diff --check`
+
+Notes:
+- A direct FastAPI `TestClient` smoke test for the new contract endpoints could not run because the current Python environment does not have `fastapi` installed. No global dependency install was performed.
+- `WORKFLOW.md` still appears to contain binary/corrupted content in the current checkout, so it could not be meaningfully read as Markdown.
+
+Next recommended task:
+- Implement PersonaBridge realtime room token and browser voice shell.
+
 Started PersonaBridge as the active project and implemented its first full-stack scaffold.
 
 Added:
