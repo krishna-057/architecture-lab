@@ -2,22 +2,26 @@
 
 Tasks should stay small enough for one focused session.
 
-## Active Project: PersonaBridge
+## Active Project: CollabFlow
 
 ### Ready
 
-- [ ] Add PersonaBridge durable memory candidate APIs and deletion controls.
+- [ ] Add CollabFlow scaffold.
+
+### Completed
+
+### Later
+
+- [ ] Add HookRelay scaffold.
+
+## Completed Project: PersonaBridge
 
 ### Completed
 
 - [x] Add PersonaBridge scaffold.
 - [x] Define PersonaBridge realtime session and memory contracts.
 - [x] Implement PersonaBridge realtime room token and browser voice shell.
-
-### Later
-
-- [ ] Add CollabFlow scaffold.
-- [ ] Add HookRelay scaffold.
+- [x] Add PersonaBridge durable memory candidate APIs and deletion controls.
 
 ## Completed Project: PocketSentinel
 

@@ -2,6 +2,31 @@
 
 ## 2026-07-16
 
+Implemented PersonaBridge durable memory candidate APIs and deletion controls.
+
+Added:
+- Consent-gated memory candidate creation from allowed final user text in the FastAPI message flow.
+- Local durable JSON candidate storage at `projects/03-personabridge/.data/memory-candidates.json` by default, configurable with `MEMORY_STORE_PATH`.
+- `GET /api/sessions/{session_id}/memory-candidates` for active candidate review.
+- `DELETE /api/memory-candidates/{candidate_id}` to tombstone a candidate and remove the visible summary.
+- Web console memory candidate counts, active candidate rows, and delete controls.
+- Workspace validation markers for candidate listing/deletion and the memory candidate contract.
+- README, architecture, contract, decision, and interview-note updates explaining why local candidate durability comes before PostgreSQL/pgvector recall.
+
+Validated the work by running:
+- `npm run check` from `projects/03-personabridge`
+- `npm run build -w @personabridge/web` from `projects/03-personabridge`
+- `python -m compileall services\api\app` from `projects/03-personabridge`
+- `git diff --check`
+
+Notes:
+- A direct FastAPI `TestClient` smoke test for candidate creation and deletion could not run because the current Python environment does not have `fastapi` installed. No global dependency install was performed.
+- `WORKFLOW.md` still appears to contain binary/corrupted content in the current checkout, so it could not be meaningfully read as Markdown.
+- PersonaBridge's Ready queue is complete, so the active project queue moved to CollabFlow per the 30-day plan.
+
+Next recommended task:
+- Start CollabFlow with the first local-first workspace scaffold.
+
 Implemented the PersonaBridge realtime room token and browser voice shell.
 
 Added:
