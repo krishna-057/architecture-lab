@@ -6,9 +6,11 @@ Tasks should stay small enough for one focused session.
 
 ### Ready
 
-- [ ] Add CollabFlow scaffold.
+- [ ] Define CollabFlow websocket sync and presence contract.
 
 ### Completed
+
+- [x] Add CollabFlow scaffold.
 
 ### Later
 

@@ -1,0 +1,255 @@
+:root {
+  color-scheme: light;
+  --ink: #202529;
+  --muted: #66727d;
+  --line: #d6dde1;
+  --surface: #f4f6f5;
+  --primary: #21605b;
+  --accent: #a6493d;
+  --focus: #2f6f9f;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: Arial, Helvetica, sans-serif;
+  color: var(--ink);
+  background: var(--surface);
+}
+
+button,
+input,
+textarea {
+  font: inherit;
+}
+
+button {
+  min-height: 40px;
+  border: 0;
+  border-radius: 8px;
+  padding: 0 16px;
+  color: #ffffff;
+  background: var(--primary);
+  font-weight: 700;
+}
+
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.58;
+}
+
+input,
+textarea {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 11px 12px;
+  color: var(--ink);
+  background: #ffffff;
+}
+
+textarea {
+  resize: vertical;
+  line-height: 1.45;
+}
+
+.workspace-shell {
+  min-height: 100vh;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 360px;
+  gap: 18px;
+  padding: 18px;
+}
+
+.document-panel,
+.control-panel {
+  min-width: 0;
+}
+
+.document-panel,
+.panel-block {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.document-panel {
+  display: grid;
+  grid-template-rows: auto auto auto auto minmax(0, 1fr);
+  gap: 16px;
+  padding: 16px;
+}
+
+.control-panel {
+  display: grid;
+  align-content: start;
+  gap: 14px;
+}
+
+.topbar,
+.workspace-strip,
+.section-header,
+.panel-header,
+.task-row,
+.snapshot-row div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.topbar span,
+.workspace-strip span,
+.field-block span,
+.section-header span,
+.panel-header span,
+.contract-list dt,
+.snapshot-row time,
+.empty-state {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.topbar strong {
+  display: block;
+  margin-top: 4px;
+  font-size: 18px;
+}
+
+.workspace-strip {
+  flex-wrap: wrap;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 14px;
+  background: #f9faf9;
+}
+
+.workspace-strip label,
+.workspace-strip div {
+  min-width: 142px;
+}
+
+.workspace-strip label {
+  flex: 1 1 220px;
+}
+
+.workspace-strip strong {
+  display: block;
+  margin-top: 5px;
+  color: var(--primary);
+}
+
+.field-block {
+  display: grid;
+  gap: 8px;
+}
+
+.task-editor {
+  display: grid;
+  align-content: start;
+  gap: 12px;
+}
+
+.task-form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+}
+
+.task-list,
+.snapshot-list {
+  display: grid;
+  gap: 8px;
+}
+
+.task-row {
+  min-height: 48px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 8px 8px 8px 12px;
+  background: #fbfcfc;
+}
+
+.task-row span {
+  min-width: 0;
+  line-height: 1.35;
+}
+
+.task-row button {
+  min-width: 76px;
+  background: var(--focus);
+}
+
+.panel-block {
+  padding: 14px;
+}
+
+.panel-block p {
+  margin: 12px 0 0;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.contract-list {
+  display: grid;
+  gap: 10px;
+  margin: 14px 0 0;
+}
+
+.contract-list div {
+  border-top: 1px solid var(--line);
+  padding-top: 10px;
+}
+
+.contract-list dd {
+  margin: 4px 0 0;
+  overflow-wrap: anywhere;
+  font-size: 14px;
+}
+
+.action-stack {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.action-stack button:last-child {
+  background: var(--accent);
+}
+
+.snapshot-row {
+  display: grid;
+  gap: 6px;
+  border-top: 1px solid var(--line);
+  padding-top: 10px;
+}
+
+.snapshot-row:first-of-type {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.snapshot-row span {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.empty-state {
+  margin: 0;
+}
+
+@media (max-width: 920px) {
+  .workspace-shell {
+    grid-template-columns: 1fr;
+  }
+
+  .task-form,
+  .action-stack {
+    grid-template-columns: 1fr;
+  }
+}

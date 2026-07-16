@@ -2,6 +2,30 @@
 
 ## 2026-07-16
 
+Started CollabFlow as the active project and implemented its first local-first workspace scaffold.
+
+Added:
+- `projects/04-collabflow/apps/web` as a Next.js workspace editor for title, notes, tasks, local persistence, and snapshot export.
+- Browser-owned Yjs document state for the first CRDT-backed workspace slice.
+- Native IndexedDB projection saves so the scaffold proves offline-first behavior before server sync.
+- `projects/04-collabflow/services/api` as the FastAPI boundary for workspaces, sync-contract discovery, and exported snapshots.
+- Local JSON snapshot storage at `projects/04-collabflow/.data/snapshots.json` by default, configurable with `SNAPSHOT_STORE_PATH`.
+- Workspace validation markers for Yjs, IndexedDB, sync contract, and snapshot export.
+- README, architecture, decisions, and interview-note updates explaining why websocket sync, awareness/presence, and PostgreSQL snapshots remain deferred.
+
+Validated the work by running:
+- `npm run check` from `projects/04-collabflow`
+- `npm run build -w @collabflow/web` from `projects/04-collabflow`
+- `python -m compileall services\api\app` from `projects/04-collabflow`
+- `git diff --check`
+
+Notes:
+- `WORKFLOW.md` still appears to contain binary/corrupted content in the current checkout, so it could not be meaningfully read as Markdown.
+- The first CollabFlow slice intentionally stores live document state in the browser and exports durable snapshots explicitly; it does not run a websocket sync provider yet.
+
+Next recommended task:
+- Define the CollabFlow websocket sync and presence contract.
+
 Implemented PersonaBridge durable memory candidate APIs and deletion controls.
 
 Added:

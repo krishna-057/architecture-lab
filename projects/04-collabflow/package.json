@@ -1,0 +1,18 @@
+{
+  "name": "collabflow",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Local-first collaborative workspace with CRDT-backed notes, tasks, and snapshot boundaries.",
+  "workspaces": [
+    "apps/*"
+  ],
+  "scripts": {
+    "check": "node scripts/check-workspace.mjs",
+    "dev:web": "npm run dev -w @collabflow/web",
+    "dev:api": "python -m uvicorn services.api.app.main:app --reload --port 8300"
+  },
+  "engines": {
+    "node": ">=20",
+    "python": ">=3.10"
+  }
+}
