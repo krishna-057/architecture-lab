@@ -14,8 +14,22 @@ The five portfolio builds are independent projects, not features of one product.
 
 ## Push Policy
 
-Daily project work should produce ordinary incremental commits in the active project's private repository. Avoid large catch-up dumps. When code still starts inside the lab workspace, split or mirror only the active project folder into the matching repository before the daily run is considered complete.
+Daily project work should produce ordinary incremental commits in the active project's private repository. Avoid large catch-up dumps. When code still starts inside the lab workspace, mirror only the active project folder into the matching repository before the daily run is considered complete.
 
 Use history-preserving splits when moving existing lab work into project repositories. The first split on 2026-07-16 used `git subtree split` so each private repository received the commits that touched that project, with original commit dates and messages preserved.
 
 The lab repository can still receive planning updates, daily logs, task queue changes, and cross-project documentation. Project implementation commits should be visible in the matching private project repository.
+
+## Important Correction
+
+The 2026-07-16 repository split should be treated as a private baseline import, not as the portfolio's consistency signal. Even though the split preserved per-project commits, creating and pushing all five repositories on one day can still look like a batch import from the outside.
+
+Going forward, the consistency signal must come from real daily work:
+
+- Pick one active project task.
+- Commit only that day's meaningful change in the project's own repository.
+- Push that project repository on the same day.
+- Keep the lab repository for planning and progress notes.
+- Do not backdate, amend, or rewrite history to manufacture activity.
+
+If an old project needs more visible progress, add real follow-up improvements over multiple days instead of trying to reshape the import history.

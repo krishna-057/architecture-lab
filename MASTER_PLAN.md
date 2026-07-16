@@ -138,4 +138,4 @@ flashreserve: add reservation data model
 pocketsentinel: document webrtc signaling flow
 ```
 
-For project repositories, prefer direct incremental commits on the project repo's working branch or `main` once the project is private and ready for portfolio polishing. Do not batch unrelated days into one catch-up commit.
+For project repositories, prefer direct incremental commits on the project repo's working branch or `main` once the project is private and ready for portfolio polishing. Do not batch unrelated days into one catch-up commit, and do not rewrite dates to simulate consistency. The consistency signal should come from real daily project work pushed as it is completed.

@@ -20,6 +20,12 @@ Notes:
 Next recommended task:
 - Update future automation workflow instructions to push active project changes to the matching private repository.
 
+Correction:
+- The split created separate private repositories, but pushing all five repositories on 2026-07-16 does not satisfy the intended "consistent visible GitHub work over time" signal by itself.
+- Treat the split as a private baseline import.
+- Future runs must create real incremental commits directly in the active project's private repository on the day work is completed.
+- Do not backdate or rewrite history to manufacture contribution activity.
+
 Implemented the HookRelay PostgreSQL schema and BullMQ delivery worker boundary.
 
 Added:
