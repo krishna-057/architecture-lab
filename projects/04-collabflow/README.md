@@ -8,6 +8,7 @@ The first slice is a single-user local-first workspace shell that proves the cor
 - a Yjs document for title, notes, and task-list state
 - browser IndexedDB snapshots for offline persistence
 - a FastAPI API at `services/api` for workspace metadata, sync contract discovery, and durable snapshot export
+- `SYNC_CONTRACT.md` plus API discovery for the future websocket room, Yjs update, and presence contract
 
 ## Architecture Focus
 
@@ -48,10 +49,20 @@ Local generated state is intentionally small and ignored:
 1. The browser creates a workspace through `POST /api/workspaces`.
 2. The browser initializes a Yjs document for the workspace title, notes, and tasks.
 3. Edits update the Yjs document first, then the current projection is saved into IndexedDB.
-4. The API exposes `GET /api/workspaces/{workspace_id}/sync-contract` so the UI can display the intended collaboration boundary.
+4. The API exposes `GET /api/workspaces/{workspace_id}/sync-contract` so the UI can display the websocket room, Yjs update encoding, message types, reconnect rule, and ephemeral presence fields.
 5. The browser can export a durable snapshot with `POST /api/workspaces/{workspace_id}/snapshots`.
 
 This is intentionally not a full multi-user sync server yet. The first milestone proves the local-first state shape and the export boundary without introducing websocket lifecycle complexity too early.
+
+## Sync Contract
+
+The first realtime contract is documented in `SYNC_CONTRACT.md` and returned by the API. It defines:
+
+- one websocket room per workspace using `workspace:{workspace_id}`
+- base64url-encoded Yjs binary update messages
+- ephemeral Yjs awareness presence fields
+- reconnect behavior that restores IndexedDB before asking the sync server for missing updates
+- snapshot offers as durable checkpoints, not live document ownership
 
 ## Why This Project Matters
 

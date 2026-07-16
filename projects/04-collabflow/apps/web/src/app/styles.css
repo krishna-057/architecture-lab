@@ -211,6 +211,53 @@ textarea {
   font-size: 14px;
 }
 
+.contract-card-list,
+.presence-grid {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.contract-card {
+  border-top: 1px solid var(--line);
+  padding-top: 10px;
+}
+
+.contract-card:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.contract-card div,
+.presence-pill {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.contract-card span,
+.presence-pill span {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.contract-card p {
+  margin-top: 6px;
+}
+
+.presence-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.presence-pill {
+  min-height: 40px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 8px 10px;
+  background: #fbfcfc;
+}
+
 .action-stack {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -250,6 +297,10 @@ textarea {
 
   .task-form,
   .action-stack {
+    grid-template-columns: 1fr;
+  }
+
+  .presence-grid {
     grid-template-columns: 1fr;
   }
 }

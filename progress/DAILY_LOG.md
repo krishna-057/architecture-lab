@@ -2,6 +2,29 @@
 
 ## 2026-07-16
 
+Defined the CollabFlow websocket sync and presence contract.
+
+Added:
+- `projects/04-collabflow/SYNC_CONTRACT.md` with room identity, websocket endpoint, Yjs update message types, ephemeral presence fields, and reconnect ordering.
+- Structured FastAPI sync contract discovery for websocket endpoint, room id, auth mode, Yjs update encoding, message list, presence field list, and reconnect rule.
+- Web UI panels that display websocket message types and presence fields from the server-discovered contract.
+- `SYNC_WEBSOCKET_URL` configuration in `.env.example`.
+- Workspace validation markers that require websocket and awareness contract coverage.
+- README, architecture, decision, and interview-note updates explaining why the contract is defined before implementing the realtime provider.
+
+Validated the work by running:
+- `npm run check` from `projects/04-collabflow`
+- `npm run build -w @collabflow/web` from `projects/04-collabflow`
+- `python -m compileall services\api\app` from `projects/04-collabflow`
+- `git diff --check`
+
+Notes:
+- This slice intentionally does not open a websocket endpoint. The current app remains local-first with IndexedDB persistence and explicit snapshot export.
+- `WORKFLOW.md` still appears to contain binary/corrupted content in the current checkout, so it could not be meaningfully read as Markdown.
+
+Next recommended task:
+- Implement the CollabFlow websocket sync server and browser provider shell.
+
 Started CollabFlow as the active project and implemented its first local-first workspace scaffold.
 
 Added:

@@ -15,10 +15,28 @@ type SyncContract = {
   document_id: string;
   local_persistence: "indexeddb_snapshot";
   crdt_runtime: "yjs";
-  sync_transport: "deferred_websocket";
+  sync_transport: "websocket_contract";
+  websocket_endpoint: string;
+  room_id: string;
+  auth_mode: string;
+  yjs_update_encoding: string;
+  messages: {
+    message_type: "sync_request" | "yjs_update" | "awareness_update" | "snapshot_offer";
+    sender: "browser" | "sync_server";
+    payload_encoding: string;
+    durable: boolean;
+    purpose: string;
+  }[];
+  presence_fields: {
+    field: "client_id" | "display_name" | "cursor" | "selection" | "status" | "last_seen";
+    required: boolean;
+    retention: "ephemeral_awareness_only";
+    purpose: string;
+  }[];
   durable_snapshot_endpoint: string;
   presence_scope: string;
   conflict_rule: string;
+  reconnect_rule: string;
 };
 
 type Snapshot = {
@@ -366,8 +384,20 @@ export default function CollabFlowHome() {
                 <dd>{contract.document_id}</dd>
               </div>
               <div>
+                <dt>Room</dt>
+                <dd>{contract.room_id}</dd>
+              </div>
+              <div>
+                <dt>WebSocket</dt>
+                <dd>{contract.websocket_endpoint}</dd>
+              </div>
+              <div>
                 <dt>Persistence</dt>
                 <dd>{contract.local_persistence}</dd>
+              </div>
+              <div>
+                <dt>Update encoding</dt>
+                <dd>{contract.yjs_update_encoding}</dd>
               </div>
               <div>
                 <dt>Presence</dt>
@@ -375,6 +405,42 @@ export default function CollabFlowHome() {
               </div>
             </dl>
           ) : null}
+        </section>
+
+        <section className="panel-block">
+          <div className="panel-header">
+            <span>WebSocket Messages</span>
+            <strong>{contract?.messages.length ?? 0}</strong>
+          </div>
+          <div className="contract-card-list">
+            {contract?.messages.map((message) => (
+              <article className="contract-card" key={message.message_type}>
+                <div>
+                  <strong>{message.message_type}</strong>
+                  <span>{message.sender}</span>
+                </div>
+                <p>
+                  {message.payload_encoding} / {message.durable ? "durable" : "ephemeral"}
+                </p>
+              </article>
+            )) ?? <p className="empty-state">Create a workspace to inspect message types.</p>}
+          </div>
+        </section>
+
+        <section className="panel-block">
+          <div className="panel-header">
+            <span>Presence Fields</span>
+            <strong>{contract?.presence_fields.length ?? 0}</strong>
+          </div>
+          <div className="presence-grid">
+            {contract?.presence_fields.map((field) => (
+              <div className="presence-pill" key={field.field}>
+                <strong>{field.field}</strong>
+                <span>{field.required ? "required" : "optional"}</span>
+              </div>
+            )) ?? <p className="empty-state">Presence is discovered from the sync contract.</p>}
+          </div>
+          {contract ? <p>{contract.reconnect_rule}</p> : null}
         </section>
 
         <section className="panel-block">

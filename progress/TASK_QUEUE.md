@@ -6,10 +6,11 @@ Tasks should stay small enough for one focused session.
 
 ### Ready
 
-- [ ] Define CollabFlow websocket sync and presence contract.
+- [ ] Implement CollabFlow websocket sync server and browser provider shell.
 
 ### Completed
 
+- [x] Define CollabFlow websocket sync and presence contract.
 - [x] Add CollabFlow scaffold.
 
 ### Later

@@ -9,7 +9,8 @@ const requiredFiles = [
   "apps/web/src/app/layout.tsx",
   "services/api/Dockerfile",
   "services/api/requirements.txt",
-  "services/api/app/main.py"
+  "services/api/app/main.py",
+  "SYNC_CONTRACT.md"
 ];
 
 const rootPackage = JSON.parse(readFileSync("package.json", "utf8"));
@@ -33,10 +34,12 @@ if (
   !appPage.includes("new Y.Doc") ||
   !appPage.includes("indexedDB.open") ||
   !appPage.includes("/sync-contract") ||
+  !appPage.includes("WebSocket Messages") ||
+  !appPage.includes("Presence Fields") ||
   !appPage.includes("/snapshots") ||
   !appPage.includes("Export Snapshot")
 ) {
-  throw new Error("Web app must exercise Yjs, IndexedDB, sync contract, and snapshot boundaries.");
+  throw new Error("Web app must exercise Yjs, IndexedDB, sync contract, presence, and snapshot boundaries.");
 }
 
 const apiFile = readFileSync("services/api/app/main.py", "utf8");
@@ -44,10 +47,23 @@ if (
   !apiFile.includes("/api/workspaces") ||
   !apiFile.includes("/api/workspaces/{workspace_id}/sync-contract") ||
   !apiFile.includes("/api/workspaces/{workspace_id}/snapshots") ||
-  !apiFile.includes("deferred_websocket") ||
+  !apiFile.includes("websocket_contract") ||
+  !apiFile.includes("SYNC_WEBSOCKET_URL") ||
+  !apiFile.includes("awareness_update") ||
+  !apiFile.includes("presence_fields") ||
   !apiFile.includes("SNAPSHOT_STORE_PATH")
 ) {
   throw new Error("API must expose workspace, sync-contract, and snapshot boundaries.");
 }
 
-console.log("CollabFlow scaffold check passed.");
+const syncContract = readFileSync("SYNC_CONTRACT.md", "utf8");
+if (
+  !syncContract.includes("workspace:{workspace_id}") ||
+  !syncContract.includes("yjs_update") ||
+  !syncContract.includes("awareness_update") ||
+  !syncContract.includes("Presence is Yjs awareness state")
+) {
+  throw new Error("SYNC_CONTRACT.md must define websocket rooms, Yjs updates, and awareness presence.");
+}
+
+console.log("CollabFlow scaffold and sync contract check passed.");
