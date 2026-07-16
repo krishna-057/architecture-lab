@@ -2,6 +2,27 @@
 
 ## 2026-07-16
 
+Started PersonaBridge as the active project and implemented its first full-stack scaffold.
+
+Added:
+- `projects/03-personabridge/apps/web` as the Next.js personal assistant console for sessions, chat, memory consent, and approvals.
+- `projects/03-personabridge/services/api` as the FastAPI boundary for session state, message flow, and approval decisions.
+- `projects/03-personabridge/scripts/check-workspace.mjs` for dependency-light scaffold validation.
+- Project package metadata, `.env.example`, local API requirements, and Dockerfile.
+- Documentation for why realtime voice, durable memory, model credentials, and actual tool execution remain deferred behind explicit contracts.
+
+Validated the work by running:
+- `npm run check` from `projects/03-personabridge`
+- `npm run build -w @personabridge/web` from `projects/03-personabridge`
+- `python -m compileall services\api\app` from `projects/03-personabridge`
+
+Notes:
+- `npm install` reported 2 moderate severity vulnerabilities in the current Next/React dependency tree; no dependency upgrade was performed because that is a separate task.
+- `WORKFLOW.md` still appears to contain binary/corrupted content in the current checkout, so it could not be meaningfully read as Markdown.
+
+Next recommended task:
+- Define PersonaBridge realtime session and memory contracts.
+
 Implemented the PocketSentinel dashboard object detection event ingestion pipeline.
 
 Added:

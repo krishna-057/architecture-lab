@@ -6,7 +6,11 @@ Tasks should stay small enough for one focused session.
 
 ### Ready
 
-- [ ] Add PersonaBridge scaffold.
+- [ ] Define PersonaBridge realtime session and memory contracts.
+
+### Completed
+
+- [x] Add PersonaBridge scaffold.
 
 ### Later
 

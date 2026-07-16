@@ -32,4 +32,5 @@ tmp/
 temp/
 projects/01-flashreserve/.data/
 projects/02-pocketsentinel/.data/
+projects/03-personabridge/.data/
 __pycache__/
