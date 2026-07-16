@@ -50,6 +50,25 @@ Planned local ports:
 - Camera PWA: `http://localhost:3100`
 - Dashboard: `http://localhost:3101`
 - FastAPI service: `http://localhost:8100`
+- PostgreSQL: `localhost:5433`
+
+## Local Development Stack
+
+PocketSentinel now includes a minimal Docker Compose stack for the API and durable event storage:
+
+```powershell
+cd projects/02-pocketsentinel
+docker compose up --build
+```
+
+The stack runs:
+
+- `postgres`, initialized from `db/schema.sql`.
+- `api`, a FastAPI container built from `services/api/Dockerfile`.
+
+PostgreSQL data is bind-mounted to `projects/02-pocketsentinel/.data/postgres` so local database state remains under `K:\AutoPilot_Projects`. The first durable table is `detection_events`, which stores the object detection timeline by `session_id`.
+
+When `DATABASE_URL` is configured, the API writes detection events to PostgreSQL. Without `DATABASE_URL` or the Python database dependency, it falls back to the existing in-memory event list so the scaffold can still be syntax-checked and explored without Docker.
 
 ## WebRTC Pairing Contract
 

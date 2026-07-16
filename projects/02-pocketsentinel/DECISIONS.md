@@ -29,3 +29,18 @@ Rejected:
 - WebSocket signaling immediately: reasonable long term, but it adds connection lifecycle concerns before camera permission and peer negotiation are implemented.
 - Putting signaling only in the dashboard app: weaker boundary because the API will also own sessions and detection events.
 - Sending video frames through FastAPI: simpler to debug, but it avoids the actual WebRTC architecture and creates avoidable privacy and latency problems.
+
+## Decision 3: Persist Detection Events Before Persisting Signaling
+
+PocketSentinel adds PostgreSQL through Docker Compose for the API and detection event timeline.
+
+Why:
+- Detection events are the first user-facing historical artifact; losing them on API restart would make the dashboard timeline misleading.
+- Session pairing and signaling messages are short-lived negotiation state in the current one-camera prototype, so memory is still sufficient.
+- A single `detection_events` table keeps the persistence slice small while proving the planned PostgreSQL boundary.
+- The database bind mount lives under `projects/02-pocketsentinel/.data/postgres` so local development state stays inside the project workspace on `K:`.
+
+Rejected:
+- Persisting all sessions and signaling immediately: useful later, but it adds schema and lifecycle rules before the camera and dashboard clients use the contract.
+- Adding Redis for signaling or queues now: unnecessary until polling, reconnects, or inference jobs create real pressure.
+- Running PostgreSQL only as a documented external prerequisite: weaker reproducibility than a local Compose stack.

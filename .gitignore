@@ -31,3 +31,5 @@ docker-data/
 tmp/
 temp/
 projects/01-flashreserve/.data/
+projects/02-pocketsentinel/.data/
+__pycache__/

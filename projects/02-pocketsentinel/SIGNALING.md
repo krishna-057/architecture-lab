@@ -53,8 +53,8 @@ The API assigns each message a monotonically increasing `sequence`. Clients poll
 
 ## First-Slice Constraints
 
-- Signaling state is in memory, matching the current scaffold's in-memory session and detection event store.
+- Signaling state is still in memory because the current pairing flow is short-lived and local-only.
 - REST polling is deliberate for the first slice because it is easier to inspect, test, and explain than a WebSocket signaling server.
-- The API stores SDP and ICE messages only long enough for local prototype pairing. Durable session history belongs in PostgreSQL when the local development stack is added.
+- The API stores SDP and ICE messages only long enough for local prototype pairing. Durable session history belongs in PostgreSQL after browser reconnect behavior exists.
+- Detection events are the first PostgreSQL-backed data because they form the dashboard timeline users expect to survive restarts.
 - Media remains peer-to-peer through WebRTC. If NAT traversal fails, the documented next step is adding STUN/TURN configuration, not relaying video through FastAPI.
-

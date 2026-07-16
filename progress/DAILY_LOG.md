@@ -2,6 +2,29 @@
 
 ## 2026-07-16
 
+Added the PocketSentinel local development stack for API and event storage.
+
+Added:
+- `projects/02-pocketsentinel/compose.yaml` with PostgreSQL and FastAPI services.
+- `projects/02-pocketsentinel/db/schema.sql` for the first durable `detection_events` table.
+- `projects/02-pocketsentinel/services/api/Dockerfile` for the API container.
+- Optional PostgreSQL-backed detection event writes and reads when `DATABASE_URL` is configured, with memory fallback for lightweight checks.
+- Workspace validation that requires the Compose stack, schema, API Dockerfile, and K:-scoped PostgreSQL bind mount.
+- `.gitignore` coverage for PocketSentinel local database state and Python cache folders.
+- Documentation for why detection events are persisted before short-lived session/signaling state.
+
+Validated the work by running:
+- `node scripts/check-workspace.mjs` from `projects/02-pocketsentinel`
+- `docker compose -f projects/02-pocketsentinel/compose.yaml config`
+- `python -m compileall services\api\app` from `projects/02-pocketsentinel`
+
+Notes:
+- The Compose config resolves PostgreSQL data to `K:\AutoPilot_Projects\FlashReserve\projects\02-pocketsentinel\.data\postgres`.
+- `WORKFLOW.md` still appears to contain binary/corrupted content in the current checkout, so it could not be meaningfully read as Markdown.
+
+Next recommended task:
+- Implement the camera capture permission flow.
+
 Defined the first PocketSentinel WebRTC signaling and pairing flow.
 
 Added:

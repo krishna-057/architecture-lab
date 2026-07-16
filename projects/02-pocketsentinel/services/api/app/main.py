@@ -1,3 +1,5 @@
+import os
+from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
 from secrets import choice
 from string import ascii_uppercase, digits
@@ -8,7 +10,24 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 
 
-app = FastAPI(title="PocketSentinel API", version="0.1.0")
+try:
+    import psycopg
+    from psycopg.rows import dict_row
+except ImportError:  # pragma: no cover - allows syntax checks before deps are installed.
+    psycopg = None
+    dict_row = None
+
+
+DATABASE_URL = os.getenv("DATABASE_URL")
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    initialize_database()
+    yield
+
+
+app = FastAPI(title="PocketSentinel API", version="0.1.0", lifespan=lifespan)
 
 
 class CreateSessionRequest(BaseModel):
@@ -64,6 +83,76 @@ pairings: dict[str, UUID] = {}
 signals: dict[UUID, list[SignalMessageResponse]] = {}
 
 
+def database_enabled() -> bool:
+    return bool(DATABASE_URL and psycopg is not None)
+
+
+def initialize_database() -> None:
+    if not database_enabled():
+        return
+
+    with psycopg.connect(DATABASE_URL) as connection:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                """
+                create table if not exists detection_events (
+                    event_id uuid primary key,
+                    session_id uuid not null,
+                    label varchar(80) not null,
+                    confidence double precision not null check (confidence >= 0 and confidence <= 1),
+                    occurred_at timestamptz not null,
+                    created_at timestamptz not null default now()
+                )
+                """
+            )
+            cursor.execute(
+                """
+                create index if not exists detection_events_session_occurred_at_idx
+                    on detection_events (session_id, occurred_at desc)
+                """
+            )
+
+
+def store_detection_event(event: DetectionEventResponse) -> None:
+    if not database_enabled():
+        events[event.session_id].append(event)
+        return
+
+    with psycopg.connect(DATABASE_URL) as connection:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                """
+                insert into detection_events (event_id, session_id, label, confidence, occurred_at)
+                values (%s, %s, %s, %s, %s)
+                """,
+                (
+                    event.event_id,
+                    event.session_id,
+                    event.label,
+                    event.confidence,
+                    event.occurred_at,
+                ),
+            )
+
+
+def load_detection_events(session_id: UUID) -> list[DetectionEventResponse]:
+    if not database_enabled():
+        return events[session_id]
+
+    with psycopg.connect(DATABASE_URL, row_factory=dict_row) as connection:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                """
+                select event_id, session_id, label, confidence, occurred_at
+                from detection_events
+                where session_id = %s
+                order by occurred_at asc, created_at asc
+                """,
+                (session_id,),
+            )
+            return [DetectionEventResponse(**row) for row in cursor.fetchall()]
+
+
 def generate_pairing_code() -> str:
     alphabet = ascii_uppercase + digits
     while True:
@@ -83,7 +172,10 @@ def update_session(session: SessionResponse, **changes: object) -> SessionRespon
 
 @app.get("/health")
 def health() -> dict[str, str]:
-    return {"status": "ok"}
+    return {
+        "status": "ok",
+        "event_storage": "postgresql" if database_enabled() else "memory",
+    }
 
 
 @app.post("/api/sessions", response_model=SessionResponse)
@@ -191,7 +283,7 @@ def record_detection(session_id: UUID, payload: DetectionEventRequest) -> Detect
         confidence=payload.confidence,
         occurred_at=payload.occurred_at or datetime.now(timezone.utc),
     )
-    events[session_id].append(event)
+    store_detection_event(event)
     return event
 
 
@@ -199,4 +291,4 @@ def record_detection(session_id: UUID, payload: DetectionEventRequest) -> Detect
 def list_detections(session_id: UUID) -> list[DetectionEventResponse]:
     if session_id not in sessions:
         raise HTTPException(status_code=404, detail="Session not found.")
-    return events[session_id]
+    return load_detection_events(session_id)

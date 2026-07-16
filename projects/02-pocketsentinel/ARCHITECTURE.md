@@ -25,7 +25,7 @@ Detection events stored in PostgreSQL
 - `apps/dashboard` is the viewer shell. Its first responsibility is pairing a phone stream, rendering the WebRTC video element, and showing detection events.
 - `services/api` is the FastAPI service. Its first responsibility is session creation, signaling contract ownership, and detection event ingestion.
 
-The first API implementation uses in-memory dictionaries only to make the boundary executable without pulling in PostgreSQL before the signaling flow is defined. PostgreSQL remains the planned durable store for device sessions and detection timelines.
+The API still keeps session identity and signaling messages in memory because that state is short-lived and tied to the local WebRTC pairing flow. Detection events now have an optional PostgreSQL path so the dashboard timeline can survive API restarts once object detection is wired.
 
 ## WebRTC Signaling Boundary
 
@@ -43,6 +43,16 @@ The scaffold uses separate ports so all three surfaces can run together:
 camera app:    3100
 dashboard app: 3101
 api service:   8100
+postgres:      5433
 ```
 
-The repository should keep generated dependencies, caches, model weights, and local databases under `K:\AutoPilot_Projects` when those heavier artifacts are introduced.
+The local Compose stack runs PostgreSQL plus the FastAPI service:
+
+```powershell
+cd projects/02-pocketsentinel
+docker compose up --build
+```
+
+PostgreSQL initializes from `db/schema.sql` and stores local data under `projects/02-pocketsentinel/.data/postgres`, keeping durable development state on `K:\AutoPilot_Projects`. The API checks `DATABASE_URL` at startup; if PostgreSQL is available, detection events are persisted in `detection_events`, otherwise the API keeps the existing memory-backed behavior for lightweight checks.
+
+Session and signaling persistence are intentionally deferred. They are useful once pairing reconnects, multi-dashboard views, or audit trails matter, but they are not required for the next camera-capture and dashboard-pairing slices.
