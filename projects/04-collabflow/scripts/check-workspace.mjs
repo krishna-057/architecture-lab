@@ -33,13 +33,17 @@ const appPage = readFileSync("apps/web/src/app/page.tsx", "utf8");
 if (
   !appPage.includes("new Y.Doc") ||
   !appPage.includes("indexedDB.open") ||
+  !appPage.includes("new WebSocket") ||
+  !appPage.includes("Y.applyUpdate") ||
+  !appPage.includes("Y.encodeStateAsUpdate") ||
   !appPage.includes("/sync-contract") ||
   !appPage.includes("WebSocket Messages") ||
+  !appPage.includes("Live Sync") ||
   !appPage.includes("Presence Fields") ||
   !appPage.includes("/snapshots") ||
   !appPage.includes("Export Snapshot")
 ) {
-  throw new Error("Web app must exercise Yjs, IndexedDB, sync contract, presence, and snapshot boundaries.");
+  throw new Error("Web app must exercise Yjs, IndexedDB, websocket sync, presence, and snapshot boundaries.");
 }
 
 const apiFile = readFileSync("services/api/app/main.py", "utf8");
@@ -47,13 +51,15 @@ if (
   !apiFile.includes("/api/workspaces") ||
   !apiFile.includes("/api/workspaces/{workspace_id}/sync-contract") ||
   !apiFile.includes("/api/workspaces/{workspace_id}/snapshots") ||
-  !apiFile.includes("websocket_contract") ||
+  !apiFile.includes('@app.websocket("/ws/collabflow")') ||
+  !apiFile.includes("websocket_sync") ||
   !apiFile.includes("SYNC_WEBSOCKET_URL") ||
+  !apiFile.includes("sync_update_log") ||
   !apiFile.includes("awareness_update") ||
   !apiFile.includes("presence_fields") ||
   !apiFile.includes("SNAPSHOT_STORE_PATH")
 ) {
-  throw new Error("API must expose workspace, sync-contract, and snapshot boundaries.");
+  throw new Error("API must expose workspace, websocket sync, sync-contract, and snapshot boundaries.");
 }
 
 const syncContract = readFileSync("SYNC_CONTRACT.md", "utf8");
@@ -61,6 +67,7 @@ if (
   !syncContract.includes("workspace:{workspace_id}") ||
   !syncContract.includes("yjs_update") ||
   !syncContract.includes("awareness_update") ||
+  !syncContract.includes("/ws/collabflow") ||
   !syncContract.includes("Presence is Yjs awareness state")
 ) {
   throw new Error("SYNC_CONTRACT.md must define websocket rooms, Yjs updates, and awareness presence.");

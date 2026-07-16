@@ -1,6 +1,6 @@
 # CollabFlow Sync And Presence Contract
 
-This contract defines the first realtime boundary for CollabFlow without implementing the websocket server yet. The browser remains local-first: it loads IndexedDB first, edits a Yjs document, and exports snapshots explicitly through FastAPI.
+This contract defines the first realtime boundary for CollabFlow. The browser remains local-first: it loads IndexedDB first, edits a Yjs document, syncs Yjs updates through a development websocket room, and exports snapshots explicitly through FastAPI.
 
 ## Room Identity
 
@@ -30,18 +30,25 @@ The advertised endpoint is configured by `SYNC_WEBSOCKET_URL` and defaults to:
 ws://localhost:8300/ws/collabflow
 ```
 
-This is a contract endpoint for the next implementation slice. The current FastAPI app does not accept websocket connections yet.
+The current FastAPI app accepts this websocket endpoint. It validates the workspace room, replays in-memory Yjs updates for the workspace, broadcasts new Yjs updates to other connected browsers, and fans out ephemeral presence.
 
 ## Message Types
 
 | Type | Sender | Encoding | Durable | Purpose |
 | --- | --- | --- | --- | --- |
-| `sync_request` | Browser | JSON | No | Join the workspace room and request the current server-held update clock. |
-| `yjs_update` | Browser | Base64url Yjs binary update bytes | Yes | Broadcast document changes to peers; a future server may append or compact updates. |
+| `sync_request` | Browser | JSON | No | Join the workspace room and request the current server-held update log. |
+| `yjs_update` | Browser | Base64url Yjs binary update bytes | Yes | Broadcast document changes to peers and append them to the in-memory development update log. |
 | `awareness_update` | Browser | JSON | No | Share cursor, selection, identity, and activity state through Yjs awareness. |
 | `snapshot_offer` | Sync server | JSON | Yes | Tell clients that a compacted snapshot is available through the snapshot API. |
 
 Durable messages affect document recovery or compaction. Ephemeral messages are connection state only.
+
+The development server also sends operational control messages:
+
+| Type | Sender | Purpose |
+| --- | --- | --- |
+| `sync_ready` | Sync server | Confirms the room join and reports peer and replay counts. |
+| `sync_error` | Sync server | Reports invalid room ids, missing updates, or unsupported message types. |
 
 ## Presence Shape
 
@@ -65,12 +72,12 @@ Clients should:
 1. Load the latest local IndexedDB projection.
 2. Reconnect to the workspace room.
 3. Send `sync_request`.
-4. Apply missing Yjs updates from the sync server.
+4. Apply missing in-memory Yjs updates from the sync server.
 5. Resume local edits and export durable snapshots only after the Yjs document catches up.
 
-## Deferred Until Implementation
+## Deferred Until Later Slices
 
 - Signed workspace membership and authorization.
-- Websocket fanout, backpressure, and heartbeat handling.
-- Update log storage and compaction.
+- Backpressure and heartbeat handling.
+- Durable update log storage and compaction.
 - Multi-device conflict tests against a running sync provider.

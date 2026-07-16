@@ -40,3 +40,17 @@ Rejected alternatives:
 - Add `y-websocket` immediately. That would prove live sync faster, but it would hide important room, presence, and reconnect decisions behind a library default before the portfolio docs explain them.
 - Persist presence in snapshots. That would make snapshots look more complete, but stale cursors and collaborator labels are not durable workspace content.
 - Invent a custom CRDT payload. Yjs update bytes are the actual interoperability boundary; wrapping them in a small message envelope is enough.
+
+## Implement websocket sync as a FastAPI development shell first
+
+Decision:
+CollabFlow now uses `WS /ws/collabflow` in the existing FastAPI service for the first realtime slice. Browsers join a workspace room with `sync_request`, send base64url Yjs update bytes, receive peer updates, and exchange ephemeral presence. The server keeps room membership, presence, and update replay in process memory.
+
+Why:
+This proves the websocket provider lifecycle and Yjs fanout boundary without adding a second runtime or a durable update-log schema too early. The existing API already owns workspace identity and sync-contract discovery, so a small websocket adapter keeps the implementation understandable for the architecture lab.
+
+Rejected alternatives:
+
+- Add the `y-websocket` server package immediately. It is mature and likely useful later, but it would introduce a separate Node service before the project demonstrates the message contract itself.
+- Persist every Yjs update in PostgreSQL now. Durable update logs need compaction and retention decisions; exported snapshots are enough durability for this slice.
+- Treat presence as document data. Presence remains ephemeral awareness state because stale cursors and collaborator labels should not appear in durable snapshots.

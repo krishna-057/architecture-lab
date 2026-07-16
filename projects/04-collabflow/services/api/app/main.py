@@ -2,10 +2,10 @@ import json
 import os
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 from uuid import UUID, uuid4
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.encoders import jsonable_encoder
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
@@ -58,7 +58,7 @@ class SyncContractResponse(BaseModel):
     document_id: str
     local_persistence: Literal["indexeddb_snapshot"]
     crdt_runtime: Literal["yjs"]
-    sync_transport: Literal["websocket_contract"]
+    sync_transport: Literal["websocket_sync"]
     websocket_endpoint: str
     room_id: str
     auth_mode: str
@@ -97,6 +97,10 @@ SYNC_WEBSOCKET_URL = os.getenv("SYNC_WEBSOCKET_URL", "ws://localhost:8300/ws/col
 
 workspaces: dict[UUID, WorkspaceResponse] = {}
 snapshots: dict[UUID, list[SnapshotResponse]] = {}
+sync_update_log: dict[UUID, list[str]] = {}
+sync_rooms: dict[str, set[WebSocket]] = {}
+sync_connections: dict[WebSocket, dict[str, Any]] = {}
+presence_by_room: dict[str, dict[str, dict[str, Any]]] = {}
 
 
 def now_utc() -> datetime:
@@ -153,6 +157,19 @@ def require_workspace(workspace_id: UUID) -> WorkspaceResponse:
     return workspace
 
 
+def mark_workspace_sync_ready(workspace_id: UUID) -> None:
+    workspace = require_workspace(workspace_id)
+    if workspace.status == "sync_ready":
+        return
+
+    if hasattr(workspace, "model_copy"):
+        updated = workspace.model_copy(update={"status": "sync_ready"})
+    else:
+        updated = workspace.copy(update={"status": "sync_ready"})
+    workspaces[workspace_id] = updated
+    persist_snapshots()
+
+
 def sync_contract_for(workspace_id: UUID) -> SyncContractResponse:
     room_id = f"workspace:{workspace_id}"
     return SyncContractResponse(
@@ -160,7 +177,7 @@ def sync_contract_for(workspace_id: UUID) -> SyncContractResponse:
         document_id=f"collabflow:{workspace_id}:workspace-doc",
         local_persistence="indexeddb_snapshot",
         crdt_runtime="yjs",
-        sync_transport="websocket_contract",
+        sync_transport="websocket_sync",
         websocket_endpoint=SYNC_WEBSOCKET_URL,
         room_id=room_id,
         auth_mode="development client identity header; signed workspace membership is deferred",
@@ -171,14 +188,14 @@ def sync_contract_for(workspace_id: UUID) -> SyncContractResponse:
                 sender="browser",
                 payload_encoding="json",
                 durable=False,
-                purpose="Join the workspace room and request the current server-held update clock.",
+                purpose="Join the workspace room and replay the server-held update log.",
             ),
             SyncMessageContract(
                 message_type="yjs_update",
                 sender="browser",
                 payload_encoding="base64url",
                 durable=True,
-                purpose="Broadcast a Yjs document update to peers; future server may append or compact these updates.",
+                purpose="Broadcast a Yjs document update to peers and append it to the in-memory development update log.",
             ),
             SyncMessageContract(
                 message_type="awareness_update",
@@ -235,9 +252,50 @@ def sync_contract_for(workspace_id: UUID) -> SyncContractResponse:
         ],
         durable_snapshot_endpoint=f"/api/workspaces/{workspace_id}/snapshots",
         presence_scope="Presence is ephemeral client state and is not written into document snapshots.",
-        conflict_rule="Concurrent field and task edits are merged by Yjs updates; durable snapshots are exported checkpoints, not the source of truth.",
+        conflict_rule="Concurrent field and task edits are merged by Yjs updates; the development websocket server fans out updates, while durable snapshots remain exported checkpoints.",
         reconnect_rule="Clients reload IndexedDB first, reconnect to the room, send a sync_request, then apply missing Yjs updates before exporting new snapshots.",
     )
+
+
+async def broadcast_to_room(room_id: str, payload: dict[str, Any], exclude: WebSocket | None = None) -> None:
+    stale_connections: list[WebSocket] = []
+    for connection in sync_rooms.get(room_id, set()).copy():
+        if connection is exclude:
+            continue
+        try:
+            await connection.send_json(payload)
+        except RuntimeError:
+            stale_connections.append(connection)
+
+    for connection in stale_connections:
+        remove_sync_connection(connection)
+
+
+def remove_sync_connection(websocket: WebSocket) -> None:
+    state = sync_connections.pop(websocket, None)
+    if not state:
+        return
+
+    room_id = state["room_id"]
+    client_id = state["client_id"]
+    room_connections = sync_rooms.get(room_id)
+    if room_connections is not None:
+        room_connections.discard(websocket)
+        if not room_connections:
+            sync_rooms.pop(room_id, None)
+
+    room_presence = presence_by_room.get(room_id)
+    if room_presence is not None:
+        room_presence.pop(client_id, None)
+        if not room_presence:
+            presence_by_room.pop(room_id, None)
+
+
+def require_sync_connection(websocket: WebSocket) -> dict[str, Any]:
+    state = sync_connections.get(websocket)
+    if not state:
+        raise ValueError("Send sync_request before other sync messages.")
+    return state
 
 
 load_snapshots()
@@ -249,7 +307,7 @@ def health() -> dict[str, str]:
         "status": "ok",
         "storage": "file",
         "crdt_runtime": "yjs",
-        "sync_transport": "websocket_contract",
+        "sync_transport": "websocket_sync",
     }
 
 
@@ -281,6 +339,165 @@ def get_workspace(workspace_id: UUID) -> WorkspaceResponse:
 def get_sync_contract(workspace_id: UUID) -> SyncContractResponse:
     require_workspace(workspace_id)
     return sync_contract_for(workspace_id)
+
+
+@app.websocket("/ws/collabflow")
+async def collabflow_sync(websocket: WebSocket) -> None:
+    await websocket.accept()
+
+    try:
+        while True:
+            message = await websocket.receive_json()
+            message_type = message.get("type")
+
+            if message_type == "sync_request":
+                workspace_id = UUID(str(message.get("workspace_id")))
+                require_workspace(workspace_id)
+                room_id = str(message.get("room_id"))
+                expected_room_id = f"workspace:{workspace_id}"
+                if room_id != expected_room_id:
+                    await websocket.send_json(
+                        {
+                            "type": "sync_error",
+                            "detail": "Room id does not match the workspace.",
+                            "expected_room_id": expected_room_id,
+                        }
+                    )
+                    continue
+
+                client_id = str(message.get("client_id") or uuid4())
+                display_name = str(message.get("display_name") or "Collaborator")
+                sync_connections[websocket] = {
+                    "workspace_id": workspace_id,
+                    "room_id": room_id,
+                    "client_id": client_id,
+                }
+                sync_rooms.setdefault(room_id, set()).add(websocket)
+                mark_workspace_sync_ready(workspace_id)
+
+                presence = {
+                    "client_id": client_id,
+                    "display_name": display_name,
+                    "status": "editing",
+                    "last_seen": now_utc().isoformat(),
+                }
+                presence_by_room.setdefault(room_id, {})[client_id] = presence
+
+                await websocket.send_json(
+                    {
+                        "type": "sync_ready",
+                        "workspace_id": str(workspace_id),
+                        "room_id": room_id,
+                        "client_id": client_id,
+                        "peer_count": len(sync_rooms.get(room_id, set())),
+                        "update_count": len(sync_update_log.get(workspace_id, [])),
+                    }
+                )
+
+                for update in sync_update_log.get(workspace_id, []):
+                    await websocket.send_json(
+                        {
+                            "type": "yjs_update",
+                            "workspace_id": str(workspace_id),
+                            "room_id": room_id,
+                            "update": update,
+                            "sender": "sync_server",
+                        }
+                    )
+
+                for peer_presence in presence_by_room.get(room_id, {}).values():
+                    await websocket.send_json(
+                        {
+                            "type": "awareness_update",
+                            "workspace_id": str(workspace_id),
+                            "room_id": room_id,
+                            "presence": peer_presence,
+                            "sender": "sync_server",
+                        }
+                    )
+
+                await broadcast_to_room(
+                    room_id,
+                    {
+                        "type": "awareness_update",
+                        "workspace_id": str(workspace_id),
+                        "room_id": room_id,
+                        "presence": presence,
+                        "sender": "sync_server",
+                    },
+                    exclude=websocket,
+                )
+                continue
+
+            state = require_sync_connection(websocket)
+            workspace_id = state["workspace_id"]
+            room_id = state["room_id"]
+            client_id = state["client_id"]
+
+            if message_type == "yjs_update":
+                update = str(message.get("update") or "")
+                if not update:
+                    await websocket.send_json({"type": "sync_error", "detail": "Missing Yjs update."})
+                    continue
+
+                sync_update_log.setdefault(workspace_id, []).append(update)
+                await broadcast_to_room(
+                    room_id,
+                    {
+                        "type": "yjs_update",
+                        "workspace_id": str(workspace_id),
+                        "room_id": room_id,
+                        "client_id": client_id,
+                        "update": update,
+                        "sender": "browser",
+                        "received_at": now_utc().isoformat(),
+                    },
+                    exclude=websocket,
+                )
+                continue
+
+            if message_type == "awareness_update":
+                presence = dict(message.get("presence") or {})
+                presence["client_id"] = client_id
+                presence.setdefault("display_name", "Collaborator")
+                presence.setdefault("status", "editing")
+                presence["last_seen"] = now_utc().isoformat()
+                presence_by_room.setdefault(room_id, {})[client_id] = presence
+                await broadcast_to_room(
+                    room_id,
+                    {
+                        "type": "awareness_update",
+                        "workspace_id": str(workspace_id),
+                        "room_id": room_id,
+                        "presence": presence,
+                        "sender": "sync_server",
+                    },
+                    exclude=websocket,
+                )
+                continue
+
+            await websocket.send_json({"type": "sync_error", "detail": f"Unsupported sync message: {message_type}"})
+    except (WebSocketDisconnect, ValueError):
+        pass
+    finally:
+        state = sync_connections.get(websocket)
+        remove_sync_connection(websocket)
+        if state:
+            await broadcast_to_room(
+                state["room_id"],
+                {
+                    "type": "awareness_update",
+                    "workspace_id": str(state["workspace_id"]),
+                    "room_id": state["room_id"],
+                    "presence": {
+                        "client_id": state["client_id"],
+                        "display_name": "Disconnected collaborator",
+                        "status": "offline",
+                        "last_seen": now_utc().isoformat(),
+                    },
+                    "sender": "sync_server",
+                },
+            )
 
 
 @app.get("/api/workspaces/{workspace_id}/snapshots", response_model=list[SnapshotResponse])

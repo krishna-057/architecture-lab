@@ -15,7 +15,7 @@ type SyncContract = {
   document_id: string;
   local_persistence: "indexeddb_snapshot";
   crdt_runtime: "yjs";
-  sync_transport: "websocket_contract";
+  sync_transport: "websocket_sync";
   websocket_endpoint: string;
   room_id: string;
   auth_mode: string;
@@ -49,6 +49,43 @@ type Snapshot = {
   created_at: string;
 };
 
+type PresenceState = {
+  client_id: string;
+  display_name: string;
+  cursor?: string;
+  selection?: string;
+  status: "editing" | "idle" | "offline";
+  last_seen: string;
+};
+
+type SyncSocketMessage =
+  | {
+      type: "sync_ready";
+      workspace_id: string;
+      room_id: string;
+      client_id: string;
+      peer_count: number;
+      update_count: number;
+    }
+  | {
+      type: "yjs_update";
+      workspace_id: string;
+      room_id: string;
+      update: string;
+      sender: "browser" | "sync_server";
+    }
+  | {
+      type: "awareness_update";
+      workspace_id: string;
+      room_id: string;
+      presence: PresenceState;
+      sender: "sync_server";
+    }
+  | {
+      type: "sync_error";
+      detail: string;
+    };
+
 type LocalState = {
   title: string;
   notes: string;
@@ -59,6 +96,7 @@ type LocalState = {
 const apiBaseUrl = (process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8300").replace(/\/$/, "");
 const indexedDbName = "collabflow-local-first";
 const indexedDbStore = "workspace-snapshots";
+const remoteUpdateOrigin = "collabflow-remote";
 
 async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`${apiBaseUrl}${path}`, {
@@ -120,6 +158,38 @@ function formatClock(value: string) {
   }).format(new Date(value));
 }
 
+function bytesToBase64Url(bytes: Uint8Array): string {
+  let binary = "";
+  for (let index = 0; index < bytes.length; index += 1) {
+    binary += String.fromCharCode(bytes[index]);
+  }
+  return window.btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/u, "");
+}
+
+function base64UrlToBytes(value: string): Uint8Array {
+  const padded = value.replace(/-/g, "+").replace(/_/g, "/").padEnd(Math.ceil(value.length / 4) * 4, "=");
+  const binary = window.atob(padded);
+  const bytes = new Uint8Array(binary.length);
+  for (let index = 0; index < binary.length; index += 1) {
+    bytes[index] = binary.charCodeAt(index);
+  }
+  return bytes;
+}
+
+function getClientIdentity(): { clientId: string; displayName: string } {
+  const storageKey = "collabflow-client-id";
+  const existing = window.localStorage.getItem(storageKey);
+  const clientId = existing ?? crypto.randomUUID();
+  if (!existing) {
+    window.localStorage.setItem(storageKey, clientId);
+  }
+
+  return {
+    clientId,
+    displayName: `Browser ${clientId.slice(0, 4)}`
+  };
+}
+
 export default function CollabFlowHome() {
   const [workspace, setWorkspace] = useState<Workspace | null>(null);
   const [contract, setContract] = useState<SyncContract | null>(null);
@@ -135,7 +205,13 @@ export default function CollabFlowHome() {
   const [taskDraft, setTaskDraft] = useState("Add presence contract");
   const [versionVector, setVersionVector] = useState(0);
   const [statusMessage, setStatusMessage] = useState("Create a workspace to initialize a local Yjs document.");
+  const [syncStatus, setSyncStatus] = useState<"idle" | "connecting" | "connected" | "offline">("idle");
+  const [syncedUpdateCount, setSyncedUpdateCount] = useState(0);
+  const [peerPresence, setPeerPresence] = useState<PresenceState[]>([]);
   const ydocRef = useRef<Y.Doc | null>(null);
+  const syncSocketRef = useRef<WebSocket | null>(null);
+  const ydocUpdateHandlerRef = useRef<((update: Uint8Array, origin: unknown) => void) | null>(null);
+  const clientIdentityRef = useRef<{ clientId: string; displayName: string } | null>(null);
 
   const workspaceId = workspace?.workspace_id;
   const taskCount = tasks.length;
@@ -158,6 +234,30 @@ export default function CollabFlowHome() {
     setVersionVector(Y.encodeStateVector(doc).length);
   }, []);
 
+  const sendPresence = useCallback((status: PresenceState["status"]) => {
+    const socket = syncSocketRef.current;
+    const activeWorkspace = workspace;
+    const activeContract = contract;
+    const identity = clientIdentityRef.current;
+    if (!socket || socket.readyState !== WebSocket.OPEN || !activeWorkspace || !activeContract || !identity) {
+      return;
+    }
+
+    socket.send(
+      JSON.stringify({
+        type: "awareness_update",
+        workspace_id: activeWorkspace.workspace_id,
+        room_id: activeContract.room_id,
+        presence: {
+          client_id: identity.clientId,
+          display_name: identity.displayName,
+          status,
+          last_seen: new Date().toISOString()
+        }
+      })
+    );
+  }, [contract, workspace]);
+
   const replaceYText = useCallback((field: "title" | "notes", value: string) => {
     const doc = ydocRef.current;
     if (!doc) {
@@ -170,7 +270,123 @@ export default function CollabFlowHome() {
       text.insert(0, value);
     });
     syncFromYDoc();
-  }, [syncFromYDoc]);
+    sendPresence("editing");
+  }, [sendPresence, syncFromYDoc]);
+
+  const closeSyncProvider = useCallback(() => {
+    const doc = ydocRef.current;
+    const handler = ydocUpdateHandlerRef.current;
+    if (doc && handler) {
+      doc.off("update", handler);
+      ydocUpdateHandlerRef.current = null;
+    }
+
+    syncSocketRef.current?.close();
+    syncSocketRef.current = null;
+    setSyncStatus("idle");
+    setSyncedUpdateCount(0);
+    setPeerPresence([]);
+  }, []);
+
+  const connectSyncProvider = useCallback(
+    (nextWorkspace: Workspace, nextContract: SyncContract, doc: Y.Doc) => {
+      closeSyncProvider();
+      const identity = getClientIdentity();
+      clientIdentityRef.current = identity;
+      setSyncStatus("connecting");
+      setSyncedUpdateCount(0);
+      setPeerPresence([]);
+
+      const socket = new WebSocket(nextContract.websocket_endpoint);
+      syncSocketRef.current = socket;
+
+      const sendYjsUpdate = (update: Uint8Array) => {
+        if (socket.readyState !== WebSocket.OPEN) {
+          return;
+        }
+
+        socket.send(
+          JSON.stringify({
+            type: "yjs_update",
+            workspace_id: nextWorkspace.workspace_id,
+            room_id: nextContract.room_id,
+            client_id: identity.clientId,
+            update: bytesToBase64Url(update)
+          })
+        );
+        setSyncedUpdateCount((current) => current + 1);
+      };
+
+      const updateHandler = (update: Uint8Array, origin: unknown) => {
+        if (origin === remoteUpdateOrigin) {
+          return;
+        }
+        sendYjsUpdate(update);
+      };
+
+      doc.on("update", updateHandler);
+      ydocUpdateHandlerRef.current = updateHandler;
+
+      socket.onopen = () => {
+        socket.send(
+          JSON.stringify({
+            type: "sync_request",
+            workspace_id: nextWorkspace.workspace_id,
+            room_id: nextContract.room_id,
+            document_id: nextContract.document_id,
+            client_id: identity.clientId,
+            display_name: identity.displayName
+          })
+        );
+        setStatusMessage("WebSocket sync provider connected.");
+      };
+
+      socket.onmessage = (event) => {
+        const message = JSON.parse(event.data) as SyncSocketMessage;
+        if (message.type === "sync_ready") {
+          setSyncStatus("connected");
+          setWorkspace((current) => current ? { ...current, status: "sync_ready" } : current);
+          setStatusMessage(`WebSocket room ready with ${message.peer_count} peer connection(s).`);
+          if (message.update_count === 0) {
+            sendYjsUpdate(Y.encodeStateAsUpdate(doc));
+          }
+          return;
+        }
+
+        if (message.type === "yjs_update") {
+          Y.applyUpdate(doc, base64UrlToBytes(message.update), remoteUpdateOrigin);
+          syncFromYDoc();
+          setSyncedUpdateCount((current) => current + 1);
+          return;
+        }
+
+        if (message.type === "awareness_update") {
+          setPeerPresence((current) => {
+            const withoutPeer = current.filter((presence) => presence.client_id !== message.presence.client_id);
+            if (message.presence.client_id === identity.clientId || message.presence.status === "offline") {
+              return withoutPeer;
+            }
+            return [...withoutPeer, message.presence];
+          });
+          return;
+        }
+
+        if (message.type === "sync_error") {
+          setStatusMessage(message.detail);
+        }
+      };
+
+      socket.onerror = () => {
+        setSyncStatus("offline");
+        setStatusMessage("WebSocket sync provider could not connect.");
+      };
+
+      socket.onclose = () => {
+        setSyncStatus((current) => (current === "idle" ? current : "offline"));
+      };
+    },
+    [closeSyncProvider, syncFromYDoc]
+  );
 
   async function refreshSnapshots(targetWorkspaceId: string) {
     const nextSnapshots = await requestJson<Snapshot[]>(`/api/workspaces/${targetWorkspaceId}/snapshots`);
@@ -180,6 +396,7 @@ export default function CollabFlowHome() {
   async function createWorkspace() {
     setStatusMessage("Creating workspace boundary...");
     setSnapshots([]);
+    closeSyncProvider();
 
     try {
       const created = await requestJson<Workspace>("/api/workspaces", {
@@ -203,6 +420,7 @@ export default function CollabFlowHome() {
       setVersionVector(Y.encodeStateVector(doc).length);
       await writeLocalSnapshot(created.workspace_id, seed);
       await refreshSnapshots(created.workspace_id);
+      connectSyncProvider(created, nextContract, doc);
       setStatusMessage(saved ? "Workspace restored from IndexedDB." : "Workspace ready with a new local Yjs document.");
     } catch (error) {
       setStatusMessage(error instanceof Error ? error.message : "Could not create the workspace.");
@@ -220,6 +438,7 @@ export default function CollabFlowHome() {
     doc.getArray<string>("tasks").push([task]);
     setTaskDraft("");
     syncFromYDoc();
+    sendPresence("editing");
   }
 
   function removeTask(index: number) {
@@ -230,6 +449,7 @@ export default function CollabFlowHome() {
 
     doc.getArray<string>("tasks").delete(index, 1);
     syncFromYDoc();
+    sendPresence("editing");
   }
 
   async function saveLocal() {
@@ -278,6 +498,12 @@ export default function CollabFlowHome() {
     return () => window.clearTimeout(timeout);
   }, [localState, workspaceId]);
 
+  useEffect(() => {
+    return () => {
+      closeSyncProvider();
+    };
+  }, [closeSyncProvider]);
+
   return (
     <main className="workspace-shell">
       <section className="document-panel" aria-label="CollabFlow workspace document">
@@ -316,6 +542,10 @@ export default function CollabFlowHome() {
           <div>
             <span>Vector bytes</span>
             <strong>{versionVector}</strong>
+          </div>
+          <div>
+            <span>Sync</span>
+            <strong>{syncStatus}</strong>
           </div>
         </div>
 
@@ -429,6 +659,27 @@ export default function CollabFlowHome() {
 
         <section className="panel-block">
           <div className="panel-header">
+            <span>Live Sync</span>
+            <strong>{syncStatus}</strong>
+          </div>
+          <dl className="contract-list">
+            <div>
+              <dt>Provider</dt>
+              <dd>{contract ? "Native browser WebSocket" : "Not connected"}</dd>
+            </div>
+            <div>
+              <dt>Synced updates</dt>
+              <dd>{syncedUpdateCount}</dd>
+            </div>
+            <div>
+              <dt>Remote peers</dt>
+              <dd>{peerPresence.length}</dd>
+            </div>
+          </dl>
+        </section>
+
+        <section className="panel-block">
+          <div className="panel-header">
             <span>Presence Fields</span>
             <strong>{contract?.presence_fields.length ?? 0}</strong>
           </div>
@@ -439,6 +690,14 @@ export default function CollabFlowHome() {
                 <span>{field.required ? "required" : "optional"}</span>
               </div>
             )) ?? <p className="empty-state">Presence is discovered from the sync contract.</p>}
+          </div>
+          <div className="presence-grid">
+            {peerPresence.map((presence) => (
+              <div className="presence-pill" key={presence.client_id}>
+                <strong>{presence.display_name}</strong>
+                <span>{presence.status}</span>
+              </div>
+            ))}
           </div>
           {contract ? <p>{contract.reconnect_rule}</p> : null}
         </section>

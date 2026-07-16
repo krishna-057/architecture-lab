@@ -11,6 +11,14 @@ Browser
   v
 IndexedDB local snapshot
   |
+  | native websocket provider shell
+  v
+FastAPI websocket room
+  |
+  | in-memory update replay + ephemeral presence fanout
+  v
+Connected browsers
+  |
   | explicit export
   v
 FastAPI snapshot API
@@ -20,15 +28,16 @@ FastAPI snapshot API
 .data/snapshots.json
 ```
 
-The browser owns the active collaborative document. The API does not try to merge CRDT updates in this slice; it stores exported checkpoints and exposes a sync contract so the future websocket layer has a documented boundary.
+The browser owns the active collaborative document. The API does not interpret or merge CRDT fields; it accepts Yjs binary updates through a small websocket room, stores those update payloads in process memory for replay, fans them out to connected peers, and stores exported checkpoints separately.
 
 ## Runtime Components
 
 | Component | Responsibility |
 | --- | --- |
 | `apps/web` | Next.js workspace UI, Yjs document initialization, IndexedDB local persistence, snapshot export controls. |
-| `services/api` | Workspace metadata, websocket/presence sync contract endpoint, snapshot list/create endpoints. |
+| `services/api` | Workspace metadata, websocket/presence sync contract endpoint, websocket room fanout, snapshot list/create endpoints. |
 | IndexedDB | Browser-local workspace projection for offline continuity. |
+| FastAPI websocket room | Development sync shell for Yjs update fanout, replay, and ephemeral presence. |
 | `.data/snapshots.json` | Lightweight local durable snapshot store until PostgreSQL is introduced. |
 
 ## API Boundary
@@ -37,12 +46,13 @@ The browser owns the active collaborative document. The API does not try to merg
 | --- | --- |
 | `POST /api/workspaces` | Create a local-ready workspace identity. |
 | `GET /api/workspaces/{workspace_id}/sync-contract` | Tell the browser which CRDT runtime, websocket endpoint, room id, message types, presence fields, reconnect rule, persistence mode, and snapshot endpoint apply. |
+| `WS /ws/collabflow` | Join a workspace room, replay in-memory Yjs updates, broadcast new Yjs updates, and fan out ephemeral presence. |
 | `GET /api/workspaces/{workspace_id}/snapshots` | List durable checkpoints exported for a workspace. |
 | `POST /api/workspaces/{workspace_id}/snapshots` | Persist a compact checkpoint of title, notes, tasks, and Yjs state-vector length. |
 
 ## WebSocket And Presence Contract
 
-The websocket implementation is still deferred, but the contract is now explicit and server-discoverable:
+The websocket implementation is a first development shell that honors the server-discoverable contract:
 
 | Contract Part | Current Rule |
 | --- | --- |
@@ -52,6 +62,7 @@ The websocket implementation is still deferred, but the contract is now explicit
 | Message types | `sync_request`, `yjs_update`, `awareness_update`, `snapshot_offer`. |
 | Presence retention | Ephemeral Yjs awareness only; never persisted into snapshots. |
 | Reconnect | Load IndexedDB, reconnect, request missing updates, then resume snapshot exports. |
+| Update storage | In-memory per API process; durable update logs and compaction are deferred. |
 
 ## Future Sync Shape
 

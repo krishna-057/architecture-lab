@@ -24,3 +24,11 @@ The websocket contract separates durable and ephemeral data. `yjs_update` messag
 The reconnect rule starts from IndexedDB before the network. That is the local-first principle: the user sees their last local projection immediately, then the sync layer catches the Yjs document up with missing updates. Snapshot export happens after catch-up so durable checkpoints do not accidentally encode stale local-only state as if it were merged truth.
 
 The contract is provider-neutral on purpose. A later implementation can use `y-websocket`, a small Node server, or a FastAPI websocket adapter as long as it honors the room id, message types, update encoding, awareness retention, and reconnect order.
+
+## WebSocket Shell Talking Points
+
+The first sync implementation uses the existing FastAPI service as a development websocket room. That keeps the architecture small: the API already creates workspace ids and serves the sync contract, so the websocket can validate `workspace:{workspace_id}` rooms and fan out Yjs update bytes without introducing a separate sync runtime yet.
+
+The server deliberately does not inspect document fields. It treats `yjs_update` as an opaque CRDT payload, appends it to an in-memory replay list, and broadcasts it to peers. That means conflict semantics still live in Yjs, while the server owns connection management and message routing.
+
+The limitations are explicit. In-memory replay is useful for local demos and multi-tab validation, but it is not durable across API restarts and it does not solve compaction, authorization, backpressure, or horizontal scaling. Those are later architecture topics after the provider lifecycle is proven.

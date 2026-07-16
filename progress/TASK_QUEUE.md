@@ -2,20 +2,19 @@
 
 Tasks should stay small enough for one focused session.
 
-## Active Project: CollabFlow
+## Active Project: HookRelay
 
 ### Ready
 
-- [ ] Implement CollabFlow websocket sync server and browser provider shell.
+- [ ] Add HookRelay scaffold.
+
+## Completed Project: CollabFlow
 
 ### Completed
 
+- [x] Implement CollabFlow websocket sync server and browser provider shell.
 - [x] Define CollabFlow websocket sync and presence contract.
 - [x] Add CollabFlow scaffold.
-
-### Later
-
-- [ ] Add HookRelay scaffold.
 
 ## Completed Project: PersonaBridge
 

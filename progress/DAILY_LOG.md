@@ -2,6 +2,30 @@
 
 ## 2026-07-16
 
+Implemented the CollabFlow websocket sync server and browser provider shell.
+
+Added:
+- `WS /ws/collabflow` in the FastAPI API for workspace room joins, room validation, in-memory Yjs update replay, peer fanout, and ephemeral presence fanout.
+- Browser-native WebSocket provider shell in the Next.js app that sends `sync_request`, publishes base64url Yjs updates, applies remote Yjs updates, and tracks remote peer presence.
+- `sync_ready` workspace promotion after a successful websocket room join.
+- Live sync UI status for provider state, synced update count, and remote peer count.
+- Workspace validation markers for the websocket endpoint, browser provider, Yjs update application, and sync UI.
+- README, architecture, sync contract, decision, and interview-note updates explaining why the first sync server is an in-process FastAPI development shell.
+
+Validated the work by running:
+- `npm run check` from `projects/04-collabflow`
+- `npm run build -w @collabflow/web` from `projects/04-collabflow`
+- `python -m compileall services\api\app` from `projects/04-collabflow`
+- `git diff --check`
+
+Notes:
+- A direct FastAPI `TestClient` websocket smoke test could not run because the current Python environment does not have `fastapi` installed. No global dependency install was performed.
+- The websocket update log is intentionally in-memory for this development slice. Durable update logs, compaction, authorization, backpressure, and heartbeat handling remain later work.
+- `WORKFLOW.md` still appears to contain binary/corrupted content in the current checkout, so it could not be meaningfully read as Markdown.
+
+Next recommended task:
+- Start HookRelay with the first scaffold.
+
 Defined the CollabFlow websocket sync and presence contract.
 
 Added:
