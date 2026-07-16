@@ -74,3 +74,18 @@ Rejected:
 - Implementing dashboard answer creation in the same task: useful next, but it would mix operator pairing, polling, ICE handling, and media rendering in one oversized slice.
 - Proxying API requests through Next.js: convenient, but it hides the API boundary that the project is meant to demonstrate.
 - Persisting sessions now: reconnect and multi-viewer behavior are still undefined, so memory-backed sessions remain enough.
+
+## Decision 6: Create Camera Offers Before Dashboard Answering
+
+The camera app now claims a pairing code and creates a WebRTC offer from the active local `MediaStream`.
+
+Why:
+- The camera is the only peer that can prove tracks exist before negotiation, so it should create the first offer in the prototype.
+- Keeping offer creation in the sender slice validates the permission-to-signaling path without adding remote rendering and answer handling at the same time.
+- Posting SDP and ICE candidates through the existing REST-polling API reuses the documented signaling boundary and keeps video out of FastAPI.
+- Starting without STUN/TURN keeps the local contract small; traversal configuration becomes useful after both peers can complete an answer flow.
+
+Rejected:
+- Letting the dashboard create the offer first: possible with transceivers, but less intuitive for a phone-as-camera prototype where the sender owns the media tracks.
+- Adding a WebRTC helper library now: browser APIs are enough for one peer connection and would keep the interview signal clearer.
+- Combining camera offer creation with dashboard answering: it would finish more of the happy path, but it hides which side owns each failure mode.

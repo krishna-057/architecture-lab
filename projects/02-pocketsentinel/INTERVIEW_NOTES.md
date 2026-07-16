@@ -18,3 +18,4 @@ Key topics:
 - The API never carries video frames in the first design. That keeps the privacy story clear: browser peers negotiate through the API, then media flows peer-to-peer unless a future TURN relay is required.
 - Camera capture is gated by a user tap and local permission success before pairing is enabled. That keeps browser/device permission errors separate from WebRTC signaling errors and makes the privacy boundary visible in the UI.
 - The dashboard pairing shell creates sessions and polls for messages before WebRTC answering is implemented. That keeps the operator workflow and API/CORS boundary testable before SDP and ICE handling are layered in.
+- The camera now claims a pairing code and creates the SDP offer from real local tracks. This proves the sender-side WebRTC path while leaving answer creation and remote video rendering as the next receiver-owned slice.

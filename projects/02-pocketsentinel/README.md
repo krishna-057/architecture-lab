@@ -104,6 +104,18 @@ The dashboard now creates and monitors the first viewing session:
 
 The WebRTC answer path is intentionally deferred until the camera app claims a code and creates real offers from an active `MediaStream`. The dashboard shell still proves the browser/API boundary and the operator workflow needed for the next slice.
 
+## Camera Pairing And Offer Flow
+
+The camera PWA can now join a dashboard-created session:
+
+- The user starts camera preview first, then enters the dashboard pairing code.
+- The camera claims the pairing code through `POST /api/pairings/{pairing_code}/claim`.
+- A browser `RTCPeerConnection` is created only after a live `MediaStream` exists.
+- Local camera tracks are attached to the peer connection before creating the SDP offer.
+- The camera posts the `offer` and gathered `ice-candidate` messages through the existing signaling API.
+
+The slice deliberately stops before applying dashboard answers. That keeps the sender-side WebRTC boundary testable while the next dashboard slice owns answer creation, remote video rendering, and applying camera ICE candidates.
+
 ## Why This Project Matters
 
 This project combines product creativity with real networking and AI inference. It is intentionally more than a CRUD app, but still small enough to build as a focused prototype.

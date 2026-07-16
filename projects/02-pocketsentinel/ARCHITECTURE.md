@@ -47,6 +47,14 @@ The dashboard now owns the operator side of pairing. It creates a session throug
 
 Because the browser apps and API run on different local ports, FastAPI allows CORS for `http://localhost:3100` and `http://localhost:3101` by default. The origins can be replaced with `CORS_ALLOWED_ORIGINS` for other local setups. This keeps the development topology honest without adding a reverse proxy before the WebRTC contract is usable.
 
+## Camera Offer Boundary
+
+The camera app now owns the sender side of the WebRTC negotiation. After local capture succeeds, it accepts the short pairing code, claims the waiting dashboard session, creates a browser `RTCPeerConnection`, attaches the active camera tracks, and posts the SDP offer plus ICE candidates through FastAPI.
+
+The peer connection is intentionally created without STUN or TURN configuration in this slice. Local-host and same-LAN development can validate the offer and candidate contract first; NAT traversal belongs in a later decision once the dashboard answer path can prove whether connectivity fails for a real reason.
+
+The camera page closes its peer connection when capture stops or the page unmounts. It does not upload frames to the API and it does not try to render a dashboard answer yet, keeping the sender slice separate from receiver-side media rendering.
+
 ## Local Development
 
 The scaffold uses separate ports so all three surfaces can run together:

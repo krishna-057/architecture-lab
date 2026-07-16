@@ -45,6 +45,24 @@ button.danger {
   background: var(--accent);
 }
 
+input {
+  min-height: 44px;
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0 14px;
+  color: var(--ink);
+  background: #ffffff;
+  font: inherit;
+  font-weight: 700;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+input:disabled {
+  opacity: 0.64;
+}
+
 .phone-shell {
   min-height: 100vh;
   width: min(520px, 100%);
@@ -162,6 +180,31 @@ button.danger {
   line-height: 1.45;
 }
 
+.pairing-panel {
+  display: grid;
+  gap: 8px;
+}
+
+.pairing-panel label {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.pairing-panel div {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 120px;
+  gap: 10px;
+}
+
+.pairing-panel p {
+  min-height: 40px;
+  margin: 0;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.45;
+}
+
 .stat-strip {
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -187,5 +230,9 @@ button.danger {
 
   .capture-surface {
     min-height: calc(100vh - 132px);
+  }
+
+  .pairing-panel div {
+    grid-template-columns: 1fr;
   }
 }

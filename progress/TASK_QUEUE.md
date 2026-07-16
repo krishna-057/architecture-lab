@@ -11,6 +11,8 @@ Tasks should stay small enough for one focused session.
 - [x] Add local development stack for API and event storage.
 - [x] Implement camera capture permission flow.
 - [x] Implement dashboard stream pairing shell.
+- [x] Implement camera pairing claim and WebRTC offer creation.
+- [ ] Implement dashboard WebRTC answer creation and remote video rendering.
 
 ### Later
 

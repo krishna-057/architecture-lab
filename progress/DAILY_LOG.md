@@ -2,6 +2,25 @@
 
 ## 2026-07-16
 
+Implemented the PocketSentinel camera pairing claim and WebRTC offer creation slice.
+
+Added:
+- Pairing-code entry in the camera PWA after local capture succeeds.
+- Camera-side claim against `POST /api/pairings/{pairing_code}/claim`.
+- Browser `RTCPeerConnection` creation from the active `MediaStream`.
+- Sender-side SDP offer posting and ICE candidate posting through the existing signaling API.
+- Documentation for why dashboard answering, remote rendering, and STUN/TURN configuration remain separate next steps.
+
+Validated the work by running:
+- `node scripts/check-workspace.mjs` from `projects/02-pocketsentinel`
+- `npm run build -w @pocketsentinel/camera` from `projects/02-pocketsentinel`
+
+Notes:
+- `WORKFLOW.md` still appears to contain binary/corrupted content in the current checkout, so it could not be meaningfully read as Markdown.
+
+Next recommended task:
+- Implement dashboard WebRTC answer creation and remote video rendering.
+
 Implemented the PocketSentinel dashboard stream pairing shell.
 
 Added:
