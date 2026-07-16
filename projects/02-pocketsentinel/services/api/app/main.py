@@ -7,6 +7,7 @@ from typing import Any, Literal
 from uuid import UUID, uuid4
 
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
 
@@ -19,6 +20,14 @@ except ImportError:  # pragma: no cover - allows syntax checks before deps are i
 
 
 DATABASE_URL = os.getenv("DATABASE_URL")
+CORS_ALLOWED_ORIGINS = [
+    origin.strip()
+    for origin in os.getenv(
+        "CORS_ALLOWED_ORIGINS",
+        "http://localhost:3100,http://localhost:3101",
+    ).split(",")
+    if origin.strip()
+]
 
 
 @asynccontextmanager
@@ -28,6 +37,13 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="PocketSentinel API", version="0.1.0", lifespan=lifespan)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=CORS_ALLOWED_ORIGINS,
+    allow_credentials=False,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
 class CreateSessionRequest(BaseModel):

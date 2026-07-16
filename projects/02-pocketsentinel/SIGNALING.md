@@ -23,6 +23,8 @@ PocketSentinel uses WebRTC for browser-to-browser media and a small FastAPI sign
 9. Camera polls for dashboard messages and applies the answer plus dashboard ICE candidates.
 10. Either side can post `bye`; the API marks the session `ended`.
 
+The dashboard currently implements steps 1, 2, and 6 as the first operator-facing shell. It shows the pairing code and polls for camera messages, while answer creation and video rendering remain the next WebRTC slice.
+
 ## Signaling Message Contract
 
 `POST /api/sessions/{session_id}/signal`
@@ -58,3 +60,4 @@ The API assigns each message a monotonically increasing `sequence`. Clients poll
 - The API stores SDP and ICE messages only long enough for local prototype pairing. Durable session history belongs in PostgreSQL after browser reconnect behavior exists.
 - Detection events are the first PostgreSQL-backed data because they form the dashboard timeline users expect to survive restarts.
 - Media remains peer-to-peer through WebRTC. If NAT traversal fails, the documented next step is adding STUN/TURN configuration, not relaying video through FastAPI.
+- Local CORS is allowed for the camera and dashboard development origins so each app can call FastAPI directly while the ports stay separate.

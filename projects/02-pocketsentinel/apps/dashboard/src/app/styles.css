@@ -30,6 +30,11 @@ button {
   font-weight: 700;
 }
 
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.58;
+}
+
 .dashboard-shell {
   min-height: 100vh;
   display: grid;
@@ -47,14 +52,16 @@ button {
 
 .viewer {
   display: grid;
-  grid-template-rows: auto 1fr;
+  grid-template-rows: auto auto 1fr auto;
   gap: 14px;
   padding: 16px;
 }
 
 .viewer-header,
 .timeline-header,
-.event-row {
+.event-row,
+.session-panel,
+.signal-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -64,7 +71,11 @@ button {
 .viewer-header span,
 .timeline-header span,
 .event-row time,
-.event-row span {
+.event-row span,
+.session-panel span,
+.signal-log > span,
+.signal-row time,
+.signal-row span {
   color: var(--muted);
   font-size: 13px;
 }
@@ -75,10 +86,44 @@ button {
   margin-top: 4px;
 }
 
+.session-panel {
+  flex-wrap: wrap;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 14px;
+  background: #f8fafb;
+}
+
+.session-panel div {
+  min-width: 132px;
+}
+
+.session-panel strong {
+  display: block;
+  margin-top: 5px;
+  font-size: 15px;
+}
+
+.session-panel strong[data-status="pairing"],
+.session-panel strong[data-status="streaming"] {
+  color: var(--primary);
+}
+
+.session-panel strong[data-status="error"],
+.session-panel strong[data-status="ended"] {
+  color: var(--accent);
+}
+
+.pairing-code {
+  font-family: "Courier New", Courier, monospace;
+  font-size: 24px;
+  letter-spacing: 0;
+}
+
 .video-frame {
   display: grid;
   place-items: center;
-  min-height: 520px;
+  min-height: 420px;
   border: 1px solid var(--line);
   border-radius: 8px;
   background:
@@ -88,15 +133,53 @@ button {
   background-size: 42px 42px;
 }
 
+.video-frame[data-active="true"] {
+  background:
+    linear-gradient(90deg, rgba(198, 83, 47, 0.14) 1px, transparent 1px),
+    linear-gradient(rgba(198, 83, 47, 0.14) 1px, transparent 1px),
+    #f5efec;
+  background-size: 42px 42px;
+}
+
 .video-frame p {
+  width: min(420px, 82%);
   margin: 0;
   color: var(--muted);
   font-size: 16px;
+  line-height: 1.45;
+  text-align: center;
 }
 
 .timeline {
   align-self: start;
   padding: 16px;
+}
+
+.signal-log {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 14px;
+}
+
+.signal-log > p,
+.empty-state {
+  margin: 12px 0 0;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.signal-row {
+  min-height: 34px;
+  border-top: 1px solid var(--line);
+}
+
+.signal-row:first-of-type {
+  margin-top: 8px;
+}
+
+.signal-row strong {
+  margin-left: auto;
+  color: var(--primary);
 }
 
 .event-row {

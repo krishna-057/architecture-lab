@@ -41,6 +41,12 @@ The camera app owns browser permission and local preview state before it touches
 
 The stream is not sent to the API and is not persisted. Stopping capture explicitly stops every media track before resetting the preview. This keeps the first browser slice privacy-preserving and makes the later pairing step depend on a real active stream instead of mixing permission, signaling, and peer-connection failures together.
 
+## Dashboard Pairing Boundary
+
+The dashboard now owns the operator side of pairing. It creates a session through FastAPI, displays the six-character code and expiry, polls session state, and reads only signaling messages addressed to the `dashboard` role. The UI keeps the video frame as a reserved surface until the next slice adds `RTCPeerConnection` answer creation.
+
+Because the browser apps and API run on different local ports, FastAPI allows CORS for `http://localhost:3100` and `http://localhost:3101` by default. The origins can be replaced with `CORS_ALLOWED_ORIGINS` for other local setups. This keeps the development topology honest without adding a reverse proxy before the WebRTC contract is usable.
+
 ## Local Development
 
 The scaffold uses separate ports so all three surfaces can run together:

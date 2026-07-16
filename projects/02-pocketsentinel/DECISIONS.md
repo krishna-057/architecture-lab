@@ -59,3 +59,18 @@ Rejected:
 - Asking for permission automatically on page load: more surprising on mobile and easier for browsers to block.
 - Enabling pairing before capture succeeds: mixes permission failures with signaling failures and makes the next slice harder to test.
 - Uploading preview frames to the API for validation: contradicts the initial WebRTC/privacy boundary.
+
+## Decision 5: Build The Dashboard Pairing Shell Before WebRTC Answering
+
+The dashboard now creates sessions and polls the API for status, camera signaling messages, and detection events before it creates `RTCPeerConnection` answers.
+
+Why:
+- The operator workflow can be validated with the existing FastAPI contract before browser peer negotiation adds more failure modes.
+- Showing the pairing code, expiry, and signal log makes the REST-polling signaling boundary visible and easy to debug.
+- Local CORS support is the smallest development bridge for separate app/API ports; a reverse proxy is unnecessary at this stage.
+- Reserving the video frame keeps the UI shape stable for the next slice without pretending that media is already connected.
+
+Rejected:
+- Implementing dashboard answer creation in the same task: useful next, but it would mix operator pairing, polling, ICE handling, and media rendering in one oversized slice.
+- Proxying API requests through Next.js: convenient, but it hides the API boundary that the project is meant to demonstrate.
+- Persisting sessions now: reconnect and multi-viewer behavior are still undefined, so memory-backed sessions remain enough.

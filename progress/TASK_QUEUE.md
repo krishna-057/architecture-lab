@@ -10,7 +10,7 @@ Tasks should stay small enough for one focused session.
 - [x] Define WebRTC signaling and pairing flow.
 - [x] Add local development stack for API and event storage.
 - [x] Implement camera capture permission flow.
-- [ ] Implement dashboard stream pairing shell.
+- [x] Implement dashboard stream pairing shell.
 
 ### Later
 

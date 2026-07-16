@@ -2,6 +2,27 @@
 
 ## 2026-07-16
 
+Implemented the PocketSentinel dashboard stream pairing shell.
+
+Added:
+- Dashboard session creation against `POST /api/sessions`.
+- Pairing-code, expiry, session status, and signal-log UI in `apps/dashboard`.
+- Polling for dashboard-addressed signaling messages and session status.
+- Detection timeline polling for the active session.
+- Local FastAPI CORS configuration for the camera and dashboard development origins.
+- Documentation for why dashboard answering and real media rendering stay in the next WebRTC slice.
+
+Validated the work by running:
+- `node scripts/check-workspace.mjs` from `projects/02-pocketsentinel`
+- `npm run build -w @pocketsentinel/dashboard` from `projects/02-pocketsentinel`
+- `python -m compileall services\api\app` from `projects/02-pocketsentinel`
+
+Notes:
+- `WORKFLOW.md` still appears to contain binary/corrupted content in the current checkout, so it could not be meaningfully read as Markdown.
+
+Next recommended task:
+- Implement camera pairing claim and WebRTC offer creation from the active media stream.
+
 Implemented the PocketSentinel camera capture permission flow.
 
 Added:

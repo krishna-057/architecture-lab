@@ -93,6 +93,17 @@ The camera PWA now has the first permission-gated capture flow:
 
 The first slice keeps capture in the browser and does not upload frames to the API. Pairing and WebRTC offer creation remain the next frontend slice so permission failures can be handled separately from signaling errors.
 
+## Dashboard Pairing Shell
+
+The dashboard now creates and monitors the first viewing session:
+
+- `POST /api/sessions` creates a short-lived dashboard-owned session.
+- The UI shows the pairing code, expiry time, session status, and the latest signaling messages addressed to the dashboard.
+- The dashboard polls `/api/sessions/{session_id}` and `/api/sessions/{session_id}/signal?recipient_role=dashboard&after_sequence=...`.
+- The detection timeline reads from `/api/sessions/{session_id}/detections` when a session exists.
+
+The WebRTC answer path is intentionally deferred until the camera app claims a code and creates real offers from an active `MediaStream`. The dashboard shell still proves the browser/API boundary and the operator workflow needed for the next slice.
+
 ## Why This Project Matters
 
 This project combines product creativity with real networking and AI inference. It is intentionally more than a CRUD app, but still small enough to build as a focused prototype.
