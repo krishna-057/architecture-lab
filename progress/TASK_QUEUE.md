@@ -6,7 +6,11 @@ Tasks should stay small enough for one focused session.
 
 ### Ready
 
-- [ ] Add HookRelay scaffold.
+No Ready tasks currently queued.
+
+### Completed
+
+- [x] Add HookRelay scaffold.
 
 ## Completed Project: CollabFlow
 

@@ -1,0 +1,18 @@
+{
+  "name": "hookrelay",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Webhook delivery and replay platform scaffold with endpoint, event, delivery, signing, and replay boundaries.",
+  "workspaces": [
+    "apps/*",
+    "services/*"
+  ],
+  "scripts": {
+    "check": "node scripts/check-workspace.mjs",
+    "dev:web": "npm run dev -w @hookrelay/web",
+    "dev:api": "npm run dev -w @hookrelay/api"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

@@ -1,0 +1,281 @@
+:root {
+  color-scheme: light;
+  --ink: #202529;
+  --muted: #65717a;
+  --line: #d7dee3;
+  --surface: #f5f7f7;
+  --panel: #ffffff;
+  --primary: #1f6a64;
+  --accent: #9d4c35;
+  --focus: #2f6f9f;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: Arial, Helvetica, sans-serif;
+  color: var(--ink);
+  background: var(--surface);
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+button {
+  min-height: 40px;
+  border: 0;
+  border-radius: 8px;
+  padding: 0 16px;
+  color: #ffffff;
+  background: var(--primary);
+  font-weight: 700;
+}
+
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.58;
+}
+
+input,
+select,
+textarea {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 11px 12px;
+  color: var(--ink);
+  background: #ffffff;
+}
+
+textarea {
+  resize: vertical;
+  line-height: 1.45;
+}
+
+.app-shell {
+  min-height: 100vh;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 380px;
+  gap: 18px;
+  padding: 18px;
+}
+
+.workbench,
+.side-panel {
+  min-width: 0;
+}
+
+.workbench {
+  display: grid;
+  align-content: start;
+  gap: 16px;
+}
+
+.side-panel {
+  display: grid;
+  align-content: start;
+  gap: 14px;
+}
+
+.topbar,
+.metric-strip,
+.section-header,
+.delivery-row,
+.delivery-row div,
+.retry-grid,
+.endpoint-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.topbar,
+.metric-strip,
+.form-panel,
+.table-section,
+.panel-block {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+}
+
+.topbar {
+  min-height: 72px;
+  padding: 14px 16px;
+}
+
+.topbar span,
+.metric-strip span,
+label span,
+.section-header span,
+.detail-list dt,
+.delivery-row span,
+.endpoint-row span,
+.empty-state,
+.endpoint-row small {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.topbar strong {
+  display: block;
+  margin-top: 4px;
+  font-size: 20px;
+}
+
+.metric-strip {
+  flex-wrap: wrap;
+  padding: 14px;
+}
+
+.metric-strip div {
+  min-width: 130px;
+}
+
+.metric-strip strong {
+  display: block;
+  margin-top: 4px;
+  color: var(--primary);
+  font-size: 22px;
+}
+
+.form-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.15fr);
+  gap: 16px;
+}
+
+.form-panel,
+.table-section,
+.panel-block {
+  padding: 14px;
+}
+
+.form-panel {
+  display: grid;
+  align-content: start;
+  gap: 12px;
+}
+
+label {
+  display: grid;
+  gap: 7px;
+}
+
+.table-section {
+  display: grid;
+  gap: 12px;
+}
+
+.delivery-list,
+.endpoint-list,
+.detail-list {
+  display: grid;
+  gap: 8px;
+}
+
+.delivery-row {
+  min-height: 62px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px;
+  background: #fbfcfc;
+}
+
+.delivery-row div {
+  min-width: 0;
+  align-items: flex-start;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.delivery-row strong,
+.delivery-row span,
+.detail-list dd,
+.endpoint-row span,
+.endpoint-row small {
+  overflow-wrap: anywhere;
+}
+
+.delivery-row button {
+  min-width: 86px;
+  background: var(--focus);
+}
+
+.detail-list {
+  margin: 12px 0 0;
+}
+
+.detail-list div {
+  border-top: 1px solid var(--line);
+  padding-top: 10px;
+}
+
+.detail-list div:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.detail-list dd {
+  margin: 4px 0 0;
+  font-size: 14px;
+}
+
+.panel-block p {
+  margin: 12px 0 0;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.retry-grid {
+  flex-wrap: wrap;
+  justify-content: flex-start;
+  margin-top: 12px;
+}
+
+.retry-grid span {
+  min-width: 64px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 8px 10px;
+  text-align: center;
+  color: var(--primary);
+  background: #fbfcfc;
+  font-weight: 700;
+}
+
+.endpoint-row {
+  align-items: flex-start;
+  flex-direction: column;
+  border-top: 1px solid var(--line);
+  padding-top: 10px;
+}
+
+.endpoint-row:first-child {
+  border-top: 0;
+}
+
+.empty-state {
+  margin: 0;
+}
+
+@media (max-width: 980px) {
+  .app-shell,
+  .form-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .delivery-row {
+    align-items: stretch;
+    flex-direction: column;
+  }
+}

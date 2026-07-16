@@ -2,6 +2,29 @@
 
 ## 2026-07-16
 
+Started HookRelay as the active project and implemented its first full-stack scaffold.
+
+Added:
+- `projects/05-hookrelay/services/api` as a Fastify API for endpoint creation, event ingestion, idempotency handling, delivery attempt records, HMAC signature previews, and replay enqueueing.
+- `projects/05-hookrelay/apps/web` as a Next.js delivery console for endpoint setup, event submission, delivery log inspection, signature preview, retry contract display, and replay actions.
+- `projects/05-hookrelay/DELIVERY_CONTRACT.md` for idempotency, signature header, retry ladder, and replay rules.
+- `projects/05-hookrelay/scripts/check-workspace.mjs`, `.env.example`, API Dockerfile, workspace package metadata, and npm lockfile.
+- README, architecture, decision, and interview-note updates explaining why PostgreSQL, BullMQ, outbound delivery, auth, and OpenTelemetry remain deferred behind the first delivery contract.
+
+Validated the work by running:
+- `npm run check` from `projects/05-hookrelay`
+- `npm run check -w @hookrelay/api` from `projects/05-hookrelay`
+- `npm run build -w @hookrelay/web` from `projects/05-hookrelay`
+- A local Fastify smoke test covering `/health`, `/api/delivery-contract`, `/api/endpoints`, `POST /api/events`, `/api/deliveries`, and delivery replay.
+
+Notes:
+- `npm install` reported 2 moderate severity vulnerabilities in the current dependency tree; no dependency upgrade was performed because that is a separate task.
+- `WORKFLOW.md` still appears to contain binary/corrupted content in the current checkout, so it could not be meaningfully read as Markdown.
+- The first HookRelay slice intentionally queues delivery records but does not send outbound webhooks yet.
+
+Next recommended task:
+- Add HookRelay PostgreSQL schema and BullMQ delivery worker boundary.
+
 Implemented the CollabFlow websocket sync server and browser provider shell.
 
 Added:
