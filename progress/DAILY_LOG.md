@@ -2,6 +2,32 @@
 
 ## 2026-07-16
 
+Implemented the HookRelay PostgreSQL schema and BullMQ delivery worker boundary.
+
+Added:
+- `projects/05-hookrelay/db/schema.sql` with durable webhook endpoints, idempotent events, delivery attempts, retry statuses, and dead-letter state.
+- `projects/05-hookrelay/compose.yaml` with PostgreSQL, Redis, API, and worker services using K:-scoped `.data` bind mounts.
+- Optional PostgreSQL storage in the Fastify API through `DATABASE_URL`, while preserving in-memory mode when no database is configured.
+- BullMQ enqueueing through `REDIS_URL` plus a worker entrypoint that sends signed webhook requests, records success/failure, creates retry attempts, and promotes final failures to `dead_letter`.
+- Shared signing, storage, queue, app, and delivery-runner modules for the API and worker.
+- Web delivery status rendering for queued, delivering, succeeded, failed, and dead-letter attempts.
+- README, architecture, delivery contract, decision, and interview-note updates explaining why durable mode is environment-gated instead of required for every local check.
+
+Validated the work by running:
+- `npm run check` from `projects/05-hookrelay`
+- `npm run check -w @hookrelay/api` from `projects/05-hookrelay`
+- `docker compose -f projects\05-hookrelay\compose.yaml config`
+- A local Fastify smoke test covering `/health`, `/api/endpoints`, `POST /api/events`, duplicate idempotency handling, signature generation, and delivery replay.
+
+Notes:
+- `npm install` reported 2 moderate severity vulnerabilities in the current dependency tree; no dependency upgrade was performed because that is a separate task.
+- `WORKFLOW.md` still appears to contain binary/corrupted content in the current checkout, so it could not be meaningfully read as Markdown.
+- The worker performs real outbound HTTP requests when BullMQ runs, but tenant auth, replay authorization, receiver verification examples, jittered backoff, and OpenTelemetry remain later work.
+- HookRelay's Ready queue had no queued tasks, so this run promoted the next documented HookRelay follow-up from the active docs and prior daily log into the completed queue item.
+
+Next recommended task:
+- Add HookRelay receiver verification example and replay authorization contract.
+
 Started HookRelay as the active project and implemented its first full-stack scaffold.
 
 Added:

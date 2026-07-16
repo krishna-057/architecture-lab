@@ -18,3 +18,22 @@ Rejected alternatives:
 
 Follow-up:
 Add PostgreSQL tables and a BullMQ delivery worker after the endpoint/event/delivery attempt shapes are validated.
+
+## 2026-07-16: Add Optional PostgreSQL Storage And BullMQ Worker Boundary
+
+Decision:
+Keep in-memory mode as the default local scaffold, and activate PostgreSQL plus BullMQ when `DATABASE_URL` and `REDIS_URL` are configured.
+
+Why:
+- The project now has stable endpoint, event, idempotency, delivery attempt, replay, and signature shapes, so a durable schema can be introduced without guessing at table boundaries.
+- PostgreSQL owns restart-safe endpoints, event payloads, idempotency uniqueness, delivery statuses, and dead-letter state.
+- BullMQ is the right next boundary because webhook delivery is network-bound, retry-heavy work that should not run inside the request path.
+- Optional durable mode keeps quick checks usable without Docker while still proving the real architecture with Compose.
+
+Rejected alternatives:
+- Force Docker for all local development: more production-like, but it slows lightweight API and dashboard iteration.
+- Add a custom SQL-backed scheduler: unnecessary when BullMQ already provides delayed jobs and worker concurrency.
+- Split the worker into a separate package now: premature for this lab; sharing signing, retry, and storage modules keeps behavior consistent.
+
+Follow-up:
+Add receiver verification examples, replay authorization, jittered retry policy, and OpenTelemetry spans.

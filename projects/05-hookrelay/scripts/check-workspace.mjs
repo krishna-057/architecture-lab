@@ -4,13 +4,20 @@ import { join } from "node:path";
 const requiredFiles = [
   "package.json",
   ".env.example",
+  "compose.yaml",
   "DELIVERY_CONTRACT.md",
+  "db/schema.sql",
   "apps/web/package.json",
   "apps/web/src/app/page.tsx",
   "apps/web/src/app/layout.tsx",
   "services/api/package.json",
   "services/api/Dockerfile",
-  "services/api/src/server.js"
+  "services/api/src/server.js",
+  "services/api/src/app.js",
+  "services/api/src/storage.js",
+  "services/api/src/delivery-queue.js",
+  "services/api/src/delivery-runner.js",
+  "services/api/src/worker.js"
 ];
 
 for (const file of requiredFiles) {
@@ -33,7 +40,19 @@ if (!apiPackage.dependencies?.fastify) {
   throw new Error("HookRelay API must use Fastify for the first HTTP delivery boundary.");
 }
 
-const apiFile = readFileSync("services/api/src/server.js", "utf8");
+for (const dependency of ["pg", "bullmq", "ioredis"]) {
+  if (!apiPackage.dependencies?.[dependency]) {
+    throw new Error(`HookRelay API is missing required durable boundary dependency: ${dependency}`);
+  }
+}
+
+const apiFile = [
+  "services/api/src/app.js",
+  "services/api/src/storage.js",
+  "services/api/src/delivery-queue.js",
+  "services/api/src/delivery-runner.js",
+  "services/api/src/worker.js"
+].map((file) => readFileSync(file, "utf8")).join("\n");
 for (const marker of [
   "/api/endpoints",
   "/api/events",
@@ -42,7 +61,11 @@ for (const marker of [
   "HookRelay-Signature",
   "idempotency_key",
   "replay",
-  "retry_policy"
+  "retry_policy",
+  "new Pool",
+  "new Queue",
+  "new Worker",
+  "dead_letter"
 ]) {
   if (!apiFile.includes(marker)) {
     throw new Error(`API is missing required marker: ${marker}`);
@@ -68,6 +91,20 @@ const contract = readFileSync("DELIVERY_CONTRACT.md", "utf8");
 for (const marker of ["HMAC", "Retry Policy", "Replay Rule", "idempotency_key", "HookRelay-Signature"]) {
   if (!contract.includes(marker)) {
     throw new Error(`Delivery contract is missing required marker: ${marker}`);
+  }
+}
+
+const schema = readFileSync("db/schema.sql", "utf8");
+for (const marker of ["webhook_endpoints", "webhook_events", "delivery_attempts", "unique (endpoint_id, idempotency_key)", "dead_letter"]) {
+  if (!schema.includes(marker)) {
+    throw new Error(`PostgreSQL schema is missing required marker: ${marker}`);
+  }
+}
+
+const compose = readFileSync("compose.yaml", "utf8");
+for (const marker of ["postgres:16-alpine", "redis:7-alpine", "./.data/postgres", "./.data/redis", "worker:"]) {
+  if (!compose.includes(marker)) {
+    throw new Error(`Compose stack is missing required marker: ${marker}`);
   }
 }
 

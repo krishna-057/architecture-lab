@@ -10,6 +10,7 @@ No Ready tasks currently queued.
 
 ### Completed
 
+- [x] Add HookRelay PostgreSQL schema and BullMQ delivery worker boundary.
 - [x] Add HookRelay scaffold.
 
 ## Completed Project: CollabFlow

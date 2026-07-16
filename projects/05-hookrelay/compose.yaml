@@ -1,0 +1,49 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: hookrelay
+      POSTGRES_USER: hookrelay
+      POSTGRES_PASSWORD: hookrelay
+    ports:
+      - "5545:5432"
+    volumes:
+      - ./.data/postgres:/var/lib/postgresql/data
+      - ./db/schema.sql:/docker-entrypoint-initdb.d/001-schema.sql:ro
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "6385:6379"
+    volumes:
+      - ./.data/redis:/data
+
+  api:
+    build:
+      context: .
+      dockerfile: services/api/Dockerfile
+    environment:
+      DATABASE_URL: postgresql://hookrelay:hookrelay@postgres:5432/hookrelay
+      REDIS_URL: redis://redis:6379
+      CORS_ALLOWED_ORIGINS: http://localhost:3400
+      HOOKRELAY_API_PORT: 8400
+      DELIVERY_WORKER_MODE: api-enqueue-only
+    ports:
+      - "8400:8400"
+    depends_on:
+      - postgres
+      - redis
+
+  worker:
+    build:
+      context: .
+      dockerfile: services/api/Dockerfile
+    command: ["npm", "run", "worker"]
+    environment:
+      DATABASE_URL: postgresql://hookrelay:hookrelay@postgres:5432/hookrelay
+      REDIS_URL: redis://redis:6379
+      DELIVERY_WORKER_MODE: bullmq-worker
+    depends_on:
+      - postgres
+      - redis

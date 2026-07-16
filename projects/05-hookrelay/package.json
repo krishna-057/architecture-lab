@@ -10,7 +10,8 @@
   "scripts": {
     "check": "node scripts/check-workspace.mjs",
     "dev:web": "npm run dev -w @hookrelay/web",
-    "dev:api": "npm run dev -w @hookrelay/api"
+    "dev:api": "npm run dev -w @hookrelay/api",
+    "dev:worker": "npm run worker -w @hookrelay/api"
   },
   "engines": {
     "node": ">=20"

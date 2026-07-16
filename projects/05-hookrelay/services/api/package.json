@@ -5,10 +5,14 @@
   "type": "module",
   "scripts": {
     "dev": "node --watch src/server.js",
+    "worker": "node src/worker.js",
     "start": "node src/server.js",
-    "check": "node --check src/server.js"
+    "check": "node --check src/server.js && node --check src/worker.js && node --check src/app.js && node --check src/storage.js && node --check src/delivery-queue.js && node --check src/delivery-runner.js"
   },
   "dependencies": {
-    "fastify": "^5.2.1"
+    "bullmq": "^5.12.12",
+    "fastify": "^5.2.1",
+    "ioredis": "^5.4.1",
+    "pg": "^8.13.1"
   }
 }

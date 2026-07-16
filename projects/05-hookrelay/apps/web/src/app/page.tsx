@@ -26,7 +26,7 @@ type DeliveryAttempt = {
   event_id: string;
   endpoint_id: string;
   target_url: string;
-  status: "queued";
+  status: "queued" | "delivering" | "succeeded" | "failed" | "dead_letter";
   attempt_number: number;
   next_attempt_at: string;
   response_status: number | null;
@@ -273,6 +273,10 @@ export default function HookRelayHome() {
                 <div>
                   <strong>{delivery.delivery_id}</strong>
                   <span>{delivery.target_url}</span>
+                </div>
+                <div>
+                  <span>Status</span>
+                  <strong>{delivery.status}</strong>
                 </div>
                 <div>
                   <span>Attempt</span>
