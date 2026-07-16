@@ -35,6 +35,12 @@ The API stores ordered signaling messages with a per-session sequence number. Ea
 
 Detailed flow and payload shapes live in `SIGNALING.md`.
 
+## Camera Permission Boundary
+
+The camera app owns browser permission and local preview state before it touches signaling. Capture starts only from a user click, uses `navigator.mediaDevices.getUserMedia`, and prefers the environment-facing camera for a CCTV-style phone placement. Once permission succeeds, the local `MediaStream` is attached directly to a muted inline video element.
+
+The stream is not sent to the API and is not persisted. Stopping capture explicitly stops every media track before resetting the preview. This keeps the first browser slice privacy-preserving and makes the later pairing step depend on a real active stream instead of mixing permission, signaling, and peer-connection failures together.
+
 ## Local Development
 
 The scaffold uses separate ports so all three surfaces can run together:

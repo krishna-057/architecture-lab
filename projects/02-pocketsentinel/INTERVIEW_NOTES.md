@@ -16,3 +16,4 @@ Key topics:
 - The design avoids storing raw video by default. The planned durable artifact is a detection timeline, with video retention treated as an explicit future privacy decision.
 - WebRTC still needs a signaling channel. The current contract uses FastAPI REST polling for session pairing and SDP/ICE exchange because it is inspectable and enough for a one-camera prototype.
 - The API never carries video frames in the first design. That keeps the privacy story clear: browser peers negotiate through the API, then media flows peer-to-peer unless a future TURN relay is required.
+- Camera capture is gated by a user tap and local permission success before pairing is enabled. That keeps browser/device permission errors separate from WebRTC signaling errors and makes the privacy boundary visible in the UI.

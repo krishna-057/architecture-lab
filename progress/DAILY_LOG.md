@@ -2,6 +2,26 @@
 
 ## 2026-07-16
 
+Implemented the PocketSentinel camera capture permission flow.
+
+Added:
+- Browser-native `getUserMedia` capture in `apps/camera` with a user-initiated Start action.
+- Rear-camera preference, live muted inline preview, explicit Stop track cleanup, and permission/device error states.
+- Pairing control gating so the next WebRTC slice starts only after a local media stream exists.
+- `package-lock.json` for the PocketSentinel npm workspace after installing the declared Next/React dependencies.
+- Documentation for the camera permission boundary and why pairing remains behind local capture success.
+
+Validated the work by running:
+- `node scripts/check-workspace.mjs` from `projects/02-pocketsentinel`
+- `npm run build -w @pocketsentinel/camera` from `projects/02-pocketsentinel`
+
+Notes:
+- `npm install` reported 2 moderate severity vulnerabilities in the current Next/React dependency tree; no dependency upgrade was performed because that is a separate task.
+- `WORKFLOW.md` still appears to contain binary/corrupted content in the current checkout, so it could not be meaningfully read as Markdown.
+
+Next recommended task:
+- Implement the dashboard stream pairing shell.
+
 Added the PocketSentinel local development stack for API and event storage.
 
 Added:

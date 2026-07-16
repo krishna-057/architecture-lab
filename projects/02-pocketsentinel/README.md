@@ -36,7 +36,7 @@ projects/02-pocketsentinel/
     check-workspace.mjs
 ```
 
-The first scaffold intentionally does not install npm dependencies, create a Python virtual environment, or download object-detection models. Those are heavier project artifacts and should be added only when the next slice needs them.
+The initial scaffold deferred dependency installation until the first browser slice needed it. The camera app dependencies are now locked in `package-lock.json`; Python virtual environments and object-detection model downloads are still deferred until the API or inference slices need them.
 
 Validate the scaffold:
 
@@ -80,6 +80,18 @@ The first signaling slice is now defined in `SIGNALING.md` and implemented as an
 - Camera and dashboard exchange `offer`, `answer`, `ice-candidate`, `ready`, and `bye` messages through `/api/sessions/{session_id}/signal`.
 
 This keeps video peer-to-peer through WebRTC while the API owns only session identity and negotiation messages.
+
+## Camera Capture Flow
+
+The camera PWA now has the first permission-gated capture flow:
+
+- The browser asks for camera access only after the user taps Start.
+- The app requests the rear camera when available with `facingMode: environment`.
+- A live local preview is shown after permission succeeds.
+- Stop explicitly releases all media tracks so the phone camera indicator turns off.
+- Pairing stays disabled until a local media stream exists.
+
+The first slice keeps capture in the browser and does not upload frames to the API. Pairing and WebRTC offer creation remain the next frontend slice so permission failures can be handled separately from signaling errors.
 
 ## Why This Project Matters
 

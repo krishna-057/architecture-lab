@@ -44,3 +44,18 @@ Rejected:
 - Persisting all sessions and signaling immediately: useful later, but it adds schema and lifecycle rules before the camera and dashboard clients use the contract.
 - Adding Redis for signaling or queues now: unnecessary until polling, reconnects, or inference jobs create real pressure.
 - Running PostgreSQL only as a documented external prerequisite: weaker reproducibility than a local Compose stack.
+
+## Decision 4: Gate Pairing Behind Local Camera Permission
+
+The camera app starts with an explicit permission and local-preview flow before implementing WebRTC offer creation.
+
+Why:
+- Browser camera permission can fail for user, device, browser, or HTTPS-context reasons, and those errors should be visible before signaling starts.
+- A real local `MediaStream` is the right prerequisite for pairing because the camera role cannot create a useful WebRTC offer without tracks.
+- Keeping preview local preserves the privacy claim that raw video is not sent to FastAPI.
+- The browser-native MediaDevices API is enough for the first slice, so a React camera dependency would add surface area without solving a hard problem yet.
+
+Rejected:
+- Asking for permission automatically on page load: more surprising on mobile and easier for browsers to block.
+- Enabling pairing before capture succeeds: mixes permission failures with signaling failures and makes the next slice harder to test.
+- Uploading preview frames to the API for validation: contradicts the initial WebRTC/privacy boundary.
