@@ -2,6 +2,24 @@
 
 ## 2026-07-16
 
+Created private GitHub repositories for each independent portfolio project and pushed history-preserving splits.
+
+Added:
+- `https://github.com/krishna-057/FlashReserve`
+- `https://github.com/krishna-057/PocketSentinel`
+- `https://github.com/krishna-057/PersonaBridge`
+- `https://github.com/krishna-057/CollabFlow`
+- `https://github.com/krishna-057/HookRelay`
+- `docs/project-repositories.md` documenting the repo mapping and future push policy.
+
+Notes:
+- Each project repository was created as private.
+- Existing project history was split with `git subtree split`, preserving the commits, dates, and messages for files under each project folder instead of creating one bulk dump commit.
+- Future daily runs should push the active project's implementation work to its respective private repository, while the lab repo keeps planning and progress docs.
+
+Next recommended task:
+- Update future automation workflow instructions to push active project changes to the matching private repository.
+
 Implemented the HookRelay PostgreSQL schema and BullMQ delivery worker boundary.
 
 Added:

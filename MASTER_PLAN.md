@@ -117,7 +117,9 @@ Every project README must answer:
 
 ## Branching And Git Policy
 
-Preferred branch pattern:
+The portfolio projects are independent applications. The lab repository is the planning and automation workspace, while each project also has its own private GitHub repository documented in `docs/project-repositories.md`.
+
+Preferred branch pattern inside this lab repository:
 
 ```text
 codex/project-name-short-task
@@ -136,3 +138,4 @@ flashreserve: add reservation data model
 pocketsentinel: document webrtc signaling flow
 ```
 
+For project repositories, prefer direct incremental commits on the project repo's working branch or `main` once the project is private and ready for portfolio polishing. Do not batch unrelated days into one catch-up commit.
