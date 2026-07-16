@@ -91,7 +91,7 @@ The camera PWA now has the first permission-gated capture flow:
 - Stop explicitly releases all media tracks so the phone camera indicator turns off.
 - Pairing stays disabled until a local media stream exists.
 
-The first slice keeps capture in the browser and does not upload frames to the API. Pairing and WebRTC offer creation remain the next frontend slice so permission failures can be handled separately from signaling errors.
+The capture flow keeps raw video in the browser and does not upload frames to the API. Pairing and WebRTC negotiation now depend on this local `MediaStream`, so permission failures stay separate from signaling failures.
 
 ## Dashboard Pairing Shell
 
@@ -102,7 +102,7 @@ The dashboard now creates and monitors the first viewing session:
 - The dashboard polls `/api/sessions/{session_id}` and `/api/sessions/{session_id}/signal?recipient_role=dashboard&after_sequence=...`.
 - The detection timeline reads from `/api/sessions/{session_id}/detections` when a session exists.
 
-The WebRTC answer path is intentionally deferred until the camera app claims a code and creates real offers from an active `MediaStream`. The dashboard shell still proves the browser/API boundary and the operator workflow needed for the next slice.
+The shell proved the browser/API boundary before receiver-side negotiation was added. The dashboard now consumes the camera offer through the same polling contract and renders the remote stream in the reserved viewer surface.
 
 ## Camera Pairing And Offer Flow
 
@@ -114,7 +114,18 @@ The camera PWA can now join a dashboard-created session:
 - Local camera tracks are attached to the peer connection before creating the SDP offer.
 - The camera posts the `offer` and gathered `ice-candidate` messages through the existing signaling API.
 
-The slice deliberately stops before applying dashboard answers. That keeps the sender-side WebRTC boundary testable while the next dashboard slice owns answer creation, remote video rendering, and applying camera ICE candidates.
+The camera now keeps polling after sending the offer so it can apply the dashboard answer and dashboard-originated ICE candidates without changing the signaling transport.
+
+## Dashboard Answer And Remote Stream Flow
+
+The dashboard completes the first local WebRTC happy path:
+
+- It polls dashboard-addressed signaling messages and validates SDP/ICE payloads before applying them.
+- It creates one browser `RTCPeerConnection` per viewing session after receiving the camera offer.
+- It applies camera ICE candidates, creates the SDP answer, and posts dashboard ICE candidates through FastAPI.
+- It binds remote tracks to the live video surface once the peer connection receives the camera stream.
+
+This slice still uses no STUN/TURN servers. Local-host and same-LAN development can now validate the full offer/answer and media rendering path before NAT traversal is introduced.
 
 ## Why This Project Matters
 

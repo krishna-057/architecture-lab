@@ -17,5 +17,7 @@ Key topics:
 - WebRTC still needs a signaling channel. The current contract uses FastAPI REST polling for session pairing and SDP/ICE exchange because it is inspectable and enough for a one-camera prototype.
 - The API never carries video frames in the first design. That keeps the privacy story clear: browser peers negotiate through the API, then media flows peer-to-peer unless a future TURN relay is required.
 - Camera capture is gated by a user tap and local permission success before pairing is enabled. That keeps browser/device permission errors separate from WebRTC signaling errors and makes the privacy boundary visible in the UI.
-- The dashboard pairing shell creates sessions and polls for messages before WebRTC answering is implemented. That keeps the operator workflow and API/CORS boundary testable before SDP and ICE handling are layered in.
-- The camera now claims a pairing code and creates the SDP offer from real local tracks. This proves the sender-side WebRTC path while leaving answer creation and remote video rendering as the next receiver-owned slice.
+- The dashboard pairing shell creates sessions and polls for messages before it upgrades the reserved viewer surface into a remote WebRTC video element.
+- The camera now claims a pairing code and creates the SDP offer from real local tracks, then applies the dashboard answer and dashboard ICE candidates through the same signaling API.
+- The dashboard now creates the SDP answer, exchanges ICE candidates through the same FastAPI polling boundary, and renders remote tracks directly in the browser. This completes the first peer-to-peer video loop without sending raw frames through the API.
+- STUN/TURN remains deferred until local and same-LAN negotiation are proven. That keeps traversal credentials and relay costs out of the prototype until there is a real connectivity problem to solve.

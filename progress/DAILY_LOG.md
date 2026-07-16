@@ -2,6 +2,26 @@
 
 ## 2026-07-16
 
+Implemented the PocketSentinel dashboard WebRTC answer and remote rendering slice.
+
+Added:
+- Dashboard-side `RTCPeerConnection` creation when a camera offer arrives through the existing signaling API.
+- SDP answer posting and dashboard ICE candidate posting through FastAPI REST polling.
+- Remote track rendering in the dashboard live video surface.
+- Camera-side polling for dashboard answers and ICE candidates so the offer/answer path can complete.
+- Documentation for why STUN/TURN and media relays remain deferred until local peer-to-peer negotiation is proven.
+
+Validated the work by running:
+- `node scripts/check-workspace.mjs` from `projects/02-pocketsentinel`
+- `npm run build -w @pocketsentinel/dashboard` from `projects/02-pocketsentinel`
+- `npm run build -w @pocketsentinel/camera` from `projects/02-pocketsentinel`
+
+Notes:
+- `WORKFLOW.md` still appears to contain binary/corrupted content in the current checkout, so it could not be meaningfully read as Markdown.
+
+Next recommended task:
+- Add dashboard object detection event ingestion pipeline.
+
 Implemented the PocketSentinel camera pairing claim and WebRTC offer creation slice.
 
 Added:

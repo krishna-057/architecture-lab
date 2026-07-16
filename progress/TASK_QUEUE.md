@@ -12,7 +12,8 @@ Tasks should stay small enough for one focused session.
 - [x] Implement camera capture permission flow.
 - [x] Implement dashboard stream pairing shell.
 - [x] Implement camera pairing claim and WebRTC offer creation.
-- [ ] Implement dashboard WebRTC answer creation and remote video rendering.
+- [x] Implement dashboard WebRTC answer creation and remote video rendering.
+- [ ] Add dashboard object detection event ingestion pipeline.
 
 ### Later
 

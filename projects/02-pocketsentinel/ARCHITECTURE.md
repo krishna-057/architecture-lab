@@ -43,7 +43,7 @@ The stream is not sent to the API and is not persisted. Stopping capture explici
 
 ## Dashboard Pairing Boundary
 
-The dashboard now owns the operator side of pairing. It creates a session through FastAPI, displays the six-character code and expiry, polls session state, and reads only signaling messages addressed to the `dashboard` role. The UI keeps the video frame as a reserved surface until the next slice adds `RTCPeerConnection` answer creation.
+The dashboard now owns the operator side of pairing. It creates a session through FastAPI, displays the six-character code and expiry, polls session state, and reads only signaling messages addressed to the `dashboard` role. The same viewer surface now becomes the remote video element once the WebRTC answer flow connects.
 
 Because the browser apps and API run on different local ports, FastAPI allows CORS for `http://localhost:3100` and `http://localhost:3101` by default. The origins can be replaced with `CORS_ALLOWED_ORIGINS` for other local setups. This keeps the development topology honest without adding a reverse proxy before the WebRTC contract is usable.
 
@@ -51,9 +51,17 @@ Because the browser apps and API run on different local ports, FastAPI allows CO
 
 The camera app now owns the sender side of the WebRTC negotiation. After local capture succeeds, it accepts the short pairing code, claims the waiting dashboard session, creates a browser `RTCPeerConnection`, attaches the active camera tracks, and posts the SDP offer plus ICE candidates through FastAPI.
 
-The peer connection is intentionally created without STUN or TURN configuration in this slice. Local-host and same-LAN development can validate the offer and candidate contract first; NAT traversal belongs in a later decision once the dashboard answer path can prove whether connectivity fails for a real reason.
+The peer connection is intentionally created without STUN or TURN configuration in this slice. Local-host and same-LAN development can validate the offer, answer, and candidate contract first; NAT traversal belongs in a later decision once local negotiation is proven.
 
-The camera page closes its peer connection when capture stops or the page unmounts. It does not upload frames to the API and it does not try to render a dashboard answer yet, keeping the sender slice separate from receiver-side media rendering.
+The camera page closes its peer connection when capture stops or the page unmounts. It does not upload frames to the API. After sending an offer, it polls camera-addressed signaling messages so it can apply the dashboard answer and dashboard ICE candidates.
+
+## Dashboard Answer Boundary
+
+The dashboard now owns receiver-side WebRTC negotiation. When a camera offer arrives, the dashboard creates one browser `RTCPeerConnection` for the active session, applies the offer and camera ICE candidates, creates the SDP answer, and posts the answer plus dashboard ICE candidates through the existing FastAPI signaling endpoint.
+
+Remote media is rendered directly from `ontrack` into the dashboard video element. The API still never receives raw video frames; it stores only short-lived SDP and ICE payloads needed for local negotiation.
+
+STUN/TURN configuration is still deferred. The first complete offer/answer slice should prove local and same-LAN behavior before introducing external traversal infrastructure or credentials.
 
 ## Local Development
 
@@ -75,4 +83,4 @@ docker compose up --build
 
 PostgreSQL initializes from `db/schema.sql` and stores local data under `projects/02-pocketsentinel/.data/postgres`, keeping durable development state on `K:\AutoPilot_Projects`. The API checks `DATABASE_URL` at startup; if PostgreSQL is available, detection events are persisted in `detection_events`, otherwise the API keeps the existing memory-backed behavior for lightweight checks.
 
-Session and signaling persistence are intentionally deferred. They are useful once pairing reconnects, multi-dashboard views, or audit trails matter, but they are not required for the next camera-capture and dashboard-pairing slices.
+Session and signaling persistence are intentionally deferred. They are useful once pairing reconnects, multi-dashboard views, or audit trails matter, but they are not required for the current one-camera local streaming prototype.

@@ -89,3 +89,18 @@ Rejected:
 - Letting the dashboard create the offer first: possible with transceivers, but less intuitive for a phone-as-camera prototype where the sender owns the media tracks.
 - Adding a WebRTC helper library now: browser APIs are enough for one peer connection and would keep the interview signal clearer.
 - Combining camera offer creation with dashboard answering: it would finish more of the happy path, but it hides which side owns each failure mode.
+
+## Decision 7: Complete Local WebRTC With Browser-Native Answering
+
+The dashboard now creates the WebRTC answer and renders the remote camera stream without adding a signaling library, WebSocket server, or media relay.
+
+Why:
+- The existing REST-polling signaling contract already carries ordered SDP and ICE messages, so answer creation does not need a new transport.
+- Browser-native `RTCPeerConnection` keeps the architecture signal clear: FastAPI coordinates negotiation, while media remains peer-to-peer.
+- Rendering remote tracks directly in the dashboard proves the core CCTV loop before object detection or frame sampling adds more moving parts.
+- Applying the dashboard answer and ICE candidates in the camera app is necessary for the receiver slice to be truly end-to-end.
+
+Rejected:
+- Adding SimplePeer or another wrapper now: useful for ergonomics, but it hides the WebRTC offer/answer mechanics this project is meant to demonstrate.
+- Adding STUN/TURN servers immediately: needed for broader network traversal, but local and same-LAN negotiation should work before external credentials are introduced.
+- Relaying media through FastAPI: easier to reason about from one backend process, but it violates the privacy and latency boundary established for the project.

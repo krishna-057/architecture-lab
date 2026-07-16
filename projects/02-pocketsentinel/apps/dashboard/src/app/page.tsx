@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 type SessionStatus = "waiting_for_camera" | "pairing" | "streaming" | "ended";
 type ShellStatus = "idle" | "creating" | "waiting" | "pairing" | "streaming" | "ended" | "error";
@@ -21,6 +21,7 @@ type SignalMessage = {
   sender_role: "camera" | "dashboard";
   recipient_role: "camera" | "dashboard";
   type: "offer" | "answer" | "ice-candidate" | "ready" | "bye";
+  payload: unknown;
   created_at: string;
 };
 
@@ -30,6 +31,8 @@ type DetectionEvent = {
   confidence: number;
   occurred_at: string;
 };
+
+type StreamState = "empty" | "waiting_offer" | "answering" | "connecting" | "streaming" | "error";
 
 const apiBaseUrl = (process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8100").replace(/\/$/, "");
 
@@ -69,11 +72,38 @@ function statusFromSession(session: SessionResponse | null): ShellStatus {
   return session.status;
 }
 
+function isSessionDescription(payload: unknown): payload is RTCSessionDescriptionInit {
+  return (
+    typeof payload === "object" &&
+    payload !== null &&
+    "type" in payload &&
+    "sdp" in payload &&
+    typeof payload.type === "string" &&
+    typeof payload.sdp === "string"
+  );
+}
+
+function isIceCandidate(payload: unknown): payload is RTCIceCandidateInit {
+  return (
+    typeof payload === "object" &&
+    payload !== null &&
+    "candidate" in payload &&
+    typeof payload.candidate === "string"
+  );
+}
+
 export default function DashboardHome() {
+  const remoteVideoRef = useRef<HTMLVideoElement | null>(null);
+  const remoteStreamRef = useRef<MediaStream | null>(null);
+  const peerConnectionRef = useRef<RTCPeerConnection | null>(null);
+  const processedSignalIdsRef = useRef<Set<string>>(new Set());
+  const queuedIceCandidatesRef = useRef<RTCIceCandidateInit[]>([]);
+  const messageCounterRef = useRef(0);
   const [session, setSession] = useState<SessionResponse | null>(null);
   const [signals, setSignals] = useState<SignalMessage[]>([]);
   const [detections, setDetections] = useState<DetectionEvent[]>([]);
   const [status, setStatus] = useState<ShellStatus>("idle");
+  const [streamState, setStreamState] = useState<StreamState>("empty");
   const [message, setMessage] = useState("Create a viewing session to receive a camera pairing code.");
 
   const lastSignalSequence = useMemo(
@@ -82,6 +112,167 @@ export default function DashboardHome() {
   );
   const sessionId = session?.session_id;
   const hasOffer = signals.some((signal) => signal.type === "offer");
+
+  const closePeerConnection = useCallback(() => {
+    peerConnectionRef.current?.close();
+    peerConnectionRef.current = null;
+    queuedIceCandidatesRef.current = [];
+    remoteStreamRef.current = null;
+
+    if (remoteVideoRef.current) {
+      remoteVideoRef.current.srcObject = null;
+    }
+  }, []);
+
+  const postSignal = useCallback(
+    async (
+      targetSessionId: string,
+      type: "answer" | "ice-candidate" | "bye",
+      payload: RTCSessionDescriptionInit | RTCIceCandidateInit | Record<string, unknown>
+    ) => {
+      messageCounterRef.current += 1;
+      await requestJson<SignalMessage>(`/api/sessions/${targetSessionId}/signal`, {
+        method: "POST",
+        body: JSON.stringify({
+          sender_role: "dashboard",
+          type,
+          payload,
+          client_message_id: `dashboard-${messageCounterRef.current}`
+        })
+      });
+    },
+    []
+  );
+
+  const ensurePeerConnection = useCallback(
+    (targetSessionId: string) => {
+      if (peerConnectionRef.current) {
+        return peerConnectionRef.current;
+      }
+
+      if (!window.RTCPeerConnection) {
+        throw new Error("This browser does not support WebRTC peer connections.");
+      }
+
+      const peerConnection = new RTCPeerConnection();
+      peerConnectionRef.current = peerConnection;
+
+      peerConnection.ontrack = (event) => {
+        if (!remoteStreamRef.current) {
+          remoteStreamRef.current = new MediaStream();
+        }
+
+        remoteStreamRef.current.addTrack(event.track);
+
+        if (remoteVideoRef.current) {
+          remoteVideoRef.current.srcObject = remoteStreamRef.current;
+          void remoteVideoRef.current.play().catch(() => {
+            setMessage("Remote video is connected. Tap the video if the browser pauses playback.");
+          });
+        }
+
+        setStreamState("streaming");
+        setMessage("Live camera stream connected.");
+      };
+
+      peerConnection.onicecandidate = (event) => {
+        if (event.candidate) {
+          void postSignal(targetSessionId, "ice-candidate", event.candidate.toJSON()).catch((error) => {
+            setStreamState("error");
+            setMessage(error instanceof Error ? error.message : "Could not send dashboard ICE candidate.");
+          });
+        }
+      };
+
+      peerConnection.onconnectionstatechange = () => {
+        if (peerConnection.connectionState === "connected") {
+          setStreamState("streaming");
+          setMessage("Live camera stream connected.");
+        }
+
+        if (peerConnection.connectionState === "failed") {
+          setStreamState("error");
+          setMessage("WebRTC connection failed. Create a new session and pair again.");
+        }
+      };
+
+      return peerConnection;
+    },
+    [postSignal]
+  );
+
+  const applyQueuedIceCandidates = useCallback(async (peerConnection: RTCPeerConnection) => {
+    const queuedCandidates = queuedIceCandidatesRef.current;
+    queuedIceCandidatesRef.current = [];
+
+    for (const candidate of queuedCandidates) {
+      await peerConnection.addIceCandidate(candidate);
+    }
+  }, []);
+
+  const handleDashboardSignal = useCallback(
+    async (signal: SignalMessage, targetSessionId: string) => {
+      if (processedSignalIdsRef.current.has(signal.message_id)) {
+        return;
+      }
+      processedSignalIdsRef.current.add(signal.message_id);
+
+      if (signal.type === "offer") {
+        if (!isSessionDescription(signal.payload) || signal.payload.type !== "offer") {
+          throw new Error("Camera sent an invalid WebRTC offer.");
+        }
+
+        setStreamState("answering");
+        setMessage("Camera offer received. Creating dashboard answer...");
+
+        const peerConnection = ensurePeerConnection(targetSessionId);
+        await peerConnection.setRemoteDescription(signal.payload);
+        await applyQueuedIceCandidates(peerConnection);
+
+        const answer = await peerConnection.createAnswer();
+        await peerConnection.setLocalDescription(answer);
+
+        if (!peerConnection.localDescription) {
+          throw new Error("Browser did not create a dashboard WebRTC answer.");
+        }
+
+        await postSignal(targetSessionId, "answer", {
+          type: peerConnection.localDescription.type,
+          sdp: peerConnection.localDescription.sdp
+        });
+
+        setStreamState("connecting");
+        setMessage("Dashboard answer sent. Waiting for the camera stream...");
+        return;
+      }
+
+      if (signal.type === "ice-candidate") {
+        if (!isIceCandidate(signal.payload)) {
+          return;
+        }
+
+        const peerConnection = peerConnectionRef.current;
+        if (!peerConnection?.remoteDescription) {
+          queuedIceCandidatesRef.current.push(signal.payload);
+          return;
+        }
+
+        await peerConnection.addIceCandidate(signal.payload);
+        return;
+      }
+
+      if (signal.type === "bye") {
+        closePeerConnection();
+        setStreamState("empty");
+        setMessage("Camera ended the stream.");
+      }
+    },
+    [applyQueuedIceCandidates, closePeerConnection, ensurePeerConnection, postSignal]
+  );
+
+  useEffect(() => {
+    return () => closePeerConnection();
+  }, [closePeerConnection]);
 
   useEffect(() => {
     if (!sessionId || status === "ended" || status === "error") {
@@ -100,20 +291,19 @@ export default function DashboardHome() {
 
         if (nextSignals.length > 0) {
           setSignals((current) => [...current, ...nextSignals]);
-          setMessage(
-            nextSignals.some((signal) => signal.type === "offer")
-              ? "Camera offer received. The WebRTC answer path is ready for the next slice."
-              : "Camera signaling activity received."
-          );
+          for (const signal of nextSignals) {
+            await handleDashboardSignal(signal, sessionId);
+          }
         }
       } catch (error) {
         setStatus("error");
+        setStreamState("error");
         setMessage(error instanceof Error ? error.message : "Could not poll the pairing session.");
       }
     }, 1600);
 
     return () => window.clearInterval(interval);
-  }, [lastSignalSequence, sessionId, status]);
+  }, [handleDashboardSignal, lastSignalSequence, sessionId, status]);
 
   useEffect(() => {
     if (!sessionId) {
@@ -140,6 +330,10 @@ export default function DashboardHome() {
     setSession(null);
     setSignals([]);
     setDetections([]);
+    processedSignalIdsRef.current = new Set();
+    messageCounterRef.current = 0;
+    closePeerConnection();
+    setStreamState("waiting_offer");
 
     try {
       const created = await requestJson<SessionResponse>("/api/sessions", {
@@ -152,6 +346,7 @@ export default function DashboardHome() {
       setMessage("Share the pairing code with the camera phone.");
     } catch (error) {
       setStatus("error");
+      setStreamState("error");
       setMessage(error instanceof Error ? error.message : "Could not create a dashboard session.");
     }
   }
@@ -167,11 +362,18 @@ export default function DashboardHome() {
   }[status];
 
   const pairingExpiresAt = session ? formatClock(session.expires_at) : "--";
-  const streamLabel = hasOffer ? "Offer received" : session ? "Waiting for offer" : "Not started";
+  const streamLabel = {
+    empty: session ? "Waiting for offer" : "Not started",
+    waiting_offer: "Waiting for offer",
+    answering: "Answering",
+    connecting: "Connecting",
+    streaming: "Streaming",
+    error: "Connection error"
+  }[streamState];
 
   return (
     <main className="dashboard-shell">
-      <section className="viewer" aria-label="Live camera viewer placeholder">
+      <section className="viewer" aria-label="Live camera viewer">
         <div className="viewer-header">
           <div>
             <span>Live room</span>
@@ -200,7 +402,8 @@ export default function DashboardHome() {
           </div>
         </div>
         <div className="video-frame" data-active={hasOffer || status === "streaming"}>
-          <p>{message}</p>
+          <video ref={remoteVideoRef} aria-label="Remote camera stream" autoPlay playsInline />
+          {streamState !== "streaming" ? <p>{message}</p> : null}
         </div>
         <div className="signal-log" aria-label="Signaling messages">
           <span>Signal log</span>

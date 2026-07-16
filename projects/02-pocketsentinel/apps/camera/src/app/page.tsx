@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 
 type CaptureStatus = "idle" | "requesting" | "ready" | "blocked" | "unsupported";
-type PairingStatus = "idle" | "claiming" | "offering" | "offered" | "error";
+type PairingStatus = "idle" | "claiming" | "offering" | "offered" | "streaming" | "error";
 
 type SessionResponse = {
   session_id: string;
@@ -13,6 +13,16 @@ type SessionResponse = {
   signaling_path: string;
   created_at: string;
   expires_at: string;
+};
+
+type SignalMessage = {
+  message_id: string;
+  sequence: number;
+  sender_role: "camera" | "dashboard";
+  recipient_role: "camera" | "dashboard";
+  type: "offer" | "answer" | "ice-candidate" | "ready" | "bye";
+  payload: unknown;
+  created_at: string;
 };
 
 const captureConstraints: MediaStreamConstraints = {
@@ -57,10 +67,32 @@ function permissionMessage(error: unknown) {
   return "The camera could not start. Check browser permissions and try again.";
 }
 
+function isSessionDescription(payload: unknown): payload is RTCSessionDescriptionInit {
+  return (
+    typeof payload === "object" &&
+    payload !== null &&
+    "type" in payload &&
+    "sdp" in payload &&
+    typeof payload.type === "string" &&
+    typeof payload.sdp === "string"
+  );
+}
+
+function isIceCandidate(payload: unknown): payload is RTCIceCandidateInit {
+  return (
+    typeof payload === "object" &&
+    payload !== null &&
+    "candidate" in payload &&
+    typeof payload.candidate === "string"
+  );
+}
+
 export default function CameraHome() {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const peerConnectionRef = useRef<RTCPeerConnection | null>(null);
+  const queuedDashboardIceCandidatesRef = useRef<RTCIceCandidateInit[]>([]);
+  const dashboardSignalSequenceRef = useRef(0);
   const messageCounterRef = useRef(0);
   const [status, setStatus] = useState<CaptureStatus>("idle");
   const [pairingCode, setPairingCode] = useState("");
@@ -79,6 +111,8 @@ export default function CameraHome() {
   function closePeerConnection() {
     peerConnectionRef.current?.close();
     peerConnectionRef.current = null;
+    queuedDashboardIceCandidatesRef.current = [];
+    dashboardSignalSequenceRef.current = 0;
   }
 
   async function postSignal(
@@ -97,6 +131,68 @@ export default function CameraHome() {
       })
     });
   }
+
+  useEffect(() => {
+    const sessionId = session?.session_id;
+    if (!sessionId || (pairingStatus !== "offered" && pairingStatus !== "streaming")) {
+      return;
+    }
+
+    const interval = window.setInterval(async () => {
+      try {
+        const incomingSignals = await requestJson<SignalMessage[]>(
+          `/api/sessions/${sessionId}/signal?recipient_role=camera&after_sequence=${dashboardSignalSequenceRef.current}`
+        );
+
+        for (const signal of incomingSignals) {
+          dashboardSignalSequenceRef.current = Math.max(dashboardSignalSequenceRef.current, signal.sequence);
+
+          if (signal.type === "answer") {
+            if (!isSessionDescription(signal.payload) || signal.payload.type !== "answer") {
+              throw new Error("Dashboard sent an invalid WebRTC answer.");
+            }
+
+            const peerConnection = peerConnectionRef.current;
+            if (!peerConnection) {
+              throw new Error("Camera peer connection was closed before the dashboard answered.");
+            }
+
+            await peerConnection.setRemoteDescription(signal.payload);
+
+            const queuedCandidates = queuedDashboardIceCandidatesRef.current;
+            queuedDashboardIceCandidatesRef.current = [];
+            for (const candidate of queuedCandidates) {
+              await peerConnection.addIceCandidate(candidate);
+            }
+
+            setPairingStatus("streaming");
+            setSession((current) => (current ? { ...current, status: "streaming" } : current));
+            setPairingMessage("Dashboard answer applied. Streaming to the viewer.");
+          }
+
+          if (signal.type === "ice-candidate" && isIceCandidate(signal.payload)) {
+            const peerConnection = peerConnectionRef.current;
+            if (!peerConnection?.remoteDescription) {
+              queuedDashboardIceCandidatesRef.current.push(signal.payload);
+            } else {
+              await peerConnection.addIceCandidate(signal.payload);
+            }
+          }
+
+          if (signal.type === "bye") {
+            closePeerConnection();
+            setPairingStatus("idle");
+            setPairingMessage("Dashboard ended the stream.");
+          }
+        }
+      } catch (error) {
+        setPairingStatus("error");
+        setPairingMessage(error instanceof Error ? error.message : "Could not apply the dashboard answer.");
+      }
+    }, 1600);
+
+    return () => window.clearInterval(interval);
+  }, [pairingStatus, session?.session_id]);
 
   async function startCapture() {
     if (!navigator.mediaDevices?.getUserMedia) {
@@ -167,6 +263,7 @@ export default function CameraHome() {
     }
 
     closePeerConnection();
+    dashboardSignalSequenceRef.current = 0;
     setPairingStatus("claiming");
     setPairingMessage("Claiming dashboard pairing code...");
 
@@ -209,7 +306,7 @@ export default function CameraHome() {
       });
 
       setPairingStatus("offered");
-      setPairingMessage("Offer sent. Keep this page open while the dashboard answer path is added.");
+      setPairingMessage("Offer sent. Keep this page open while the dashboard answers.");
     } catch (error) {
       closePeerConnection();
       setPairingStatus("error");
@@ -237,6 +334,7 @@ export default function CameraHome() {
     claiming: "Claiming...",
     offering: "Offering...",
     offered: "Offer Sent",
+    streaming: "Streaming",
     error: "Retry"
   }[pairingStatus];
 
