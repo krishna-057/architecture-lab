@@ -6,12 +6,13 @@ Tasks should stay small enough for one focused session.
 
 ### Ready
 
-- [ ] Implement PersonaBridge realtime room token and browser voice shell.
+- [ ] Add PersonaBridge durable memory candidate APIs and deletion controls.
 
 ### Completed
 
 - [x] Add PersonaBridge scaffold.
 - [x] Define PersonaBridge realtime session and memory contracts.
+- [x] Implement PersonaBridge realtime room token and browser voice shell.
 
 ### Later
 

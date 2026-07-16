@@ -2,6 +2,30 @@
 
 ## 2026-07-16
 
+Implemented the PersonaBridge realtime room token and browser voice shell.
+
+Added:
+- `POST /api/sessions/{session_id}/realtime-token` in the FastAPI API with a five-minute opaque browser join token.
+- Session promotion from `chat_ready` to `voice_ready` after room token minting.
+- Browser microphone capture in the PersonaBridge console through a user-triggered Join Voice action.
+- Voice shell UI for join/leave state, token expiry, room identity, and local device label.
+- Workspace validation markers for the token endpoint, microphone capture path, and room token contract.
+- README, architecture, contract, decision, and interview-note updates explaining why the provider SDK remains deferred behind the room token boundary.
+
+Validated the work by running:
+- `npm run check` from `projects/03-personabridge`
+- `npm run build -w @personabridge/web` from `projects/03-personabridge`
+- `python -m compileall services\api\app` from `projects/03-personabridge`
+- `git diff --check`
+
+Notes:
+- A direct FastAPI `TestClient` smoke test for the token endpoint could not run because the current Python environment does not have `fastapi` installed. No global dependency install was performed.
+- The room token is intentionally an in-memory local development token, not production authentication. A future provider adapter should replace it with a signed or provider-issued short-lived credential.
+- `WORKFLOW.md` still appears to contain binary/corrupted content in the current checkout, so it could not be meaningfully read as Markdown.
+
+Next recommended task:
+- Add PersonaBridge durable memory candidate APIs and deletion controls.
+
 Defined the PersonaBridge realtime session and memory contracts.
 
 Added:
