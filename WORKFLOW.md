@@ -62,6 +62,20 @@ Human-only tasks:
 - Private account login.
 - Any action that legally requires the user's direct consent.
 
+## Human Notification Fallback
+
+If Codex mobile notifications are not available, use GitHub Issues as the blocker notification channel.
+
+When human input is needed:
+
+1. Create or update a GitHub issue titled `Human needed: <short reason>`.
+2. Add the `human-needed` label if possible.
+3. Explain the exact action required from the user.
+4. Include branch, commit, workspace, and relevant command output.
+5. Stop until the user replies or completes the required action.
+
+See `NOTIFICATIONS.md`.
+
 ## Documentation Style
 
 Write documentation like an engineer defending design choices in an interview:
@@ -81,4 +95,3 @@ Do not add:
 - Event sourcing unless history replay is core to the project.
 - Complex folder abstractions before multiple modules need them.
 - Generic libraries when a local function is clearer.
-

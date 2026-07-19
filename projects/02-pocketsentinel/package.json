@@ -1,0 +1,19 @@
+{
+  "name": "pocketsentinel",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Phone-as-CCTV camera streaming and detection event prototype.",
+  "workspaces": [
+    "apps/*"
+  ],
+  "scripts": {
+    "check": "node scripts/check-workspace.mjs",
+    "dev:camera": "npm run dev -w @pocketsentinel/camera",
+    "dev:dashboard": "npm run dev -w @pocketsentinel/dashboard",
+    "dev:api": "python -m uvicorn services.api.app.main:app --reload --port 8100"
+  },
+  "engines": {
+    "node": ">=20",
+    "python": ">=3.10"
+  }
+}

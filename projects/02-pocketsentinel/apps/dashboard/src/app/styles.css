@@ -1,0 +1,260 @@
+:root {
+  color-scheme: light;
+  --ink: #1d252c;
+  --muted: #64717d;
+  --line: #d4dde4;
+  --surface: #f5f7f9;
+  --primary: #176b5b;
+  --accent: #c6532f;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: Arial, Helvetica, sans-serif;
+  color: var(--ink);
+  background: var(--surface);
+}
+
+button {
+  min-height: 40px;
+  border: 0;
+  border-radius: 8px;
+  padding: 0 16px;
+  color: #ffffff;
+  background: var(--primary);
+  font: inherit;
+  font-weight: 700;
+}
+
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.58;
+}
+
+.dashboard-shell {
+  min-height: 100vh;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 360px;
+  gap: 18px;
+  padding: 18px;
+}
+
+.viewer,
+.timeline {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.viewer {
+  display: grid;
+  grid-template-rows: auto auto 1fr auto;
+  gap: 14px;
+  padding: 16px;
+}
+
+.viewer-header,
+.timeline-header,
+.event-row,
+.session-panel,
+.signal-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.viewer-header span,
+.timeline-header span,
+.event-row time,
+.event-row span,
+.session-panel span,
+.signal-log > span,
+.signal-row time,
+.signal-row span {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.viewer-header strong,
+.timeline-header strong {
+  display: block;
+  margin-top: 4px;
+}
+
+.session-panel {
+  flex-wrap: wrap;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 14px;
+  background: #f8fafb;
+}
+
+.session-panel div {
+  min-width: 132px;
+}
+
+.session-panel strong {
+  display: block;
+  margin-top: 5px;
+  font-size: 15px;
+}
+
+.session-panel strong[data-status="pairing"],
+.session-panel strong[data-status="streaming"] {
+  color: var(--primary);
+}
+
+.session-panel strong[data-status="error"],
+.session-panel strong[data-status="ended"] {
+  color: var(--accent);
+}
+
+.pairing-code {
+  font-family: "Courier New", Courier, monospace;
+  font-size: 24px;
+  letter-spacing: 0;
+}
+
+.video-frame {
+  position: relative;
+  overflow: hidden;
+  display: grid;
+  place-items: center;
+  min-height: 420px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background:
+    linear-gradient(90deg, rgba(23, 107, 91, 0.12) 1px, transparent 1px),
+    linear-gradient(rgba(23, 107, 91, 0.12) 1px, transparent 1px),
+    #edf3f1;
+  background-size: 42px 42px;
+}
+
+.video-frame video {
+  width: 100%;
+  height: 100%;
+  min-height: 420px;
+  object-fit: contain;
+  background: #101417;
+}
+
+.analysis-canvas {
+  display: none;
+}
+
+.video-frame[data-active="true"] {
+  background:
+    linear-gradient(90deg, rgba(198, 83, 47, 0.14) 1px, transparent 1px),
+    linear-gradient(rgba(198, 83, 47, 0.14) 1px, transparent 1px),
+    #f5efec;
+  background-size: 42px 42px;
+}
+
+.video-frame p {
+  position: absolute;
+  z-index: 1;
+  width: min(420px, 82%);
+  margin: 0;
+  color: var(--muted);
+  font-size: 16px;
+  line-height: 1.45;
+  text-align: center;
+}
+
+.timeline {
+  align-self: start;
+  padding: 16px;
+}
+
+.signal-log {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 14px;
+}
+
+.signal-log > p,
+.empty-state {
+  margin: 12px 0 0;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.pipeline-status {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 42px;
+  margin-top: 14px;
+  border-top: 1px solid var(--line);
+}
+
+.pipeline-status span {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.pipeline-status strong {
+  color: var(--primary);
+  font-size: 13px;
+  text-align: right;
+}
+
+.pipeline-status[data-status="idle"] strong {
+  color: var(--muted);
+}
+
+.pipeline-status[data-status="error"] strong {
+  color: var(--accent);
+}
+
+.signal-row {
+  min-height: 34px;
+  border-top: 1px solid var(--line);
+}
+
+.signal-row:first-of-type {
+  margin-top: 8px;
+}
+
+.signal-row strong {
+  margin-left: auto;
+  color: var(--primary);
+}
+
+.event-row {
+  min-height: 72px;
+  border-top: 1px solid var(--line);
+}
+
+.event-row:first-of-type {
+  margin-top: 14px;
+}
+
+.event-row div {
+  text-align: right;
+}
+
+.event-row strong,
+.event-row span {
+  display: block;
+}
+
+.event-row strong {
+  color: var(--accent);
+}
+
+@media (max-width: 920px) {
+  .dashboard-shell {
+    grid-template-columns: 1fr;
+  }
+
+  .timeline {
+    align-self: stretch;
+  }
+}

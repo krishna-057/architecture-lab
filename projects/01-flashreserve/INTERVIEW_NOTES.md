@@ -18,11 +18,28 @@ PostgreSQL row locking is correct and simpler, but under a large flash-sale burs
 
 Reservations may expire late, but confirmation still checks the reservation deadline. That means an expired reservation cannot be confirmed just because the worker has not processed it yet.
 
+The worker is also retry-safe: PostgreSQL records the durable expired state, and Redis stock release uses a per-reservation marker so a retried BullMQ job cannot restore the same stock twice.
+
 ### Why not microservices?
 
 The first version does not need independent deployment or scaling per domain. A modular monolith keeps boundaries clear while avoiding distributed transactions and network failure between internal modules.
+
+### Why not start with a shopping cart?
+
+The hard part of a flash sale is protecting the hottest inventory path, not supporting general storefront ergonomics. Starting with one product per reservation keeps expiry, rollback, and idempotent confirmation easy to explain. The schema still keeps `order_items`, so the design can grow into carts later without replacing the order model.
 
 ### How would you scale it?
 
 Start with Redis atomic scripts and per-product counters. Add rate limits and a waiting room for extreme bursts. If WebSocket fanout grows, use Redis pub/sub or a dedicated realtime gateway. If order processing grows, split workers independently before splitting the whole backend.
 
+### How are live stock updates delivered?
+
+Clients join a product-scoped Socket.IO room on the `/stock` namespace. The reservation path emits `stock.updated` after the reservation is durable and the expiry job is scheduled. The expiry worker emits the same event only when it actually restores Redis stock, so retries do not duplicate updates.
+
+### How is order confirmation idempotent?
+
+Confirmation locks the reservation row in PostgreSQL, checks ownership, status, and deadline, then marks the reservation confirmed while creating the order and order item in the same transaction. If the client retries after success, the API sees the reservation is already confirmed and returns the existing order instead of creating a duplicate.
+
+### What does the admin inventory endpoint show?
+
+The read-only admin endpoint returns product drop metadata, durable inventory counters, derived available stock, reservation status counts, and recent reservations for one product. It intentionally uses PostgreSQL instead of Redis so operators see the auditable source of truth, while Redis remains the fast reservation counter.

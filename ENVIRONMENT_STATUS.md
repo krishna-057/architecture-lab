@@ -12,6 +12,8 @@ Checked on 2026-06-29.
 | Docker Compose | Installed: v2.35.1-desktop.1 |
 | Git | Installed: 2.40.1.windows.1 |
 | npm cache | `K:\AutoPilot_Projects\npm-cache` |
+| GitHub CLI | Portable install at `K:\AutoPilot_Projects\tools\gh\gh.exe` |
+| Docker WSL data | `K:\AutoPilot_Projects\docker-data\wsl` |
 
 ## Git Identity
 
@@ -24,13 +26,10 @@ Checked on 2026-06-29.
 
 | Item | Status | Why It Matters |
 | --- | --- | --- |
-| GitHub remote | Not configured | Needed before pushing daily work. |
-| GitHub CLI | Portable install at `K:\AutoPilot_Projects\tools\gh\gh.exe` | Useful for creating PRs from automation. |
-| Docker image storage | Not verified | Important before pulling PostgreSQL/Redis images because Docker can use significant disk space. |
+| C: free space | Low, about 0.66 GB after Docker reset | Avoid installing project-heavy tools or dependencies on C:. |
 
 ## Next User Actions
 
-1. Create an empty GitHub repo.
-2. Add it as `origin`.
-3. Push the initial planning files.
-4. Run GitHub CLI auth using `.\scripts\gh.ps1 auth login` if you want automated PR creation.
+1. Keep project files, npm cache, Docker data, generated assets, and downloaded dependencies under `K:\AutoPilot_Projects`.
+2. Avoid installing non-essential tools to `C:`.
+3. Use `.\scripts\gh.ps1` for GitHub CLI actions.
