@@ -41,6 +41,22 @@ create table if not exists delivery_attempts (
   updated_at timestamptz not null default now()
 );
 
+create table if not exists delivery_observability_spans (
+  span_id text primary key,
+  trace_id text not null,
+  parent_span_id text,
+  name text not null,
+  delivery_id text,
+  event_id text,
+  endpoint_id text,
+  status text not null check (status in ('ok', 'error')),
+  started_at timestamptz not null,
+  ended_at timestamptz not null,
+  duration_ms integer not null,
+  attributes jsonb not null default '{}'::jsonb,
+  error text
+);
+
 alter table delivery_attempts
   add column if not exists base_delay_seconds integer not null default 0,
   add column if not exists jitter_seconds integer not null default 0,
@@ -56,3 +72,9 @@ create index if not exists idx_delivery_attempts_event_created
 
 create index if not exists idx_delivery_attempts_status_next
   on delivery_attempts(status, next_attempt_at);
+
+create index if not exists idx_delivery_observability_spans_trace
+  on delivery_observability_spans(trace_id, started_at desc);
+
+create index if not exists idx_delivery_observability_spans_delivery
+  on delivery_observability_spans(delivery_id, started_at desc);

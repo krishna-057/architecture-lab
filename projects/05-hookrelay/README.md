@@ -15,6 +15,7 @@ Added:
 - `services/api/src/worker.js` as the BullMQ worker boundary for outbound HTTP delivery attempts, retry creation, and dead-letter promotion.
 - `DELIVERY_CONTRACT.md` for idempotency, HMAC headers, receiver verification, retry, replay authorization, and audit rules.
 - `services/api/src/retry-policy.js` for bounded retry jitter shared by the API, worker, and dashboard contract.
+- `services/api/src/observability.js` for bounded local delivery spans, with PostgreSQL span persistence when `DATABASE_URL` is configured.
 - `scripts/check-workspace.mjs` for dependency-light validation of the scaffold markers.
 
 Run locally:
@@ -63,6 +64,7 @@ Default URLs:
 | `GET /health` | Local service health and worker mode. |
 | `GET /api/delivery-contract` | Discover retry, signature, replay, and idempotency rules. |
 | `GET /api/receiver-verification-example` | Show a receiver-side HMAC verification example with sample payload and headers. |
+| `GET /api/observability/spans` | List recent event ingestion, enqueue, replay, worker, and outbound HTTP spans. |
 | `GET /api/endpoints` | List webhook endpoints. |
 | `POST /api/endpoints` | Create a webhook endpoint with a signing secret. |
 | `GET /api/events` | List accepted producer events. |
@@ -70,7 +72,7 @@ Default URLs:
 | `GET /api/deliveries` | List queued delivery attempts and signature previews. |
 | `POST /api/deliveries/:delivery_id/replay` | Create a new queued attempt for an existing event after a replay reason is supplied. |
 
-When `DATABASE_URL` is set, endpoints, events, and delivery attempts are stored in PostgreSQL. When `REDIS_URL` is set, new delivery attempts are also enqueued into BullMQ with the documented delay ladder plus bounded jitter. Without those variables, the API still runs in in-memory mode for fast local checks.
+When `DATABASE_URL` is set, endpoints, events, delivery attempts, and observability spans are stored in PostgreSQL. When `REDIS_URL` is set, new delivery attempts are also enqueued into BullMQ with the documented delay ladder plus bounded jitter. Without those variables, the API still runs in in-memory mode for fast local checks.
 
 ## Why This Project Matters
 
@@ -80,4 +82,4 @@ This is a strong backend/system design project because it focuses on real produc
 
 - Tenant/user ownership and endpoint authentication.
 - Tenant-specific retry overrides and endpoint-level rate limits.
-- OpenTelemetry traces and delivery latency dashboards.
+- OpenTelemetry exporters, trace sampling, and long-retention latency dashboards.

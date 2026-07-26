@@ -177,6 +177,7 @@ label {
 
 .delivery-list,
 .endpoint-list,
+.span-list,
 .detail-list {
   display: grid;
   gap: 8px;
@@ -262,15 +263,34 @@ label {
   font-weight: 700;
 }
 
-.endpoint-row {
+.endpoint-row,
+.span-row {
   align-items: flex-start;
   flex-direction: column;
   border-top: 1px solid var(--line);
   padding-top: 10px;
 }
 
-.endpoint-row:first-child {
+.endpoint-row:first-child,
+.span-row:first-child {
   border-top: 0;
+}
+
+.span-row {
+  display: grid;
+  gap: 5px;
+}
+
+.span-row div {
+  display: grid;
+  gap: 3px;
+}
+
+.span-row span,
+.span-row small {
+  color: var(--muted);
+  font-size: 13px;
+  overflow-wrap: anywhere;
 }
 
 .empty-state {

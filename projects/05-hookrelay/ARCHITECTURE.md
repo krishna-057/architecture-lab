@@ -26,6 +26,8 @@ Receiver endpoint
 
 Without `DATABASE_URL` and `REDIS_URL`, the API still runs in in-memory mode for fast local checks. The in-memory path keeps the same endpoint, event, delivery, signature, replay, and contract shapes as durable mode.
 
+API and worker operations also write provider-neutral observability spans. In memory mode, spans stay in the current process for quick local checks. In durable mode, spans are written to PostgreSQL so API and worker processes share the same recent delivery trace log.
+
 ## Components
 
 | Component | Responsibility |
@@ -35,6 +37,7 @@ Without `DATABASE_URL` and `REDIS_URL`, the API still runs in in-memory mode for
 | PostgreSQL | Optional durable owner for endpoints, events, idempotency uniqueness, delivery attempt state, replay audit fields, and dead-letter status. |
 | BullMQ / Redis | Optional durable queue and jittered delayed retry scheduler for outbound delivery jobs. |
 | Worker process | Sends signed outbound HTTP requests, records responses, schedules retries, and marks dead-letter failures. |
+| Observability span log | Captures event ingestion, enqueue, replay, worker processing, and outbound HTTP timing as local JSON spans before adding a vendor exporter. |
 | Receiver verification example | Shows receivers how to rebuild `timestamp.rawBody`, compute HMAC-SHA256, and enforce a timestamp tolerance. |
 | Replay authorization contract | Requires operator replay reasons before manual replay creates a new delivery attempt. |
 
@@ -45,6 +48,7 @@ Without `DATABASE_URL` and `REDIS_URL`, the API still runs in in-memory mode for
 | `GET /health` | Report API, storage, queue, and worker mode. |
 | `GET /api/delivery-contract` | Discover idempotency, signature, receiver verification, retry, replay authorization, queue, and storage rules. |
 | `GET /api/receiver-verification-example` | Return sample receiver verification inputs, required headers, and Node.js digest expression. |
+| `GET /api/observability/spans` | Return recent provider-neutral spans with trace ids, span ids, timing, status, and delivery attributes. |
 | `GET /api/endpoints` | List webhook endpoints without exposing full signing secrets. |
 | `POST /api/endpoints` | Create a webhook target and signing secret. |
 | `GET /api/events` | List accepted producer events. |
@@ -82,10 +86,24 @@ The default jitter ratio is 20%, configurable through `DELIVERY_RETRY_JITTER_RAT
 
 Manual replay attempts store `replay_reason` and `replay_requested_by`. That gives the operator action an audit trail before HookRelay has tenant users, roles, or approval policies.
 
+## Observability
+
+HookRelay records a small span envelope for the operations that explain delivery lifecycle behavior:
+
+```text
+hookrelay.event.ingest
+hookrelay.delivery.enqueue
+hookrelay.delivery.replay
+hookrelay.delivery.process
+hookrelay.delivery.http_request
+```
+
+Each span has `trace_id`, `span_id`, optional parent span, delivery/event/endpoint identifiers, timing, status, error, and JSON attributes. The envelope is intentionally close to OpenTelemetry concepts, but the first implementation remains local so the portfolio slice can prove where instrumentation belongs before choosing an exporter, collector, sampling policy, and retention store.
+
 ## Deferred Work
 
 - Tenant and endpoint ownership.
 - Role-based replay authorization.
 - Tenant-specific retry overrides and rate limits.
 - Receiver SDKs.
-- OpenTelemetry traces and latency dashboards.
+- OpenTelemetry exporters, trace sampling, and long-retention latency dashboards.

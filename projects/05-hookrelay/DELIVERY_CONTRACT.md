@@ -9,6 +9,7 @@ HookRelay defines the HTTP contract for endpoint setup, event ingestion, deliver
 | Endpoint | `/api/endpoints` | In-memory by default, PostgreSQL when configured | PostgreSQL `webhook_endpoints` |
 | Event | `/api/events` | In-memory by default, PostgreSQL when configured | PostgreSQL `webhook_events` |
 | Delivery attempt | `/api/deliveries` | In-memory by default, PostgreSQL plus BullMQ when configured | PostgreSQL `delivery_attempts` plus BullMQ jobs |
+| Observability span | `/api/observability/spans` | In-memory by default, PostgreSQL when configured | OpenTelemetry exporter plus query store |
 | Contract discovery | `/api/delivery-contract` | Static API response | Versioned API contract |
 
 ## Event Ingestion
@@ -105,6 +106,41 @@ Manual replay is an operator action, not an automatic retry. The replay endpoint
 
 The reason and requester are stored on the replay delivery attempt as `replay_reason` and `replay_requested_by`. This keeps the first authorization rule simple while preserving the audit trail needed before adding tenant users, roles, or approval workflows.
 
+## Observability
+
+HookRelay exposes recent delivery lifecycle spans at:
+
+```text
+GET /api/observability/spans
+```
+
+Span records use this provider-neutral envelope:
+
+```json
+{
+  "span_id": "8-byte hex id",
+  "trace_id": "16-byte hex id",
+  "parent_span_id": null,
+  "name": "hookrelay.delivery.enqueue",
+  "delivery_id": "delivery_...",
+  "event_id": "event_...",
+  "endpoint_id": "endpoint_...",
+  "status": "ok",
+  "started_at": "2026-07-27T00:00:00.000Z",
+  "ended_at": "2026-07-27T00:00:00.003Z",
+  "duration_ms": 3,
+  "attributes": {
+    "queue_mode": "bullmq",
+    "scheduled_delay_seconds": 24
+  },
+  "error": null
+}
+```
+
+The current traced operations are event ingestion, delivery enqueue, manual replay, worker delivery processing, and outbound receiver HTTP. This is intentionally a local span log first; it keeps the lifecycle visible before introducing OpenTelemetry exporters, sampling, collector deployment, and long-retention query storage.
+
 ## Durable Schema Rule
 
 PostgreSQL enforces one accepted event for each `(endpoint_id, idempotency_key)` pair. Delivery attempts remain append-friendly records, so retries and manual replays keep their own delivery ids, timestamps, signatures, and statuses.
+
+When `DATABASE_URL` is set, observability spans can be persisted in `delivery_observability_spans`. Without PostgreSQL, the API keeps a bounded in-process span log controlled by `OBSERVABILITY_SPAN_LOG_LIMIT`.

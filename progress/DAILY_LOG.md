@@ -2,6 +2,30 @@
 
 ## 2026-07-27
 
+Added HookRelay delivery observability spans.
+
+Added:
+- `services/api/src/observability.js` with provider-neutral span ids, trace ids, parent span ids, timing, status, attributes, and bounded local retention.
+- PostgreSQL-backed `delivery_observability_spans` storage when `DATABASE_URL` is configured, while keeping in-memory spans as the dependency-light default.
+- `GET /api/observability/spans` and delivery contract discovery fields for traced operations.
+- Span instrumentation around event ingestion, delivery enqueue, manual replay, worker processing, and outbound receiver HTTP.
+- Dashboard observability metric and recent-span panel.
+- README, architecture, delivery contract, decision, and interview-note updates explaining why the first span log comes before a full OpenTelemetry collector/exporter stack.
+
+Validated the work by running:
+- `node scripts/check-workspace.mjs` from `projects/05-hookrelay`
+- `npm run check -w @hookrelay/api` from `projects/05-hookrelay`
+- `npm run build -w @hookrelay/web` from `projects/05-hookrelay`
+- A local Fastify smoke test with an HTTP receiver covering contract discovery, event ingestion, worker delivery success, manual replay, and span names from `/api/observability/spans`
+- `git diff --check`
+
+Notes:
+- `WORKFLOW.md` still appears to contain binary/corrupted content in the current checkout, so it could not be meaningfully read as Markdown.
+- The span envelope is intentionally provider-neutral JSON; OpenTelemetry exporters, sampling, and long-retention dashboards remain later work.
+
+Next recommended task:
+- Add HookRelay endpoint-level rate limits.
+
 Added HookRelay jittered retry policy.
 
 Added:

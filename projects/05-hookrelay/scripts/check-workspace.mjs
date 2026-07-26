@@ -15,6 +15,7 @@ const requiredFiles = [
   "services/api/src/server.js",
   "services/api/src/app.js",
   "services/api/src/storage.js",
+  "services/api/src/observability.js",
   "services/api/src/retry-policy.js",
   "services/api/src/delivery-queue.js",
   "services/api/src/delivery-runner.js",
@@ -50,6 +51,7 @@ for (const dependency of ["pg", "bullmq", "ioredis"]) {
 const apiFile = [
   "services/api/src/app.js",
   "services/api/src/storage.js",
+  "services/api/src/observability.js",
   "services/api/src/retry-policy.js",
   "services/api/src/delivery-queue.js",
   "services/api/src/delivery-runner.js",
@@ -61,7 +63,11 @@ for (const marker of [
   "/api/deliveries",
   "/api/delivery-contract",
   "/api/receiver-verification-example",
+  "/api/observability/spans",
   "HookRelay-Signature",
+  "trace_id",
+  "span_id",
+  "hookrelay.delivery.process",
   "buildReceiverVerificationExample",
   "idempotency_key",
   "replay_authorization",
@@ -87,7 +93,9 @@ for (const marker of [
   "/api/deliveries",
   "/api/delivery-contract",
   "/api/receiver-verification-example",
+  "/api/observability/spans",
   "Idempotency Key",
+  "Observability",
   "Receiver Verification",
   "Replay Auth",
   "Retry Jitter",
@@ -107,6 +115,7 @@ for (const marker of [
   "Replay Rule",
   "Replay Authorization",
   "Receiver Verification",
+  "Observability",
   "idempotency_key",
   "HookRelay-Signature"
 ]) {
@@ -126,7 +135,8 @@ for (const marker of [
   "replay_requested_by",
   "base_delay_seconds",
   "jitter_seconds",
-  "scheduled_delay_seconds"
+  "scheduled_delay_seconds",
+  "delivery_observability_spans"
 ]) {
   if (!schema.includes(marker)) {
     throw new Error(`PostgreSQL schema is missing required marker: ${marker}`);

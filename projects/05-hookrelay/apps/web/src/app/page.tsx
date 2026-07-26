@@ -41,10 +41,31 @@ type DeliveryAttempt = {
   created_at: string;
 };
 
+type ObservabilitySpan = {
+  span_id: string;
+  trace_id: string;
+  parent_span_id: string | null;
+  name: string;
+  delivery_id: string | null;
+  event_id: string | null;
+  endpoint_id: string | null;
+  status: "ok" | "error";
+  started_at: string;
+  ended_at: string;
+  duration_ms: number;
+  attributes: Record<string, unknown>;
+  error: string | null;
+};
+
 type DeliveryContract = {
   transport: string;
   storage_mode: string;
   queue_boundary: string;
+  observability: {
+    mode: string;
+    span_endpoint: string;
+    traced_operations: string[];
+  };
   idempotency_key: string;
   signature_algorithm: string;
   signature_headers: string[];
@@ -85,6 +106,11 @@ type IngestResponse = {
   deliveries: DeliveryAttempt[];
 };
 
+type ObservabilityResponse = {
+  mode: string;
+  spans: ObservabilitySpan[];
+};
+
 const apiBaseUrl = (process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8400").replace(/\/$/, "");
 
 async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
@@ -119,6 +145,8 @@ export default function HookRelayHome() {
   const [endpoints, setEndpoints] = useState<Endpoint[]>([]);
   const [events, setEvents] = useState<DeliveryEvent[]>([]);
   const [deliveries, setDeliveries] = useState<DeliveryAttempt[]>([]);
+  const [observabilityMode, setObservabilityMode] = useState("loading");
+  const [spans, setSpans] = useState<ObservabilitySpan[]>([]);
   const [endpointName, setEndpointName] = useState("Billing listener");
   const [targetUrl, setTargetUrl] = useState("https://example.test/webhooks/billing");
   const [selectedEndpointId, setSelectedEndpointId] = useState("endpoint_demo");
@@ -129,16 +157,18 @@ export default function HookRelayHome() {
 
   const selectedEndpoint = endpoints.find((endpoint) => endpoint.endpoint_id === selectedEndpointId) ?? endpoints[0];
   const latestDelivery = deliveries[0];
+  const latestSpan = spans[0];
   const queuedCount = deliveries.filter((delivery) => delivery.status === "queued").length;
   const duplicateKeys = useMemo(() => new Set(events.map((event) => event.idempotency_key)), [events]);
 
   async function refreshAll() {
-    const [nextContract, nextVerificationExample, nextEndpoints, nextEvents, nextDeliveries] = await Promise.all([
+    const [nextContract, nextVerificationExample, nextEndpoints, nextEvents, nextDeliveries, nextObservability] = await Promise.all([
       requestJson<DeliveryContract>("/api/delivery-contract"),
       requestJson<ReceiverVerificationExample>("/api/receiver-verification-example"),
       requestJson<Endpoint[]>("/api/endpoints"),
       requestJson<DeliveryEvent[]>("/api/events"),
-      requestJson<DeliveryAttempt[]>("/api/deliveries")
+      requestJson<DeliveryAttempt[]>("/api/deliveries"),
+      requestJson<ObservabilityResponse>("/api/observability/spans")
     ]);
 
     setContract(nextContract);
@@ -146,6 +176,8 @@ export default function HookRelayHome() {
     setEndpoints(nextEndpoints);
     setEvents(nextEvents);
     setDeliveries(nextDeliveries);
+    setObservabilityMode(nextObservability.mode);
+    setSpans(nextObservability.spans);
     setSelectedEndpointId((current) => current || nextEndpoints[0]?.endpoint_id || "");
     setStatusMessage("Scaffold API is reachable.");
   }
@@ -245,6 +277,10 @@ export default function HookRelayHome() {
           <div>
             <span>Retry steps</span>
             <strong>{contract?.retry_policy.delays_seconds.length ?? 0}</strong>
+          </div>
+          <div>
+            <span>Spans</span>
+            <strong>{spans.length}</strong>
           </div>
         </div>
 
@@ -372,6 +408,10 @@ export default function HookRelayHome() {
               <dd>{contract?.replay_authorization.mode ?? "unknown"}</dd>
             </div>
             <div>
+              <dt>Observability</dt>
+              <dd>{contract?.observability.mode ?? observabilityMode}</dd>
+            </div>
+            <div>
               <dt>Receiver Window</dt>
               <dd>{contract?.receiver_verification.timestamp_tolerance_seconds ?? 0}s</dd>
             </div>
@@ -458,6 +498,40 @@ export default function HookRelayHome() {
                 <strong>{endpoint.name}</strong>
                 <span>{endpoint.target_url}</span>
                 <small>{endpoint.signing_secret_preview}</small>
+              </article>
+            ))}
+          </div>
+        </section>
+
+        <section className="panel-block">
+          <div className="section-header">
+            <span>Observability</span>
+            <strong>{latestSpan ? `${latestSpan.duration_ms}ms` : observabilityMode}</strong>
+          </div>
+          <dl className="detail-list">
+            <div>
+              <dt>Span Endpoint</dt>
+              <dd>{contract?.observability.span_endpoint ?? "/api/observability/spans"}</dd>
+            </div>
+            <div>
+              <dt>Latest Trace</dt>
+              <dd>{latestSpan?.trace_id ?? "none"}</dd>
+            </div>
+            <div>
+              <dt>Operations</dt>
+              <dd>{contract?.observability.traced_operations.join(", ") ?? "loading"}</dd>
+            </div>
+          </dl>
+          <div className="span-list">
+            {spans.slice(0, 5).map((span) => (
+              <article className="span-row" key={span.span_id}>
+                <div>
+                  <strong>{span.name}</strong>
+                  <span>{span.delivery_id ?? span.event_id ?? span.endpoint_id ?? span.trace_id}</span>
+                </div>
+                <small>
+                  {span.status} / {span.duration_ms}ms / {formatTime(span.started_at)}
+                </small>
               </article>
             ))}
           </div>

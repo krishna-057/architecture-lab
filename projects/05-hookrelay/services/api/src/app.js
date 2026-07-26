@@ -1,5 +1,6 @@
 import Fastify from "fastify";
 import { allowedOrigins, getRuntimeConfig, retryDelaysSeconds, retryJitterRatio } from "./config.js";
+import { createTraceId, NoopObservability } from "./observability.js";
 import { buildReceiverVerificationExample } from "./signing.js";
 
 function validateAbsoluteUrl(value) {
@@ -11,7 +12,7 @@ function validateAbsoluteUrl(value) {
   }
 }
 
-export function createHookRelayApp({ store, queue }) {
+export function createHookRelayApp({ store, queue, observability = new NoopObservability() }) {
   const app = Fastify({ logger: true });
 
   app.addHook("onRequest", async (request, reply) => {
@@ -40,6 +41,17 @@ export function createHookRelayApp({ store, queue }) {
     transport: "http_webhook",
     storage_mode: store.mode,
     queue_boundary: queue.mode === "bullmq" ? "bullmq_delivery_job" : "delivery_attempt_record",
+    observability: {
+      mode: observability.mode,
+      span_endpoint: "/api/observability/spans",
+      traced_operations: [
+        "hookrelay.event.ingest",
+        "hookrelay.delivery.enqueue",
+        "hookrelay.delivery.replay",
+        "hookrelay.delivery.process",
+        "hookrelay.delivery.http_request"
+      ]
+    },
     idempotency_key: "endpoint_id + producer supplied idempotency_key",
     signature_algorithm: "hmac_sha256",
     signature_headers: [
@@ -70,6 +82,14 @@ export function createHookRelayApp({ store, queue }) {
   }));
 
   app.get("/api/receiver-verification-example", async () => buildReceiverVerificationExample());
+
+  app.get("/api/observability/spans", async (request) => {
+    const limit = Math.min(Math.max(Number(request.query?.limit ?? 50), 1), 100);
+    return {
+      mode: observability.mode,
+      spans: await observability.listSpans({ limit })
+    };
+  });
 
   app.get("/api/endpoints", async () => store.listEndpoints());
 
@@ -111,15 +131,53 @@ export function createHookRelayApp({ store, queue }) {
       return reply.status(400).send({ error: "event_type, idempotency_key, and object payload are required" });
     }
 
-    const result = await store.ingestEvent({
-      endpoint,
-      eventType,
-      idempotencyKey,
-      payload: body.payload
-    });
+    const traceId = createTraceId();
+    const result = await observability.traceSpan(
+      {
+        name: "hookrelay.event.ingest",
+        traceId,
+        endpointId,
+        attributes: {
+          event_type: eventType,
+          idempotency_key: idempotencyKey,
+          queue_mode: queue.mode,
+          storage_mode: store.mode
+        }
+      },
+      async (span) => {
+        const ingestResult = await store.ingestEvent({
+          endpoint,
+          eventType,
+          idempotencyKey,
+          payload: body.payload
+        });
+        span.attributes.duplicate = ingestResult.duplicate;
+        span.attributes.event_id = ingestResult.event.event_id;
+        span.attributes.delivery_count = ingestResult.deliveries.length;
+        return ingestResult;
+      }
+    );
 
     if (!result.duplicate) {
-      await Promise.all(result.deliveries.map((delivery) => queue.enqueue(delivery)));
+      await Promise.all(result.deliveries.map((delivery) => observability.traceSpan(
+        {
+          name: "hookrelay.delivery.enqueue",
+          traceId,
+          eventId: result.event.event_id,
+          deliveryId: delivery.delivery_id,
+          endpointId: delivery.endpoint_id,
+          attributes: {
+            attempt_number: delivery.attempt_number,
+            queue_mode: queue.mode,
+            scheduled_delay_seconds: delivery.scheduled_delay_seconds
+          }
+        },
+        async (span) => {
+          const enqueueResult = await queue.enqueue(delivery);
+          span.attributes.enqueued = enqueueResult.enqueued;
+          return enqueueResult;
+        }
+      )));
     }
 
     return reply.status(result.duplicate ? 200 : 202).send(result);
@@ -147,21 +205,59 @@ export function createHookRelayApp({ store, queue }) {
       return reply.status(409).send({ error: "delivery event or endpoint is missing" });
     }
 
-    const replay = await store.createReplayDelivery({
-      endpoint,
-      event,
-      attemptNumber: existingDelivery.attempt_number + 1,
-      replayedFrom: existingDelivery.delivery_id,
-      replayReason: reason,
-      replayRequestedBy: requestedBy
-    });
-    await queue.enqueue(replay);
+    const traceId = createTraceId();
+    const replay = await observability.traceSpan(
+      {
+        name: "hookrelay.delivery.replay",
+        traceId,
+        eventId: event.event_id,
+        deliveryId: existingDelivery.delivery_id,
+        endpointId: endpoint.endpoint_id,
+        attributes: {
+          replayed_from_delivery_id: existingDelivery.delivery_id,
+          replay_requested_by: requestedBy,
+          replay_reason: reason
+        }
+      },
+      async (span) => {
+        const replayDelivery = await store.createReplayDelivery({
+          endpoint,
+          event,
+          attemptNumber: existingDelivery.attempt_number + 1,
+          replayedFrom: existingDelivery.delivery_id,
+          replayReason: reason,
+          replayRequestedBy: requestedBy
+        });
+        span.attributes.replay_delivery_id = replayDelivery.delivery_id;
+        return replayDelivery;
+      }
+    );
+    await observability.traceSpan(
+      {
+        name: "hookrelay.delivery.enqueue",
+        traceId,
+        eventId: event.event_id,
+        deliveryId: replay.delivery_id,
+        endpointId: endpoint.endpoint_id,
+        attributes: {
+          attempt_number: replay.attempt_number,
+          queue_mode: queue.mode,
+          scheduled_delay_seconds: replay.scheduled_delay_seconds
+        }
+      },
+      async (span) => {
+        const enqueueResult = await queue.enqueue(replay);
+        span.attributes.enqueued = enqueueResult.enqueued;
+        return enqueueResult;
+      }
+    );
     return reply.status(202).send(replay);
   });
 
   app.addHook("onClose", async () => {
     await queue.close();
     await store.close();
+    await observability.close();
   });
 
   return app;

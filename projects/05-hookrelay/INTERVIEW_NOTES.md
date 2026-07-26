@@ -45,3 +45,11 @@ Observability should attach one trace across event ingestion, job enqueue, each 
 - The computed schedule is stored on the delivery attempt, so operators see `base_delay_seconds`, `jitter_seconds`, `scheduled_delay_seconds`, and `next_attempt_at`.
 - BullMQ jobs use the persisted `next_attempt_at`; Redis is scheduling work, not inventing retry policy.
 - This is a stepping stone before tenant-specific retry profiles, endpoint rate limits, and tracing.
+
+## Observability Talking Points
+
+- Delivery observability is modeled as spans instead of only status logs because each webhook attempt crosses several boundaries: API ingestion, queue enqueue, worker processing, receiver HTTP, retry creation, and dead-letter state.
+- The first implementation stores a provider-neutral span envelope with `trace_id`, `span_id`, optional parent id, timing, status, delivery identifiers, attributes, and error.
+- In-memory mode keeps local checks fast. PostgreSQL mode persists spans so separate API and worker processes can contribute to the same recent trace feed.
+- The span names are intentionally domain-specific (`hookrelay.delivery.process`, `hookrelay.delivery.http_request`) so an interview discussion can move from product behavior to OpenTelemetry mapping naturally.
+- Full OpenTelemetry export is deferred until there is a clear collector, sampling, retention, and dashboard choice.

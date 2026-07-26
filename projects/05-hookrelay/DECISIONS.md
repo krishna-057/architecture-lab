@@ -75,3 +75,22 @@ Rejected alternatives:
 
 Follow-up:
 Add tenant-specific retry policies, endpoint-level rate limits, and OpenTelemetry timing spans.
+
+## 2026-07-27: Add Local Delivery Observability Spans
+
+Decision:
+Record provider-neutral spans for event ingestion, delivery enqueue, manual replay, worker processing, and outbound receiver HTTP. Keep the default span log in-process, and persist spans to PostgreSQL when `DATABASE_URL` is configured.
+
+Why:
+- Webhook delivery failures need lifecycle timing, not just final statuses. Operators need to see whether time was spent accepting an event, queueing, processing a worker job, or waiting on the receiver.
+- A plain JSON span envelope keeps the implementation easy to inspect while matching the concepts used by OpenTelemetry: trace id, span id, parent span, timing, status, attributes, and error.
+- PostgreSQL persistence gives the API and worker a shared local trace log in durable mode without introducing a collector service before the delivery lifecycle is stable.
+- The dashboard can now show observability signal directly beside delivery logs, which makes the portfolio demo easier to explain.
+
+Rejected alternatives:
+- Add a full OpenTelemetry collector now: useful later, but too much infrastructure before deciding sampling, exporter, and retention rules.
+- Only use application logs: logs are helpful, but they do not give a structured parent/child lifecycle around a delivery attempt.
+- Store spans only in memory: fine for the dependency-light scaffold, but durable mode needs worker and API spans to meet in one query surface.
+
+Follow-up:
+Add OpenTelemetry exporters, trace sampling, endpoint-level latency charts, and receiver failure classification.
