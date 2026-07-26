@@ -124,8 +124,16 @@ export class MemoryStore {
     return { duplicate: false, event, deliveries: [delivery] };
   }
 
-  async createReplayDelivery({ endpoint, event, attemptNumber, replayedFrom }) {
-    const delivery = buildDelivery({ endpoint, event, attemptNumber, retryDelaysSeconds, replayedFrom });
+  async createReplayDelivery({ endpoint, event, attemptNumber, replayedFrom, replayReason, replayRequestedBy }) {
+    const delivery = buildDelivery({
+      endpoint,
+      event,
+      attemptNumber,
+      retryDelaysSeconds,
+      replayedFrom,
+      replayReason,
+      replayRequestedBy
+    });
     this.deliveries.set(delivery.delivery_id, delivery);
     return delivery;
   }
@@ -276,8 +284,16 @@ export class PostgresStore {
     }
   }
 
-  async createReplayDelivery({ endpoint, event, attemptNumber, replayedFrom }) {
-    const delivery = buildDelivery({ endpoint, event, attemptNumber, retryDelaysSeconds, replayedFrom });
+  async createReplayDelivery({ endpoint, event, attemptNumber, replayedFrom, replayReason, replayRequestedBy }) {
+    const delivery = buildDelivery({
+      endpoint,
+      event,
+      attemptNumber,
+      retryDelaysSeconds,
+      replayedFrom,
+      replayReason,
+      replayRequestedBy
+    });
     return this.insertDelivery(this.pool, delivery);
   }
 
@@ -285,9 +301,10 @@ export class PostgresStore {
     const result = await client.query(
       `insert into delivery_attempts (
          delivery_id, event_id, endpoint_id, target_url, status, attempt_number,
-         next_attempt_at, response_status, error, replayed_from_delivery_id, signature_headers
+         next_attempt_at, response_status, error, replayed_from_delivery_id, replay_reason,
+         replay_requested_by, signature_headers
        )
-       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11::jsonb)
+       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13::jsonb)
        returning *`,
       [
         delivery.delivery_id,
@@ -300,6 +317,8 @@ export class PostgresStore {
         delivery.response_status,
         delivery.error,
         delivery.replayed_from_delivery_id,
+        delivery.replay_reason,
+        delivery.replay_requested_by,
         JSON.stringify(delivery.signature_headers)
       ]
     );

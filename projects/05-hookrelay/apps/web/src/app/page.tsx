@@ -32,6 +32,8 @@ type DeliveryAttempt = {
   response_status: number | null;
   error: string | null;
   replayed_from_delivery_id: string | null;
+  replay_reason: string | null;
+  replay_requested_by: string | null;
   signature_headers: Record<string, string>;
   created_at: string;
 };
@@ -49,6 +51,27 @@ type DeliveryContract = {
     dead_letter_after_attempts: number;
   };
   replay_rule: string;
+  replay_authorization: {
+    mode: string;
+    required_body_fields: string[];
+    optional_body_fields: string[];
+    audit_rule: string;
+  };
+  receiver_verification: {
+    timestamp_tolerance_seconds: number;
+    signed_payload: string;
+    example_endpoint: string;
+  };
+};
+
+type ReceiverVerificationExample = {
+  timestamp_tolerance_seconds: number;
+  signed_payload: string;
+  required_headers: string[];
+  sample_secret: string;
+  sample_payload: Record<string, unknown>;
+  sample_headers: Record<string, string>;
+  node_example: string;
 };
 
 type IngestResponse = {
@@ -87,6 +110,7 @@ function formatTime(value: string) {
 
 export default function HookRelayHome() {
   const [contract, setContract] = useState<DeliveryContract | null>(null);
+  const [verificationExample, setVerificationExample] = useState<ReceiverVerificationExample | null>(null);
   const [endpoints, setEndpoints] = useState<Endpoint[]>([]);
   const [events, setEvents] = useState<DeliveryEvent[]>([]);
   const [deliveries, setDeliveries] = useState<DeliveryAttempt[]>([]);
@@ -104,14 +128,16 @@ export default function HookRelayHome() {
   const duplicateKeys = useMemo(() => new Set(events.map((event) => event.idempotency_key)), [events]);
 
   async function refreshAll() {
-    const [nextContract, nextEndpoints, nextEvents, nextDeliveries] = await Promise.all([
+    const [nextContract, nextVerificationExample, nextEndpoints, nextEvents, nextDeliveries] = await Promise.all([
       requestJson<DeliveryContract>("/api/delivery-contract"),
+      requestJson<ReceiverVerificationExample>("/api/receiver-verification-example"),
       requestJson<Endpoint[]>("/api/endpoints"),
       requestJson<DeliveryEvent[]>("/api/events"),
       requestJson<DeliveryAttempt[]>("/api/deliveries")
     ]);
 
     setContract(nextContract);
+    setVerificationExample(nextVerificationExample);
     setEndpoints(nextEndpoints);
     setEvents(nextEvents);
     setDeliveries(nextDeliveries);
@@ -165,9 +191,15 @@ export default function HookRelayHome() {
 
   async function replayDelivery(deliveryId: string) {
     try {
-      await requestJson<DeliveryAttempt>(`/api/deliveries/${deliveryId}/replay`, { method: "POST" });
+      await requestJson<DeliveryAttempt>(`/api/deliveries/${deliveryId}/replay`, {
+        method: "POST",
+        body: JSON.stringify({
+          reason: "Operator requested replay after receiver recovery",
+          requested_by: "local-dashboard"
+        })
+      });
       await refreshAll();
-      setStatusMessage("Replay queued as a new delivery attempt.");
+      setStatusMessage("Replay authorized with operator intent and queued as a new delivery attempt.");
     } catch (error) {
       setStatusMessage(error instanceof Error ? error.message : "Replay failed.");
     }
@@ -286,9 +318,14 @@ export default function HookRelayHome() {
                   <span>Next try</span>
                   <strong>{formatTime(delivery.next_attempt_at)}</strong>
                 </div>
+                <div>
+                  <span>Replay</span>
+                  <strong>{delivery.replay_requested_by ?? "original"}</strong>
+                </div>
                 <button type="button" onClick={() => void replayDelivery(delivery.delivery_id)}>
                   Replay
                 </button>
+                {delivery.replay_reason ? <p>{delivery.replay_reason}</p> : null}
               </article>
             ))}
           </div>
@@ -318,6 +355,14 @@ export default function HookRelayHome() {
               <dt>Signing</dt>
               <dd>{contract?.signature_algorithm ?? "unknown"}</dd>
             </div>
+            <div>
+              <dt>Replay Auth</dt>
+              <dd>{contract?.replay_authorization.mode ?? "unknown"}</dd>
+            </div>
+            <div>
+              <dt>Receiver Window</dt>
+              <dd>{contract?.receiver_verification.timestamp_tolerance_seconds ?? 0}s</dd>
+            </div>
           </dl>
         </section>
 
@@ -332,6 +377,36 @@ export default function HookRelayHome() {
             ))}
           </div>
           <p>{contract?.replay_rule}</p>
+          <p>{contract?.replay_authorization.audit_rule}</p>
+        </section>
+
+        <section className="panel-block">
+          <div className="section-header">
+            <span>Receiver Verification</span>
+            <strong>{verificationExample ? `${verificationExample.timestamp_tolerance_seconds}s` : "loading"}</strong>
+          </div>
+          {verificationExample ? (
+            <dl className="detail-list">
+              <div>
+                <dt>Signed Payload</dt>
+                <dd>{verificationExample.signed_payload}</dd>
+              </div>
+              <div>
+                <dt>Sample Secret</dt>
+                <dd>{verificationExample.sample_secret}</dd>
+              </div>
+              <div>
+                <dt>Required Headers</dt>
+                <dd>{verificationExample.required_headers.join(", ")}</dd>
+              </div>
+              <div>
+                <dt>Verifier</dt>
+                <dd>{verificationExample.node_example}</dd>
+              </div>
+            </dl>
+          ) : (
+            <p>Receiver verification example is loading.</p>
+          )}
         </section>
 
         <section className="panel-block">

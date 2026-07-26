@@ -47,6 +47,24 @@ The signed payload is:
 
 This keeps replay protection and payload verification explicit before the worker begins sending real HTTP requests.
 
+## Receiver Verification
+
+Receivers verify the webhook by rebuilding the signed payload from the exact raw request body:
+
+```text
+<HookRelay-Timestamp>.<raw JSON request body>
+```
+
+They then compute `HMAC-SHA256` with the endpoint signing secret and compare it to `HookRelay-Signature`. The first receiver example uses a five-minute timestamp tolerance so old captured requests can be rejected once real receivers are wired.
+
+The API exposes a runnable example contract at:
+
+```text
+GET /api/receiver-verification-example
+```
+
+The example includes the required headers, a sample payload, a sample secret, and the Node.js digest expression a receiver would use.
+
 ## Retry Policy
 
 The scaffold exposes the intended retry ladder:
@@ -60,6 +78,19 @@ The API stores queued delivery records. When Redis is configured, it also create
 ## Replay Rule
 
 Manual replay creates a new queued delivery attempt for an existing event. The event payload and idempotency key remain unchanged; the replay attempt receives a new delivery id, timestamp, and signature.
+
+## Replay Authorization
+
+Manual replay is an operator action, not an automatic retry. The replay endpoint requires a human-readable `reason` in the request body before it queues a new delivery attempt:
+
+```json
+{
+  "reason": "Operator requested replay after receiver recovery",
+  "requested_by": "local-dashboard"
+}
+```
+
+The reason and requester are stored on the replay delivery attempt as `replay_reason` and `replay_requested_by`. This keeps the first authorization rule simple while preserving the audit trail needed before adding tenant users, roles, or approval workflows.
 
 ## Durable Schema Rule
 

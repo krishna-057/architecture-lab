@@ -2,6 +2,33 @@
 
 ## 2026-07-16
 
+Added HookRelay receiver verification example and replay authorization contract.
+
+Added:
+- `GET /api/receiver-verification-example` with required signature headers, sample payload, sample secret, timestamp tolerance, and Node.js HMAC digest expression.
+- Delivery contract discovery fields for receiver verification and replay authorization.
+- Replay intent validation on `POST /api/deliveries/:delivery_id/replay`, requiring a human-readable reason before queueing a new delivery attempt.
+- `replay_reason` and `replay_requested_by` fields in memory delivery records and the PostgreSQL `delivery_attempts` schema.
+- Dashboard rendering for receiver verification, replay authorization mode, receiver timestamp window, and replay audit fields.
+- HookRelay workspace validation markers covering the new receiver example and replay authorization contract.
+- README, architecture, delivery contract, decision, and interview-note updates. `projects/05-hookrelay/ARCHITECTURE.md` was replaced with valid Markdown because the existing file had invalid UTF-8 and could not be patched safely.
+
+Validated the work by running:
+- `node scripts/check-workspace.mjs` from `projects/05-hookrelay`
+- API syntax checks with `node --check` for `server.js`, `worker.js`, `app.js`, `storage.js`, `delivery-queue.js`, `delivery-runner.js`, and `signing.js`
+- `npm run build -w @hookrelay/web` from `projects/05-hookrelay`
+- `git diff --check`
+- A local Fastify smoke test covering `/api/receiver-verification-example`, replay rejection without a reason, and replay success with `reason` and `requested_by`
+
+Notes:
+- The sandbox shell did not have `npm` on PATH, so validation used the bundled Node runtime for script checks and the system `C:\nvm4w\nodejs\npm.cmd` for the Next build.
+- Direct Next binary invocation hung after printing the banner, so the hung validation process was stopped and replaced with the standard npm build path.
+- `WORKFLOW.md` still appears to contain binary/corrupted content in the current checkout, so it could not be meaningfully read as Markdown.
+- HookRelay's Ready queue had no queued tasks, so this run promoted the documented next HookRelay follow-up from memory and prior daily log into the completed queue item.
+
+Next recommended task:
+- Add HookRelay jittered retry policy.
+
 Created private GitHub repositories for each independent portfolio project and pushed history-preserving splits.
 
 Added:

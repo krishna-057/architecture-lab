@@ -28,7 +28,46 @@ export function signDelivery({ endpoint, event, deliveryId, timestamp }) {
   };
 }
 
-export function buildDelivery({ endpoint, event, attemptNumber, retryDelaysSeconds, replayedFrom = null }) {
+export function buildReceiverVerificationExample() {
+  const sampleSecret = "whsec_receiver_example";
+  const samplePayload = { event_type: "invoice.paid", invoice_id: "inv_1001", amount: 4900 };
+  const sampleEvent = { event_id: "event_example", payload: samplePayload };
+  const sampleEndpoint = { signing_secret: sampleSecret };
+  const sampleDeliveryId = "delivery_example";
+  const sampleTimestamp = 1_735_689_600;
+  const sampleHeaders = signDelivery({
+    endpoint: sampleEndpoint,
+    event: sampleEvent,
+    deliveryId: sampleDeliveryId,
+    timestamp: sampleTimestamp
+  });
+
+  return {
+    timestamp_tolerance_seconds: 300,
+    signed_payload: "<HookRelay-Timestamp>.<raw JSON request body>",
+    required_headers: [
+      "HookRelay-Timestamp",
+      "HookRelay-Signature",
+      "HookRelay-Event-Id",
+      "HookRelay-Delivery-Id"
+    ],
+    sample_secret: sampleSecret,
+    sample_payload: samplePayload,
+    sample_headers: sampleHeaders,
+    node_example:
+      "const expected = 'v1=' + crypto.createHmac('sha256', secret).update(`${timestamp}.${rawBody}`).digest('hex');"
+  };
+}
+
+export function buildDelivery({
+  endpoint,
+  event,
+  attemptNumber,
+  retryDelaysSeconds,
+  replayedFrom = null,
+  replayReason = null,
+  replayRequestedBy = null
+}) {
   const deliveryId = `delivery_${crypto.randomUUID()}`;
   const timestamp = Math.floor(Date.now() / 1000);
   const retryDelay = retryDelaysSeconds[Math.min(attemptNumber - 1, retryDelaysSeconds.length - 1)];
@@ -45,6 +84,8 @@ export function buildDelivery({ endpoint, event, attemptNumber, retryDelaysSecon
     response_status: null,
     error: null,
     replayed_from_delivery_id: replayedFrom,
+    replay_reason: replayReason,
+    replay_requested_by: replayRequestedBy,
     signature_headers: signDelivery({ endpoint, event, deliveryId, timestamp }),
     created_at: nowIso(),
     updated_at: nowIso()

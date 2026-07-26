@@ -31,6 +31,8 @@ create table if not exists delivery_attempts (
   response_status integer,
   error text,
   replayed_from_delivery_id text references delivery_attempts(delivery_id),
+  replay_reason text,
+  replay_requested_by text,
   signature_headers jsonb not null,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()

@@ -1,83 +1,89 @@
-# HookRelay Architecture
+﻿# HookRelay Architecture
 
-HookRelay starts as a modular monolith with one Fastify API process and one Next.js dashboard. The current slice keeps the dependency-light in-memory mode for quick checks and adds an optional durable path with PostgreSQL and BullMQ once `DATABASE_URL` and `REDIS_URL` are present.
+HookRelay is a webhook delivery platform with a deliberately small request path and a separate delivery worker boundary.
 
-## First-Slice Runtime
+## Runtime Shape
 
 ```text
-Producer API
+Producer
   |
+  | POST /api/events
   v
 Fastify API
   |
-  +--> In-memory endpoint registry
-  +--> In-memory event log
-  +--> In-memory delivery attempt records
-  +--> HMAC signature preview
-  +--> Replay enqueue path
-
-Next.js dashboard
-  |
+  | durable event + delivery attempt
   v
-Fastify discovery and control APIs
+PostgreSQL when DATABASE_URL is set
+  |
+  | delivery id job
+  v
+BullMQ / Redis when REDIS_URL is set
+  |
+  | signed HTTP request
+  v
+Receiver endpoint
 ```
 
-## Planned Durable Runtime
+Without `DATABASE_URL` and `REDIS_URL`, the API still runs in in-memory mode for fast local checks. The in-memory path keeps the same endpoint, event, delivery, signature, replay, and contract shapes as durable mode.
+
+## Components
+
+| Component | Responsibility |
+| --- | --- |
+| Fastify API | Endpoint setup, event ingestion, idempotency handling, delivery attempt creation, replay enqueueing, and contract discovery. |
+| Next.js web app | Developer/operator console for creating endpoints, submitting events, replaying deliveries, and inspecting signatures. |
+| PostgreSQL | Optional durable owner for endpoints, events, idempotency uniqueness, delivery attempt state, replay audit fields, and dead-letter status. |
+| BullMQ / Redis | Optional durable queue and delayed retry scheduler for outbound delivery jobs. |
+| Worker process | Sends signed outbound HTTP requests, records responses, schedules retries, and marks dead-letter failures. |
+| Receiver verification example | Shows receivers how to rebuild `timestamp.rawBody`, compute HMAC-SHA256, and enforce a timestamp tolerance. |
+| Replay authorization contract | Requires operator replay reasons before manual replay creates a new delivery attempt. |
+
+## API Boundary
+
+| Endpoint | Purpose |
+| --- | --- |
+| `GET /health` | Report API, storage, queue, and worker mode. |
+| `GET /api/delivery-contract` | Discover idempotency, signature, receiver verification, retry, replay authorization, queue, and storage rules. |
+| `GET /api/receiver-verification-example` | Return sample receiver verification inputs, required headers, and Node.js digest expression. |
+| `GET /api/endpoints` | List webhook endpoints without exposing full signing secrets. |
+| `POST /api/endpoints` | Create a webhook target and signing secret. |
+| `GET /api/events` | List accepted producer events. |
+| `POST /api/events` | Accept one event per endpoint/idempotency key and create the first delivery attempt. |
+| `GET /api/deliveries` | List delivery attempts, statuses, replay audit fields, and signature previews. |
+| `POST /api/deliveries/:delivery_id/replay` | Require replay intent, create a new queued attempt for an existing event, and enqueue it when BullMQ is configured. |
+
+## Idempotency
+
+Producer retries are keyed by `(endpoint_id, idempotency_key)`. PostgreSQL enforces that pair with a unique constraint, and in-memory mode mirrors the same rule with a map.
+
+Duplicate ingestion returns the existing event and its delivery attempts. It does not create another attempt.
+
+## Signing And Receiver Verification
+
+Each delivery signs:
 
 ```text
-Producer API
-  |
-  v
-Event ingestion API
-  |
-  +--> PostgreSQL event and delivery log
-  +--> BullMQ delivery jobs
-          |
-          v
-      Delivery worker
-          |
-          v
-      Consumer webhook endpoint
-          |
-          v
-      Delivery attempt update + retry/dead-letter decision
+<HookRelay-Timestamp>.<raw JSON event payload>
 ```
 
-## Current Durable Runtime
+The receiver verification example exposes the required headers, a sample payload, a sample secret, and the HMAC expression. A five-minute timestamp tolerance is documented as the first replay-protection window before real receiver SDKs or middleware exist.
+
+## Retry And Replay
+
+Automatic retries follow the first fixed ladder:
 
 ```text
-Producer API
-  |
-  v
-Fastify API
-  |
-  +--> PostgreSQL endpoints, events, delivery_attempts
-  +--> BullMQ delivery job
-          |
-          v
-      Worker process
-          |
-          v
-      Customer webhook endpoint
-          |
-          v
-      delivery_attempts status update
-      retry attempt or dead_letter record
+10 seconds, 30 seconds, 2 minutes, 5 minutes, 15 minutes
 ```
 
-## Boundaries
+`delivery_attempts` is append-friendly. Automatic retries and manual replays create new attempts rather than overwriting the original attempt. Final failures are marked `dead_letter` on the attempt, which keeps the first dead-letter model simple.
 
-| Boundary | First implementation | Reason |
-| --- | --- | --- |
-| API | Fastify service under `services/api` | HookRelay is HTTP-heavy, and Fastify keeps the delivery API small and direct. |
-| Dashboard | Next.js app under `apps/web` | Operators need a delivery log, replay action, and contract visibility. |
-| Storage | In-memory maps by default, PostgreSQL when configured | Fast local checks remain simple while the durable schema proves restart-safe delivery logs. |
-| Queue | Delivery attempt records by default, BullMQ when configured | The API can enqueue delayed jobs without forcing Redis for every local run. |
-| Signing | HMAC SHA-256 header preview | Signature verification can be explained and tested before outbound delivery exists. |
+Manual replay attempts store `replay_reason` and `replay_requested_by`. That gives the operator action an audit trail before HookRelay has tenant users, roles, or approval policies.
 
-## Failure Modes To Address Next
+## Deferred Work
 
-- API process restart loses state only in the default in-memory mode.
-- Worker retries currently use the fixed first ladder, not jittered exponential backoff.
-- Receiver authentication, tenant ownership, and replay authorization are not implemented yet.
-- HMAC signatures are generated, but no receiver verification example exists yet.
+- Tenant and endpoint ownership.
+- Role-based replay authorization.
+- Jittered backoff and rate limits.
+- Receiver SDKs.
+- OpenTelemetry traces and latency dashboards.

@@ -29,3 +29,11 @@ Observability should attach one trace across event ingestion, job enqueue, each 
 - BullMQ jobs contain only the delivery id. The worker reloads the delivery, event, and endpoint from storage so Redis is not the source of truth.
 - Failed attempts are immutable enough for operator history: the worker marks the failed attempt and creates a new queued attempt for the retry.
 - Dead-letter is a delivery status, not a separate service yet. That keeps replay simple while still proving the failure state.
+
+## Receiver Verification And Replay Talking Points
+
+- Receivers verify `HookRelay-Signature` by computing HMAC-SHA256 over `HookRelay-Timestamp.rawBody`, not a parsed JSON object. That avoids signature mismatches caused by JSON formatting changes.
+- A timestamp tolerance is part of the verification contract because signatures alone prove integrity, not freshness.
+- `GET /api/receiver-verification-example` exists so receiver developers can see the required headers, signed payload shape, sample payload, and digest expression from the API itself.
+- Manual replay requires a reason before creating a new delivery attempt. That is the smallest useful authorization boundary before tenant users, roles, and approvals exist.
+- Replay audit fields live on the delivery attempt, not the event, because the original event remains unchanged while each replay is a separate operator action.

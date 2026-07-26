@@ -13,7 +13,7 @@ Added:
 - `db/schema.sql` for durable endpoints, events, idempotency keys, and delivery attempts.
 - `compose.yaml` with PostgreSQL, Redis, API, and worker services. Local data is bind-mounted under `projects/05-hookrelay/.data/`.
 - `services/api/src/worker.js` as the BullMQ worker boundary for outbound HTTP delivery attempts, retry creation, and dead-letter promotion.
-- `DELIVERY_CONTRACT.md` for the first idempotency, HMAC header, retry, and replay rules.
+- `DELIVERY_CONTRACT.md` for idempotency, HMAC headers, receiver verification, retry, replay authorization, and audit rules.
 - `scripts/check-workspace.mjs` for dependency-light validation of the scaffold markers.
 
 Run locally:
@@ -61,12 +61,13 @@ Default URLs:
 | --- | --- |
 | `GET /health` | Local service health and worker mode. |
 | `GET /api/delivery-contract` | Discover retry, signature, replay, and idempotency rules. |
+| `GET /api/receiver-verification-example` | Show a receiver-side HMAC verification example with sample payload and headers. |
 | `GET /api/endpoints` | List webhook endpoints. |
 | `POST /api/endpoints` | Create a webhook endpoint with a signing secret. |
 | `GET /api/events` | List accepted producer events. |
 | `POST /api/events` | Accept one event per endpoint/idempotency key and queue a delivery attempt. |
 | `GET /api/deliveries` | List queued delivery attempts and signature previews. |
-| `POST /api/deliveries/:delivery_id/replay` | Create a new queued attempt for an existing event. |
+| `POST /api/deliveries/:delivery_id/replay` | Create a new queued attempt for an existing event after a replay reason is supplied. |
 
 When `DATABASE_URL` is set, endpoints, events, and delivery attempts are stored in PostgreSQL. When `REDIS_URL` is set, new delivery attempts are also enqueued into BullMQ with the documented delay ladder. Without those variables, the API still runs in in-memory mode for fast local checks.
 

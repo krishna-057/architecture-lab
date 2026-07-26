@@ -1,5 +1,6 @@
 import Fastify from "fastify";
 import { allowedOrigins, getRuntimeConfig, retryDelaysSeconds } from "./config.js";
+import { buildReceiverVerificationExample } from "./signing.js";
 
 function validateAbsoluteUrl(value) {
   try {
@@ -52,8 +53,21 @@ export function createHookRelayApp({ store, queue }) {
       delays_seconds: retryDelaysSeconds,
       dead_letter_after_attempts: retryDelaysSeconds.length
     },
-    replay_rule: "Manual replay creates a new queued delivery attempt for the same event payload."
+    replay_rule: "Manual replay creates a new queued delivery attempt for the same event payload.",
+    replay_authorization: {
+      mode: "operator_intent",
+      required_body_fields: ["reason"],
+      optional_body_fields: ["requested_by"],
+      audit_rule: "Replay requests must include a human-readable reason before a new delivery attempt is queued."
+    },
+    receiver_verification: {
+      timestamp_tolerance_seconds: 300,
+      signed_payload: "<HookRelay-Timestamp>.<raw JSON request body>",
+      example_endpoint: "/api/receiver-verification-example"
+    }
   }));
+
+  app.get("/api/receiver-verification-example", async () => buildReceiverVerificationExample());
 
   app.get("/api/endpoints", async () => store.listEndpoints());
 
@@ -112,6 +126,14 @@ export function createHookRelayApp({ store, queue }) {
   app.get("/api/deliveries", async () => store.listDeliveries());
 
   app.post("/api/deliveries/:delivery_id/replay", async (request, reply) => {
+    const body = request.body ?? {};
+    const reason = String(body.reason ?? "").trim();
+    const requestedBy = String(body.requested_by ?? "local-operator").trim() || "local-operator";
+
+    if (reason.length < 8) {
+      return reply.status(400).send({ error: "Replay reason must be at least 8 characters." });
+    }
+
     const existingDelivery = await store.getDelivery(request.params.delivery_id);
     if (!existingDelivery) {
       return reply.status(404).send({ error: "delivery_id was not found" });
@@ -127,7 +149,9 @@ export function createHookRelayApp({ store, queue }) {
       endpoint,
       event,
       attemptNumber: existingDelivery.attempt_number + 1,
-      replayedFrom: existingDelivery.delivery_id
+      replayedFrom: existingDelivery.delivery_id,
+      replayReason: reason,
+      replayRequestedBy: requestedBy
     });
     await queue.enqueue(replay);
     return reply.status(202).send(replay);

@@ -58,8 +58,12 @@ for (const marker of [
   "/api/events",
   "/api/deliveries",
   "/api/delivery-contract",
+  "/api/receiver-verification-example",
   "HookRelay-Signature",
+  "buildReceiverVerificationExample",
   "idempotency_key",
+  "replay_authorization",
+  "Replay reason",
   "replay",
   "retry_policy",
   "new Pool",
@@ -78,7 +82,10 @@ for (const marker of [
   "/api/events",
   "/api/deliveries",
   "/api/delivery-contract",
+  "/api/receiver-verification-example",
   "Idempotency Key",
+  "Receiver Verification",
+  "Replay Auth",
   "Signature Preview",
   "Replay"
 ]) {
@@ -88,14 +95,30 @@ for (const marker of [
 }
 
 const contract = readFileSync("DELIVERY_CONTRACT.md", "utf8");
-for (const marker of ["HMAC", "Retry Policy", "Replay Rule", "idempotency_key", "HookRelay-Signature"]) {
+for (const marker of [
+  "HMAC",
+  "Retry Policy",
+  "Replay Rule",
+  "Replay Authorization",
+  "Receiver Verification",
+  "idempotency_key",
+  "HookRelay-Signature"
+]) {
   if (!contract.includes(marker)) {
     throw new Error(`Delivery contract is missing required marker: ${marker}`);
   }
 }
 
 const schema = readFileSync("db/schema.sql", "utf8");
-for (const marker of ["webhook_endpoints", "webhook_events", "delivery_attempts", "unique (endpoint_id, idempotency_key)", "dead_letter"]) {
+for (const marker of [
+  "webhook_endpoints",
+  "webhook_events",
+  "delivery_attempts",
+  "unique (endpoint_id, idempotency_key)",
+  "dead_letter",
+  "replay_reason",
+  "replay_requested_by"
+]) {
   if (!schema.includes(marker)) {
     throw new Error(`PostgreSQL schema is missing required marker: ${marker}`);
   }

@@ -184,6 +184,7 @@ label {
 
 .delivery-row {
   min-height: 62px;
+  flex-wrap: wrap;
   border: 1px solid var(--line);
   border-radius: 8px;
   padding: 10px;
@@ -208,6 +209,14 @@ label {
 .delivery-row button {
   min-width: 86px;
   background: var(--focus);
+}
+
+.delivery-row p {
+  flex-basis: 100%;
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.4;
 }
 
 .detail-list {
