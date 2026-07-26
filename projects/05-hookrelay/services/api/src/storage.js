@@ -1,7 +1,7 @@
 import crypto from "node:crypto";
 import pg from "pg";
 import { buildDelivery, nowIso, publicEndpoint } from "./signing.js";
-import { retryDelaysSeconds } from "./config.js";
+import { retryDelaysSeconds, retryJitterRatio } from "./config.js";
 
 const { Pool } = pg;
 
@@ -115,7 +115,7 @@ export class MemoryStore {
       created_at: nowIso(),
       updated_at: nowIso()
     };
-    const delivery = buildDelivery({ endpoint, event, attemptNumber: 1, retryDelaysSeconds });
+    const delivery = buildDelivery({ endpoint, event, attemptNumber: 1, retryDelaysSeconds, retryJitterRatio });
 
     this.events.set(event.event_id, event);
     this.idempotencyIndex.set(indexKey, event.event_id);
@@ -130,6 +130,7 @@ export class MemoryStore {
       event,
       attemptNumber,
       retryDelaysSeconds,
+      retryJitterRatio,
       replayedFrom,
       replayReason,
       replayRequestedBy
@@ -271,7 +272,7 @@ export class PostgresStore {
       }
 
       const savedEvent = normalizeRow(insertedEvent.rows[0]);
-      const delivery = buildDelivery({ endpoint, event: savedEvent, attemptNumber: 1, retryDelaysSeconds });
+      const delivery = buildDelivery({ endpoint, event: savedEvent, attemptNumber: 1, retryDelaysSeconds, retryJitterRatio });
       const savedDelivery = await this.insertDelivery(client, delivery);
 
       await client.query("commit");
@@ -290,6 +291,7 @@ export class PostgresStore {
       event,
       attemptNumber,
       retryDelaysSeconds,
+      retryJitterRatio,
       replayedFrom,
       replayReason,
       replayRequestedBy
@@ -301,10 +303,11 @@ export class PostgresStore {
     const result = await client.query(
       `insert into delivery_attempts (
          delivery_id, event_id, endpoint_id, target_url, status, attempt_number,
-         next_attempt_at, response_status, error, replayed_from_delivery_id, replay_reason,
+         next_attempt_at, base_delay_seconds, jitter_seconds, scheduled_delay_seconds,
+         response_status, error, replayed_from_delivery_id, replay_reason,
          replay_requested_by, signature_headers
        )
-       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13::jsonb)
+       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16::jsonb)
        returning *`,
       [
         delivery.delivery_id,
@@ -314,6 +317,9 @@ export class PostgresStore {
         delivery.status,
         delivery.attempt_number,
         delivery.next_attempt_at,
+        delivery.base_delay_seconds,
+        delivery.jitter_seconds,
+        delivery.scheduled_delay_seconds,
         delivery.response_status,
         delivery.error,
         delivery.replayed_from_delivery_id,

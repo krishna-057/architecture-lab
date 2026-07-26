@@ -29,6 +29,9 @@ type DeliveryAttempt = {
   status: "queued" | "delivering" | "succeeded" | "failed" | "dead_letter";
   attempt_number: number;
   next_attempt_at: string;
+  base_delay_seconds: number;
+  jitter_seconds: number;
+  scheduled_delay_seconds: number;
   response_status: number | null;
   error: string | null;
   replayed_from_delivery_id: string | null;
@@ -48,6 +51,8 @@ type DeliveryContract = {
   retry_policy: {
     mode: string;
     delays_seconds: number[];
+    jitter_ratio: number;
+    jitter_mode: string;
     dead_letter_after_attempts: number;
   };
   replay_rule: string;
@@ -319,6 +324,13 @@ export default function HookRelayHome() {
                   <strong>{formatTime(delivery.next_attempt_at)}</strong>
                 </div>
                 <div>
+                  <span>Jitter</span>
+                  <strong>
+                    {delivery.jitter_seconds >= 0 ? "+" : ""}
+                    {delivery.jitter_seconds}s
+                  </strong>
+                </div>
+                <div>
                   <span>Replay</span>
                   <strong>{delivery.replay_requested_by ?? "original"}</strong>
                 </div>
@@ -363,6 +375,10 @@ export default function HookRelayHome() {
               <dt>Receiver Window</dt>
               <dd>{contract?.receiver_verification.timestamp_tolerance_seconds ?? 0}s</dd>
             </div>
+            <div>
+              <dt>Retry Jitter</dt>
+              <dd>{Math.round((contract?.retry_policy.jitter_ratio ?? 0) * 100)}% bounded</dd>
+            </div>
           </dl>
         </section>
 
@@ -376,6 +392,9 @@ export default function HookRelayHome() {
               <span key={seconds}>{seconds}s</span>
             ))}
           </div>
+          <p>
+            {contract ? `${contract.retry_policy.jitter_mode} at ${Math.round(contract.retry_policy.jitter_ratio * 100)}% per attempt.` : ""}
+          </p>
           <p>{contract?.replay_rule}</p>
           <p>{contract?.replay_authorization.audit_rule}</p>
         </section>

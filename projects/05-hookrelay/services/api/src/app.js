@@ -1,5 +1,5 @@
 import Fastify from "fastify";
-import { allowedOrigins, getRuntimeConfig, retryDelaysSeconds } from "./config.js";
+import { allowedOrigins, getRuntimeConfig, retryDelaysSeconds, retryJitterRatio } from "./config.js";
 import { buildReceiverVerificationExample } from "./signing.js";
 
 function validateAbsoluteUrl(value) {
@@ -49,8 +49,10 @@ export function createHookRelayApp({ store, queue }) {
       "HookRelay-Delivery-Id"
     ],
     retry_policy: {
-      mode: queue.mode === "bullmq" ? "bullmq_delayed_jobs" : "fixed_ladder_before_bullmq_worker",
+      mode: queue.mode === "bullmq" ? "bullmq_delayed_jobs_with_jitter" : "jittered_ladder_before_bullmq_worker",
       delays_seconds: retryDelaysSeconds,
+      jitter_ratio: retryJitterRatio,
+      jitter_mode: "bounded_symmetric_per_attempt",
       dead_letter_after_attempts: retryDelaysSeconds.length
     },
     replay_rule: "Manual replay creates a new queued delivery attempt for the same event payload.",

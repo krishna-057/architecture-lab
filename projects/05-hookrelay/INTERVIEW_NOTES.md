@@ -37,3 +37,11 @@ Observability should attach one trace across event ingestion, job enqueue, each 
 - `GET /api/receiver-verification-example` exists so receiver developers can see the required headers, signed payload shape, sample payload, and digest expression from the API itself.
 - Manual replay requires a reason before creating a new delivery attempt. That is the smallest useful authorization boundary before tenant users, roles, and approvals exist.
 - Replay audit fields live on the delivery attempt, not the event, because the original event remains unchanged while each replay is a separate operator action.
+
+## Jittered Retry Talking Points
+
+- Fixed retry ladders are easy to explain, but they can synchronize failures. If a receiver outage affects many deliveries at once, exact retries can hammer the receiver again at 10s, 30s, and 120s.
+- HookRelay keeps the documented ladder but adds bounded jitter around each base delay. That preserves predictability while spreading retry load.
+- The computed schedule is stored on the delivery attempt, so operators see `base_delay_seconds`, `jitter_seconds`, `scheduled_delay_seconds`, and `next_attempt_at`.
+- BullMQ jobs use the persisted `next_attempt_at`; Redis is scheduling work, not inventing retry policy.
+- This is a stepping stone before tenant-specific retry profiles, endpoint rate limits, and tracing.

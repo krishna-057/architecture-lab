@@ -73,7 +73,20 @@ The scaffold exposes the intended retry ladder:
 10 seconds, 30 seconds, 2 minutes, 5 minutes, 15 minutes
 ```
 
-The API stores queued delivery records. When Redis is configured, it also creates delayed BullMQ jobs. The worker sends the signed event payload to the endpoint URL, records success or failure, creates the next retry attempt, and promotes the final failed attempt to `dead_letter`.
+## Retry Jitter
+
+Each retry receives bounded symmetric Jitter around its base delay. The default jitter ratio is `0.2`, so a 30 second base delay may schedule between 24 and 36 seconds. Set `DELIVERY_RETRY_JITTER_RATIO` to tune that spread in local durable mode.
+
+Delivery attempts expose the computed schedule:
+
+```text
+base_delay_seconds
+jitter_seconds
+scheduled_delay_seconds
+next_attempt_at
+```
+
+The API stores queued delivery records. When Redis is configured, it also creates delayed BullMQ jobs from `next_attempt_at`. The worker sends the signed event payload to the endpoint URL, records success or failure, creates the next retry attempt with a fresh jittered schedule, and promotes the final failed attempt to `dead_letter`.
 
 ## Replay Rule
 

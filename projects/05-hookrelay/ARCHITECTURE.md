@@ -33,7 +33,7 @@ Without `DATABASE_URL` and `REDIS_URL`, the API still runs in in-memory mode for
 | Fastify API | Endpoint setup, event ingestion, idempotency handling, delivery attempt creation, replay enqueueing, and contract discovery. |
 | Next.js web app | Developer/operator console for creating endpoints, submitting events, replaying deliveries, and inspecting signatures. |
 | PostgreSQL | Optional durable owner for endpoints, events, idempotency uniqueness, delivery attempt state, replay audit fields, and dead-letter status. |
-| BullMQ / Redis | Optional durable queue and delayed retry scheduler for outbound delivery jobs. |
+| BullMQ / Redis | Optional durable queue and jittered delayed retry scheduler for outbound delivery jobs. |
 | Worker process | Sends signed outbound HTTP requests, records responses, schedules retries, and marks dead-letter failures. |
 | Receiver verification example | Shows receivers how to rebuild `timestamp.rawBody`, compute HMAC-SHA256, and enforce a timestamp tolerance. |
 | Replay authorization contract | Requires operator replay reasons before manual replay creates a new delivery attempt. |
@@ -70,11 +70,13 @@ The receiver verification example exposes the required headers, a sample payload
 
 ## Retry And Replay
 
-Automatic retries follow the first fixed ladder:
+Automatic retries follow the first fixed ladder with bounded per-attempt jitter:
 
 ```text
 10 seconds, 30 seconds, 2 minutes, 5 minutes, 15 minutes
 ```
+
+The default jitter ratio is 20%, configurable through `DELIVERY_RETRY_JITTER_RATIO`. Each delivery attempt stores `base_delay_seconds`, `jitter_seconds`, and `scheduled_delay_seconds` so operators can explain why a queued retry moved away from the nominal ladder.
 
 `delivery_attempts` is append-friendly. Automatic retries and manual replays create new attempts rather than overwriting the original attempt. Final failures are marked `dead_letter` on the attempt, which keeps the first dead-letter model simple.
 
@@ -84,6 +86,6 @@ Manual replay attempts store `replay_reason` and `replay_requested_by`. That giv
 
 - Tenant and endpoint ownership.
 - Role-based replay authorization.
-- Jittered backoff and rate limits.
+- Tenant-specific retry overrides and rate limits.
 - Receiver SDKs.
 - OpenTelemetry traces and latency dashboards.

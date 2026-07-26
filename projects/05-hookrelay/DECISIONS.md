@@ -56,3 +56,22 @@ Rejected alternatives:
 
 Follow-up:
 Add signed operator identity, role-based replay permissions, receiver SDK helpers, and timestamp-window enforcement in a sample receiver.
+
+## 2026-07-27: Add Bounded Retry Jitter
+
+Decision:
+Add bounded symmetric jitter to the existing retry ladder and store the computed schedule on each delivery attempt as `base_delay_seconds`, `jitter_seconds`, and `scheduled_delay_seconds`.
+
+Why:
+- Webhook receivers often fail in bursts, so exact retry timestamps can recreate a thundering herd when many events fail at once.
+- A bounded jitter ratio keeps the retry policy explainable while still spreading load around the nominal delay.
+- Storing the computed values makes operator logs auditable; `next_attempt_at` is no longer a mysterious timestamp.
+- Keeping the helper in `retry-policy.js` gives the API, worker, contract, and tests one shared scheduling rule.
+
+Rejected alternatives:
+- Full exponential backoff rewrite: useful later, but the current ladder is already documented and good enough for this lab slice.
+- Unbounded random jitter: spreads load, but makes retry timing hard to reason about and hard to explain in interviews.
+- Queue-only jitter inside BullMQ: would hide timing from the database and dashboard, which weakens delivery-log observability.
+
+Follow-up:
+Add tenant-specific retry policies, endpoint-level rate limits, and OpenTelemetry timing spans.

@@ -15,6 +15,7 @@ const requiredFiles = [
   "services/api/src/server.js",
   "services/api/src/app.js",
   "services/api/src/storage.js",
+  "services/api/src/retry-policy.js",
   "services/api/src/delivery-queue.js",
   "services/api/src/delivery-runner.js",
   "services/api/src/worker.js"
@@ -49,6 +50,7 @@ for (const dependency of ["pg", "bullmq", "ioredis"]) {
 const apiFile = [
   "services/api/src/app.js",
   "services/api/src/storage.js",
+  "services/api/src/retry-policy.js",
   "services/api/src/delivery-queue.js",
   "services/api/src/delivery-runner.js",
   "services/api/src/worker.js"
@@ -65,6 +67,8 @@ for (const marker of [
   "replay_authorization",
   "Replay reason",
   "replay",
+  "jitter_ratio",
+  "calculateRetrySchedule",
   "retry_policy",
   "new Pool",
   "new Queue",
@@ -86,6 +90,7 @@ for (const marker of [
   "Idempotency Key",
   "Receiver Verification",
   "Replay Auth",
+  "Retry Jitter",
   "Signature Preview",
   "Replay"
 ]) {
@@ -98,6 +103,7 @@ const contract = readFileSync("DELIVERY_CONTRACT.md", "utf8");
 for (const marker of [
   "HMAC",
   "Retry Policy",
+  "Jitter",
   "Replay Rule",
   "Replay Authorization",
   "Receiver Verification",
@@ -117,7 +123,10 @@ for (const marker of [
   "unique (endpoint_id, idempotency_key)",
   "dead_letter",
   "replay_reason",
-  "replay_requested_by"
+  "replay_requested_by",
+  "base_delay_seconds",
+  "jitter_seconds",
+  "scheduled_delay_seconds"
 ]) {
   if (!schema.includes(marker)) {
     throw new Error(`PostgreSQL schema is missing required marker: ${marker}`);

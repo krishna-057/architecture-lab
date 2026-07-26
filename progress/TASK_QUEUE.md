@@ -6,10 +6,11 @@ Tasks should stay small enough for one focused session.
 
 ### Ready
 
-- [ ] Add HookRelay jittered retry policy.
+- [ ] Add HookRelay delivery observability spans.
 
 ### Completed
 
+- [x] Add HookRelay jittered retry policy.
 - [x] Add HookRelay receiver verification example and replay authorization contract.
 - [x] Add HookRelay PostgreSQL schema and BullMQ delivery worker boundary.
 - [x] Add HookRelay scaffold.

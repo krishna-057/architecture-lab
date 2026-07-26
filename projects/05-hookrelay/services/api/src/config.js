@@ -1,5 +1,6 @@
 export const port = Number(process.env.HOOKRELAY_API_PORT ?? 8400);
 export const retryDelaysSeconds = [10, 30, 120, 300, 900];
+export const retryJitterRatio = Number(process.env.DELIVERY_RETRY_JITTER_RATIO ?? 0.2);
 export const queueName = process.env.DELIVERY_QUEUE_NAME ?? "hookrelay-deliveries";
 export const deliveryHttpTimeoutMs = Number(process.env.DELIVERY_HTTP_TIMEOUT_MS ?? 5000);
 

@@ -1,4 +1,5 @@
 import crypto from "node:crypto";
+import { calculateRetrySchedule } from "./retry-policy.js";
 
 export function nowIso() {
   return new Date().toISOString();
@@ -64,14 +65,14 @@ export function buildDelivery({
   event,
   attemptNumber,
   retryDelaysSeconds,
+  retryJitterRatio,
   replayedFrom = null,
   replayReason = null,
   replayRequestedBy = null
 }) {
   const deliveryId = `delivery_${crypto.randomUUID()}`;
   const timestamp = Math.floor(Date.now() / 1000);
-  const retryDelay = retryDelaysSeconds[Math.min(attemptNumber - 1, retryDelaysSeconds.length - 1)];
-  const nextAttemptAt = new Date(Date.now() + retryDelay * 1000);
+  const schedule = calculateRetrySchedule({ attemptNumber, retryDelaysSeconds, retryJitterRatio });
 
   return {
     delivery_id: deliveryId,
@@ -80,7 +81,10 @@ export function buildDelivery({
     target_url: endpoint.target_url,
     status: "queued",
     attempt_number: attemptNumber,
-    next_attempt_at: nextAttemptAt.toISOString(),
+    next_attempt_at: schedule.next_attempt_at,
+    base_delay_seconds: schedule.base_delay_seconds,
+    jitter_seconds: schedule.jitter_seconds,
+    scheduled_delay_seconds: schedule.scheduled_delay_seconds,
     response_status: null,
     error: null,
     replayed_from_delivery_id: replayedFrom,

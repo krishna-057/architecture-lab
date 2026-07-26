@@ -1,5 +1,35 @@
 # Daily Log
 
+## 2026-07-27
+
+Added HookRelay jittered retry policy.
+
+Added:
+- `services/api/src/retry-policy.js` with shared bounded retry jitter calculation.
+- `DELIVERY_RETRY_JITTER_RATIO` configuration, defaulting to `0.2`.
+- Retry contract discovery fields for `jitter_ratio` and `jitter_mode`.
+- Per-delivery schedule fields: `base_delay_seconds`, `jitter_seconds`, and `scheduled_delay_seconds`.
+- PostgreSQL schema columns plus idempotent `alter table` coverage for existing local durable tables.
+- Dashboard display for bounded retry jitter and per-attempt jitter offsets.
+- Workspace validation markers for the retry policy helper, jitter contract, jitter UI, and durable schedule fields.
+- README, architecture, delivery contract, decision, and interview-note updates explaining why bounded jitter is used before tenant-specific retry policies.
+
+Validated the work by running:
+- `node scripts/check-workspace.mjs` from `projects/05-hookrelay`
+- `npm run check -w @hookrelay/api` from `projects/05-hookrelay`
+- `npm run build -w @hookrelay/web` from `projects/05-hookrelay`
+- API syntax checks with `node --check` for `server.js`, `worker.js`, `app.js`, `storage.js`, `delivery-queue.js`, `delivery-runner.js`, `signing.js`, and `retry-policy.js`
+- A local retry policy bounds check for deterministic upper/lower jitter
+- A local Fastify smoke test covering delivery contract jitter fields and generated delivery schedule fields
+- `git diff --check`
+
+Notes:
+- `WORKFLOW.md` still appears to contain binary/corrupted content in the current checkout, so it could not be meaningfully read as Markdown.
+- The retry ladder remains `10s, 30s, 120s, 300s, 900s`; jitter spreads attempts around each base delay without replacing the documented ladder.
+
+Next recommended task:
+- Add HookRelay delivery observability spans.
+
 ## 2026-07-16
 
 Added HookRelay receiver verification example and replay authorization contract.

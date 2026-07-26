@@ -14,6 +14,7 @@ Added:
 - `compose.yaml` with PostgreSQL, Redis, API, and worker services. Local data is bind-mounted under `projects/05-hookrelay/.data/`.
 - `services/api/src/worker.js` as the BullMQ worker boundary for outbound HTTP delivery attempts, retry creation, and dead-letter promotion.
 - `DELIVERY_CONTRACT.md` for idempotency, HMAC headers, receiver verification, retry, replay authorization, and audit rules.
+- `services/api/src/retry-policy.js` for bounded retry jitter shared by the API, worker, and dashboard contract.
 - `scripts/check-workspace.mjs` for dependency-light validation of the scaffold markers.
 
 Run locally:
@@ -69,7 +70,7 @@ Default URLs:
 | `GET /api/deliveries` | List queued delivery attempts and signature previews. |
 | `POST /api/deliveries/:delivery_id/replay` | Create a new queued attempt for an existing event after a replay reason is supplied. |
 
-When `DATABASE_URL` is set, endpoints, events, and delivery attempts are stored in PostgreSQL. When `REDIS_URL` is set, new delivery attempts are also enqueued into BullMQ with the documented delay ladder. Without those variables, the API still runs in in-memory mode for fast local checks.
+When `DATABASE_URL` is set, endpoints, events, and delivery attempts are stored in PostgreSQL. When `REDIS_URL` is set, new delivery attempts are also enqueued into BullMQ with the documented delay ladder plus bounded jitter. Without those variables, the API still runs in in-memory mode for fast local checks.
 
 ## Why This Project Matters
 
@@ -78,5 +79,5 @@ This is a strong backend/system design project because it focuses on real produc
 ## What Is Intentionally Deferred
 
 - Tenant/user ownership and endpoint authentication.
-- Exponential backoff with jitter beyond the fixed first ladder.
+- Tenant-specific retry overrides and endpoint-level rate limits.
 - OpenTelemetry traces and delivery latency dashboards.
