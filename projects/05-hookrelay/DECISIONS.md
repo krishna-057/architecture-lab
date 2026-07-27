@@ -94,3 +94,22 @@ Rejected alternatives:
 
 Follow-up:
 Add OpenTelemetry exporters, trace sampling, endpoint-level latency charts, and receiver failure classification.
+
+## 2026-07-27: Add Endpoint-Level Event Rate Limits
+
+Decision:
+Add endpoint-scoped fixed-window rate limits to `POST /api/events`. Store the policy on each endpoint, use in-process counters by default, and use Redis counters when `REDIS_URL` is configured.
+
+Why:
+- Webhook platforms need a pressure valve before a noisy endpoint or producer can flood ingestion and queue creation.
+- Endpoint scope is the smallest useful boundary because HookRelay does not have tenant users or producer API keys yet.
+- A fixed window is easy to explain, cheap to implement with Redis `INCR` plus expiry, and good enough before per-tenant quota products exist.
+- Returning standard `429`, `Retry-After`, and `X-RateLimit-*` headers gives producers a concrete retry contract.
+
+Rejected alternatives:
+- Token bucket now: smoother under bursty traffic, but more moving parts than needed for the first quota slice.
+- Global API-only limit: protects the service, but does not prove endpoint-specific isolation.
+- Full tenant quota service: important later, but premature before tenant ownership and auth are implemented.
+
+Follow-up:
+Add tenant identity, producer API keys, token-bucket smoothing, and separate read/write/admin quotas.

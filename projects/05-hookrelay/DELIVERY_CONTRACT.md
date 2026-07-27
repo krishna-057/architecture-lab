@@ -7,6 +7,7 @@ HookRelay defines the HTTP contract for endpoint setup, event ingestion, deliver
 | Resource | API path | First-slice storage | Later durable owner |
 | --- | --- | --- | --- |
 | Endpoint | `/api/endpoints` | In-memory by default, PostgreSQL when configured | PostgreSQL `webhook_endpoints` |
+| Endpoint rate limit | `POST /api/events` | In-memory by default, Redis when configured | Redis counters plus tenant quota policy |
 | Event | `/api/events` | In-memory by default, PostgreSQL when configured | PostgreSQL `webhook_events` |
 | Delivery attempt | `/api/deliveries` | In-memory by default, PostgreSQL plus BullMQ when configured | PostgreSQL `delivery_attempts` plus BullMQ jobs |
 | Observability span | `/api/observability/spans` | In-memory by default, PostgreSQL when configured | OpenTelemetry exporter plus query store |
@@ -28,6 +29,36 @@ Producers submit:
 ```
 
 The API accepts one event per `(endpoint_id, idempotency_key)` pair. Duplicate submissions return the existing event and do not enqueue a second delivery attempt.
+
+## Endpoint Rate Limits
+
+Each endpoint has a fixed-window ingestion policy:
+
+```json
+{
+  "rate_limit_per_minute": 60,
+  "rate_limit_window_seconds": 60
+}
+```
+
+The default policy is configured with `ENDPOINT_RATE_LIMIT_PER_MINUTE` and `ENDPOINT_RATE_LIMIT_WINDOW_SECONDS`. `POST /api/endpoints` can override those values for a specific endpoint.
+
+`POST /api/events` checks the endpoint window before accepting an event. Accepted requests include:
+
+```text
+X-RateLimit-Limit
+X-RateLimit-Remaining
+X-RateLimit-Reset
+```
+
+When the endpoint is over limit, the API returns:
+
+```text
+HTTP 429
+Retry-After: <seconds until reset>
+```
+
+The response body includes `endpoint_id`, `limit`, `window_seconds`, `retry_after_seconds`, and `reset_at`. In memory mode, counters are process-local. When `REDIS_URL` is configured, counters use Redis fixed-window keys so multiple API processes share the same limit.
 
 ## Signature Headers
 

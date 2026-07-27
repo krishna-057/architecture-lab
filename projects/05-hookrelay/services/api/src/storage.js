@@ -1,7 +1,12 @@
 import crypto from "node:crypto";
 import pg from "pg";
 import { buildDelivery, nowIso, publicEndpoint } from "./signing.js";
-import { retryDelaysSeconds, retryJitterRatio } from "./config.js";
+import {
+  endpointRateLimitPerMinute,
+  endpointRateLimitWindowSeconds,
+  retryDelaysSeconds,
+  retryJitterRatio
+} from "./config.js";
 
 const { Pool } = pg;
 
@@ -38,6 +43,8 @@ export class MemoryStore {
       target_url: "https://example.test/webhooks/billing",
       status: "active",
       signing_secret: "whsec_demo_local_secret",
+      rate_limit_per_minute: endpointRateLimitPerMinute,
+      rate_limit_window_seconds: endpointRateLimitWindowSeconds,
       created_at: nowIso(),
       updated_at: nowIso()
     };
@@ -58,13 +65,15 @@ export class MemoryStore {
     return this.endpoints.get(endpointId) ?? null;
   }
 
-  async createEndpoint({ name, targetUrl, signingSecret }) {
+  async createEndpoint({ name, targetUrl, signingSecret, rateLimitPerMinute, rateLimitWindowSeconds }) {
     const endpoint = {
       endpoint_id: `endpoint_${crypto.randomUUID()}`,
       name,
       target_url: targetUrl,
       status: "active",
       signing_secret: signingSecret ?? `whsec_${crypto.randomBytes(18).toString("hex")}`,
+      rate_limit_per_minute: rateLimitPerMinute ?? endpointRateLimitPerMinute,
+      rate_limit_window_seconds: rateLimitWindowSeconds ?? endpointRateLimitWindowSeconds,
       created_at: nowIso(),
       updated_at: nowIso()
     };
@@ -159,10 +168,21 @@ export class PostgresStore {
 
   async init() {
     await this.withStartupRetry(() => this.pool.query(
-      `insert into webhook_endpoints (endpoint_id, name, target_url, status, signing_secret)
-       values ($1, $2, $3, $4, $5)
+      `insert into webhook_endpoints (
+         endpoint_id, name, target_url, status, signing_secret,
+         rate_limit_per_minute, rate_limit_window_seconds
+       )
+       values ($1, $2, $3, $4, $5, $6, $7)
        on conflict (endpoint_id) do nothing`,
-      ["endpoint_demo", "Local billing listener", "https://example.test/webhooks/billing", "active", "whsec_demo_local_secret"]
+      [
+        "endpoint_demo",
+        "Local billing listener",
+        "https://example.test/webhooks/billing",
+        "active",
+        "whsec_demo_local_secret",
+        endpointRateLimitPerMinute,
+        endpointRateLimitWindowSeconds
+      ]
     ));
   }
 
@@ -190,7 +210,8 @@ export class PostgresStore {
 
   async listEndpoints() {
     const result = await this.pool.query(
-      `select endpoint_id, name, target_url, status, signing_secret, created_at
+      `select endpoint_id, name, target_url, status, signing_secret,
+              rate_limit_per_minute, rate_limit_window_seconds, created_at
        from webhook_endpoints
        order by created_at desc`
     );
@@ -202,12 +223,23 @@ export class PostgresStore {
     return normalizeRow(result.rows[0]);
   }
 
-  async createEndpoint({ name, targetUrl, signingSecret }) {
+  async createEndpoint({ name, targetUrl, signingSecret, rateLimitPerMinute, rateLimitWindowSeconds }) {
     const result = await this.pool.query(
-      `insert into webhook_endpoints (endpoint_id, name, target_url, status, signing_secret)
-       values ($1, $2, $3, $4, $5)
+      `insert into webhook_endpoints (
+         endpoint_id, name, target_url, status, signing_secret,
+         rate_limit_per_minute, rate_limit_window_seconds
+       )
+       values ($1, $2, $3, $4, $5, $6, $7)
        returning *`,
-      [`endpoint_${crypto.randomUUID()}`, name, targetUrl, "active", signingSecret ?? `whsec_${crypto.randomBytes(18).toString("hex")}`]
+      [
+        `endpoint_${crypto.randomUUID()}`,
+        name,
+        targetUrl,
+        "active",
+        signingSecret ?? `whsec_${crypto.randomBytes(18).toString("hex")}`,
+        rateLimitPerMinute,
+        rateLimitWindowSeconds
+      ]
     );
     return publicEndpoint(normalizeRow(result.rows[0]));
   }

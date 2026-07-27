@@ -1,6 +1,14 @@
 import Fastify from "fastify";
-import { allowedOrigins, getRuntimeConfig, retryDelaysSeconds, retryJitterRatio } from "./config.js";
+import {
+  allowedOrigins,
+  endpointRateLimitPerMinute,
+  endpointRateLimitWindowSeconds,
+  getRuntimeConfig,
+  retryDelaysSeconds,
+  retryJitterRatio
+} from "./config.js";
 import { createTraceId, NoopObservability } from "./observability.js";
+import { MemoryEndpointRateLimiter } from "./rate-limiter.js";
 import { buildReceiverVerificationExample } from "./signing.js";
 
 function validateAbsoluteUrl(value) {
@@ -12,7 +20,17 @@ function validateAbsoluteUrl(value) {
   }
 }
 
-export function createHookRelayApp({ store, queue, observability = new NoopObservability() }) {
+function parsePositiveInteger(value, fallback) {
+  const parsed = Number(value);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+export function createHookRelayApp({
+  store,
+  queue,
+  observability = new NoopObservability(),
+  rateLimiter = new MemoryEndpointRateLimiter()
+}) {
   const app = Fastify({ logger: true });
 
   app.addHook("onRequest", async (request, reply) => {
@@ -34,6 +52,7 @@ export function createHookRelayApp({ store, queue, observability = new NoopObser
     status: "ok",
     worker_mode: getRuntimeConfig().workerMode,
     queue_mode: queue.mode,
+    rate_limit_mode: rateLimiter.mode,
     ...(await store.health())
   }));
 
@@ -41,11 +60,22 @@ export function createHookRelayApp({ store, queue, observability = new NoopObser
     transport: "http_webhook",
     storage_mode: store.mode,
     queue_boundary: queue.mode === "bullmq" ? "bullmq_delivery_job" : "delivery_attempt_record",
+    endpoint_rate_limit: {
+      mode: rateLimiter.mode,
+      scope: "endpoint_id",
+      algorithm: "fixed_window",
+      default_limit: endpointRateLimitPerMinute,
+      default_window_seconds: endpointRateLimitWindowSeconds,
+      enforced_on: "POST /api/events",
+      exceeded_status: 429,
+      retry_after_header: "Retry-After"
+    },
     observability: {
       mode: observability.mode,
       span_endpoint: "/api/observability/spans",
       traced_operations: [
         "hookrelay.event.ingest",
+        "hookrelay.endpoint.rate_limit",
         "hookrelay.delivery.enqueue",
         "hookrelay.delivery.replay",
         "hookrelay.delivery.process",
@@ -97,6 +127,8 @@ export function createHookRelayApp({ store, queue, observability = new NoopObser
     const body = request.body ?? {};
     const name = String(body.name ?? "").trim();
     const targetUrl = String(body.target_url ?? "").trim();
+    const rateLimitPerMinute = parsePositiveInteger(body.rate_limit_per_minute, endpointRateLimitPerMinute);
+    const rateLimitWindowSeconds = parsePositiveInteger(body.rate_limit_window_seconds, endpointRateLimitWindowSeconds);
 
     if (!name || !targetUrl) {
       return reply.status(400).send({ error: "name and target_url are required" });
@@ -109,7 +141,9 @@ export function createHookRelayApp({ store, queue, observability = new NoopObser
     const endpoint = await store.createEndpoint({
       name,
       targetUrl,
-      signingSecret: body.signing_secret ? String(body.signing_secret) : null
+      signingSecret: body.signing_secret ? String(body.signing_secret) : null,
+      rateLimitPerMinute,
+      rateLimitWindowSeconds
     });
     return reply.status(201).send(endpoint);
   });
@@ -132,6 +166,46 @@ export function createHookRelayApp({ store, queue, observability = new NoopObser
     }
 
     const traceId = createTraceId();
+    const rateLimit = await observability.traceSpan(
+      {
+        name: "hookrelay.endpoint.rate_limit",
+        traceId,
+        endpointId,
+        attributes: {
+          rate_limit_mode: rateLimiter.mode,
+          limit: endpoint.rate_limit_per_minute,
+          window_seconds: endpoint.rate_limit_window_seconds
+        }
+      },
+      async (span) => {
+        const check = await rateLimiter.check({
+          endpointId,
+          limit: endpoint.rate_limit_per_minute,
+          windowSeconds: endpoint.rate_limit_window_seconds
+        });
+        span.attributes.allowed = check.allowed;
+        span.attributes.remaining = check.remaining;
+        span.attributes.reset_at = check.reset_at;
+        return check;
+      }
+    );
+
+    reply.header("X-RateLimit-Limit", String(rateLimit.limit));
+    reply.header("X-RateLimit-Remaining", String(rateLimit.remaining));
+    reply.header("X-RateLimit-Reset", rateLimit.reset_at);
+
+    if (!rateLimit.allowed) {
+      reply.header("Retry-After", String(rateLimit.retry_after_seconds));
+      return reply.status(429).send({
+        error: "Endpoint rate limit exceeded.",
+        endpoint_id: endpointId,
+        limit: rateLimit.limit,
+        window_seconds: rateLimit.window_seconds,
+        retry_after_seconds: rateLimit.retry_after_seconds,
+        reset_at: rateLimit.reset_at
+      });
+    }
+
     const result = await observability.traceSpan(
       {
         name: "hookrelay.event.ingest",
@@ -141,6 +215,7 @@ export function createHookRelayApp({ store, queue, observability = new NoopObser
           event_type: eventType,
           idempotency_key: idempotencyKey,
           queue_mode: queue.mode,
+          rate_limit_remaining: rateLimit.remaining,
           storage_mode: store.mode
         }
       },
@@ -258,6 +333,7 @@ export function createHookRelayApp({ store, queue, observability = new NoopObser
     await queue.close();
     await store.close();
     await observability.close();
+    await rateLimiter.close();
   });
 
   return app;

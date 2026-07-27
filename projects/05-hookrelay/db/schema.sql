@@ -4,6 +4,8 @@ create table if not exists webhook_endpoints (
   target_url text not null,
   status text not null default 'active' check (status in ('active', 'disabled')),
   signing_secret text not null,
+  rate_limit_per_minute integer not null default 60 check (rate_limit_per_minute > 0),
+  rate_limit_window_seconds integer not null default 60 check (rate_limit_window_seconds > 0),
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
@@ -63,6 +65,10 @@ alter table delivery_attempts
   add column if not exists scheduled_delay_seconds integer not null default 0,
   add column if not exists replay_reason text,
   add column if not exists replay_requested_by text;
+
+alter table webhook_endpoints
+  add column if not exists rate_limit_per_minute integer not null default 60,
+  add column if not exists rate_limit_window_seconds integer not null default 60;
 
 create index if not exists idx_webhook_events_endpoint_created
   on webhook_events(endpoint_id, created_at desc);

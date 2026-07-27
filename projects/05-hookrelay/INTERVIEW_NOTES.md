@@ -53,3 +53,11 @@ Observability should attach one trace across event ingestion, job enqueue, each 
 - In-memory mode keeps local checks fast. PostgreSQL mode persists spans so separate API and worker processes can contribute to the same recent trace feed.
 - The span names are intentionally domain-specific (`hookrelay.delivery.process`, `hookrelay.delivery.http_request`) so an interview discussion can move from product behavior to OpenTelemetry mapping naturally.
 - Full OpenTelemetry export is deferred until there is a clear collector, sampling, retention, and dashboard choice.
+
+## Endpoint Rate Limit Talking Points
+
+- Rate limiting runs before event insertion and queue creation, which protects the request path and the worker backlog from a noisy endpoint.
+- The first scope is `endpoint_id` because HookRelay does not have tenants or producer API keys yet. That is a deliberate intermediate boundary, not the final quota model.
+- In-memory counters keep the scaffold runnable without Redis. Redis fixed-window counters become active when `REDIS_URL` is configured, so multiple API instances share the same window.
+- The API returns `429`, `Retry-After`, and `X-RateLimit-*` headers so producers have a clear backoff contract.
+- Token buckets, tenant quotas, and producer-specific limits are deferred until identity and ownership exist.

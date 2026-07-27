@@ -35,9 +35,10 @@ API and worker operations also write provider-neutral observability spans. In me
 | Fastify API | Endpoint setup, event ingestion, idempotency handling, delivery attempt creation, replay enqueueing, and contract discovery. |
 | Next.js web app | Developer/operator console for creating endpoints, submitting events, replaying deliveries, and inspecting signatures. |
 | PostgreSQL | Optional durable owner for endpoints, events, idempotency uniqueness, delivery attempt state, replay audit fields, and dead-letter status. |
-| BullMQ / Redis | Optional durable queue and jittered delayed retry scheduler for outbound delivery jobs. |
+| BullMQ / Redis | Optional durable queue, jittered delayed retry scheduler, and endpoint rate-limit counter owner. |
 | Worker process | Sends signed outbound HTTP requests, records responses, schedules retries, and marks dead-letter failures. |
 | Observability span log | Captures event ingestion, enqueue, replay, worker processing, and outbound HTTP timing as local JSON spans before adding a vendor exporter. |
+| Endpoint rate limiter | Enforces fixed-window event ingestion limits per endpoint before accepting new producer events. |
 | Receiver verification example | Shows receivers how to rebuild `timestamp.rawBody`, compute HMAC-SHA256, and enforce a timestamp tolerance. |
 | Replay authorization contract | Requires operator replay reasons before manual replay creates a new delivery attempt. |
 
@@ -50,9 +51,9 @@ API and worker operations also write provider-neutral observability spans. In me
 | `GET /api/receiver-verification-example` | Return sample receiver verification inputs, required headers, and Node.js digest expression. |
 | `GET /api/observability/spans` | Return recent provider-neutral spans with trace ids, span ids, timing, status, and delivery attributes. |
 | `GET /api/endpoints` | List webhook endpoints without exposing full signing secrets. |
-| `POST /api/endpoints` | Create a webhook target and signing secret. |
+| `POST /api/endpoints` | Create a webhook target, signing secret, and endpoint rate-limit policy. |
 | `GET /api/events` | List accepted producer events. |
-| `POST /api/events` | Accept one event per endpoint/idempotency key and create the first delivery attempt. |
+| `POST /api/events` | Check the endpoint rate limit, accept one event per endpoint/idempotency key, and create the first delivery attempt. |
 | `GET /api/deliveries` | List delivery attempts, statuses, replay audit fields, and signature previews. |
 | `POST /api/deliveries/:delivery_id/replay` | Require replay intent, create a new queued attempt for an existing event, and enqueue it when BullMQ is configured. |
 
@@ -61,6 +62,12 @@ API and worker operations also write provider-neutral observability spans. In me
 Producer retries are keyed by `(endpoint_id, idempotency_key)`. PostgreSQL enforces that pair with a unique constraint, and in-memory mode mirrors the same rule with a map.
 
 Duplicate ingestion returns the existing event and its delivery attempts. It does not create another attempt.
+
+## Endpoint Rate Limits
+
+Each endpoint has a fixed-window event ingestion limit. The default is `60` events per `60` seconds, configurable through `ENDPOINT_RATE_LIMIT_PER_MINUTE` and `ENDPOINT_RATE_LIMIT_WINDOW_SECONDS`, and endpoint creation can override both values.
+
+The API checks the endpoint limit before inserting a new event. In memory mode, the limiter uses process-local counters for quick checks. When `REDIS_URL` is configured, the limiter uses Redis `INCR` plus expiry keys, which lets multiple API processes share the same endpoint window. Exceeded limits return `429` with `Retry-After`, `X-RateLimit-Limit`, `X-RateLimit-Remaining`, and `X-RateLimit-Reset`.
 
 ## Signing And Receiver Verification
 
@@ -104,6 +111,6 @@ Each span has `trace_id`, `span_id`, optional parent span, delivery/event/endpoi
 
 - Tenant and endpoint ownership.
 - Role-based replay authorization.
-- Tenant-specific retry overrides and rate limits.
+- Tenant-specific retry overrides and multi-dimensional producer quotas.
 - Receiver SDKs.
 - OpenTelemetry exporters, trace sampling, and long-retention latency dashboards.

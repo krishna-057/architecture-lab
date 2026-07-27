@@ -2,6 +2,31 @@
 
 ## 2026-07-27
 
+Added HookRelay endpoint-level rate limits.
+
+Added:
+- `services/api/src/rate-limiter.js` with endpoint-scoped fixed-window counters.
+- In-memory rate limiting for dependency-light local checks and Redis-backed counters when `REDIS_URL` is configured.
+- Endpoint policy fields: `rate_limit_per_minute` and `rate_limit_window_seconds`.
+- `POST /api/events` enforcement before event insertion and queue creation, returning `429`, `Retry-After`, and `X-RateLimit-*` headers when an endpoint is over limit.
+- Delivery contract discovery fields for the endpoint rate-limit mode, scope, algorithm, defaults, and retry header.
+- Dashboard endpoint creation inputs and endpoint/contract rate-limit readouts.
+- PostgreSQL schema columns for endpoint rate-limit policy plus docs, validation markers, decision notes, and interview talking points.
+
+Validated the work by running:
+- `node scripts/check-workspace.mjs` from `projects/05-hookrelay`
+- `npm run check -w @hookrelay/api` from `projects/05-hookrelay`
+- `npm run build -w @hookrelay/web` from `projects/05-hookrelay`
+- A local Fastify smoke test covering endpoint creation with a one-event window, accepted first event, blocked second event with `429`, `Retry-After`, `X-RateLimit-*`, and a `hookrelay.endpoint.rate_limit` span
+- `git diff --check`
+
+Notes:
+- `WORKFLOW.md` still appears to contain binary/corrupted content in the current checkout, so it could not be meaningfully read as Markdown.
+- Endpoint scope is intentionally the first quota boundary because HookRelay does not yet have tenant ownership or producer API keys.
+
+Next recommended task:
+- Add HookRelay producer API keys and endpoint ownership.
+
 Added HookRelay delivery observability spans.
 
 Added:

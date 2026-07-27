@@ -8,6 +8,8 @@ type Endpoint = {
   target_url: string;
   status: "active";
   created_at: string;
+  rate_limit_per_minute: number;
+  rate_limit_window_seconds: number;
   signing_secret_preview: string;
 };
 
@@ -61,6 +63,16 @@ type DeliveryContract = {
   transport: string;
   storage_mode: string;
   queue_boundary: string;
+  endpoint_rate_limit: {
+    mode: string;
+    scope: string;
+    algorithm: string;
+    default_limit: number;
+    default_window_seconds: number;
+    enforced_on: string;
+    exceeded_status: number;
+    retry_after_header: string;
+  };
   observability: {
     mode: string;
     span_endpoint: string;
@@ -149,6 +161,8 @@ export default function HookRelayHome() {
   const [spans, setSpans] = useState<ObservabilitySpan[]>([]);
   const [endpointName, setEndpointName] = useState("Billing listener");
   const [targetUrl, setTargetUrl] = useState("https://example.test/webhooks/billing");
+  const [rateLimitPerMinute, setRateLimitPerMinute] = useState(60);
+  const [rateLimitWindowSeconds, setRateLimitWindowSeconds] = useState(60);
   const [selectedEndpointId, setSelectedEndpointId] = useState("endpoint_demo");
   const [eventType, setEventType] = useState("invoice.paid");
   const [idempotencyKey, setIdempotencyKey] = useState("invoice-1001-paid");
@@ -187,7 +201,12 @@ export default function HookRelayHome() {
     try {
       const endpoint = await requestJson<Endpoint>("/api/endpoints", {
         method: "POST",
-        body: JSON.stringify({ name: endpointName, target_url: targetUrl })
+        body: JSON.stringify({
+          name: endpointName,
+          target_url: targetUrl,
+          rate_limit_per_minute: rateLimitPerMinute,
+          rate_limit_window_seconds: rateLimitWindowSeconds
+        })
       });
       setEndpoints((current) => [endpoint, ...current]);
       setSelectedEndpointId(endpoint.endpoint_id);
@@ -282,6 +301,10 @@ export default function HookRelayHome() {
             <span>Spans</span>
             <strong>{spans.length}</strong>
           </div>
+          <div>
+            <span>Rate limit</span>
+            <strong>{selectedEndpoint?.rate_limit_per_minute ?? contract?.endpoint_rate_limit.default_limit ?? 0}/min</strong>
+          </div>
         </div>
 
         <section className="form-grid">
@@ -297,6 +320,24 @@ export default function HookRelayHome() {
             <label>
               <span>Target URL</span>
               <input value={targetUrl} onChange={(event) => setTargetUrl(event.target.value)} />
+            </label>
+            <label>
+              <span>Events Per Window</span>
+              <input
+                min={1}
+                type="number"
+                value={rateLimitPerMinute}
+                onChange={(event) => setRateLimitPerMinute(Number(event.target.value))}
+              />
+            </label>
+            <label>
+              <span>Window Seconds</span>
+              <input
+                min={1}
+                type="number"
+                value={rateLimitWindowSeconds}
+                onChange={(event) => setRateLimitWindowSeconds(Number(event.target.value))}
+              />
             </label>
             <button type="submit">Create Endpoint</button>
           </form>
@@ -408,6 +449,14 @@ export default function HookRelayHome() {
               <dd>{contract?.replay_authorization.mode ?? "unknown"}</dd>
             </div>
             <div>
+              <dt>Rate Limit</dt>
+              <dd>
+                {contract
+                  ? `${contract.endpoint_rate_limit.default_limit}/${contract.endpoint_rate_limit.default_window_seconds}s ${contract.endpoint_rate_limit.algorithm}`
+                  : "unknown"}
+              </dd>
+            </div>
+            <div>
               <dt>Observability</dt>
               <dd>{contract?.observability.mode ?? observabilityMode}</dd>
             </div>
@@ -497,6 +546,9 @@ export default function HookRelayHome() {
               <article className="endpoint-row" key={endpoint.endpoint_id}>
                 <strong>{endpoint.name}</strong>
                 <span>{endpoint.target_url}</span>
+                <small>
+                  {endpoint.rate_limit_per_minute}/{endpoint.rate_limit_window_seconds}s
+                </small>
                 <small>{endpoint.signing_secret_preview}</small>
               </article>
             ))}

@@ -16,6 +16,7 @@ const requiredFiles = [
   "services/api/src/app.js",
   "services/api/src/storage.js",
   "services/api/src/observability.js",
+  "services/api/src/rate-limiter.js",
   "services/api/src/retry-policy.js",
   "services/api/src/delivery-queue.js",
   "services/api/src/delivery-runner.js",
@@ -52,6 +53,7 @@ const apiFile = [
   "services/api/src/app.js",
   "services/api/src/storage.js",
   "services/api/src/observability.js",
+  "services/api/src/rate-limiter.js",
   "services/api/src/retry-policy.js",
   "services/api/src/delivery-queue.js",
   "services/api/src/delivery-runner.js",
@@ -67,6 +69,10 @@ for (const marker of [
   "HookRelay-Signature",
   "trace_id",
   "span_id",
+  "Endpoint rate limit exceeded",
+  "hookrelay.endpoint.rate_limit",
+  "rate_limit_per_minute",
+  "Retry-After",
   "hookrelay.delivery.process",
   "buildReceiverVerificationExample",
   "idempotency_key",
@@ -94,6 +100,8 @@ for (const marker of [
   "/api/delivery-contract",
   "/api/receiver-verification-example",
   "/api/observability/spans",
+  "Rate Limit",
+  "rate_limit_per_minute",
   "Idempotency Key",
   "Observability",
   "Receiver Verification",
@@ -116,6 +124,7 @@ for (const marker of [
   "Replay Authorization",
   "Receiver Verification",
   "Observability",
+  "Rate Limit",
   "idempotency_key",
   "HookRelay-Signature"
 ]) {
@@ -136,7 +145,8 @@ for (const marker of [
   "base_delay_seconds",
   "jitter_seconds",
   "scheduled_delay_seconds",
-  "delivery_observability_spans"
+  "delivery_observability_spans",
+  "rate_limit_per_minute"
 ]) {
   if (!schema.includes(marker)) {
     throw new Error(`PostgreSQL schema is missing required marker: ${marker}`);

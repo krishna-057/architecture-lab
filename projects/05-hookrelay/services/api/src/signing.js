@@ -1,4 +1,5 @@
 import crypto from "node:crypto";
+import { endpointRateLimitPerMinute, endpointRateLimitWindowSeconds } from "./config.js";
 import { calculateRetrySchedule } from "./retry-policy.js";
 
 export function nowIso() {
@@ -12,6 +13,8 @@ export function publicEndpoint(endpoint) {
     target_url: endpoint.target_url,
     status: endpoint.status,
     created_at: endpoint.created_at,
+    rate_limit_per_minute: endpoint.rate_limit_per_minute ?? endpointRateLimitPerMinute,
+    rate_limit_window_seconds: endpoint.rate_limit_window_seconds ?? endpointRateLimitWindowSeconds,
     signing_secret_preview: `${endpoint.signing_secret.slice(0, 7)}...`
   };
 }
