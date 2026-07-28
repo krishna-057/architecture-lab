@@ -4,6 +4,7 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 
 type Endpoint = {
   endpoint_id: string;
+  owner_id: string;
   name: string;
   target_url: string;
   status: "active";
@@ -63,6 +64,12 @@ type DeliveryContract = {
   transport: string;
   storage_mode: string;
   queue_boundary: string;
+  producer_authentication: {
+    mode: string;
+    accepted_headers: string[];
+    owner_rule: string;
+    demo_owner_id: string;
+  };
   endpoint_rate_limit: {
     mode: string;
     scope: string;
@@ -123,7 +130,18 @@ type ObservabilityResponse = {
   spans: ObservabilitySpan[];
 };
 
+type ProducerApiKey = {
+  key_id: string;
+  owner_id: string;
+  name: string;
+  status: "active";
+  key_preview: string;
+  created_at: string;
+  api_key?: string;
+};
+
 const apiBaseUrl = (process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8400").replace(/\/$/, "");
+const defaultProducerApiKey = process.env.NEXT_PUBLIC_HOOKRELAY_DEMO_PRODUCER_API_KEY ?? "hrp_demo_local_key";
 
 async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
   const hasBody = Boolean(init?.body);
@@ -157,6 +175,10 @@ export default function HookRelayHome() {
   const [endpoints, setEndpoints] = useState<Endpoint[]>([]);
   const [events, setEvents] = useState<DeliveryEvent[]>([]);
   const [deliveries, setDeliveries] = useState<DeliveryAttempt[]>([]);
+  const [producerKeys, setProducerKeys] = useState<ProducerApiKey[]>([]);
+  const [producerApiKey, setProducerApiKey] = useState(defaultProducerApiKey);
+  const [newKeyOwnerId, setNewKeyOwnerId] = useState("owner_demo");
+  const [newKeyName, setNewKeyName] = useState("Local dashboard producer");
   const [observabilityMode, setObservabilityMode] = useState("loading");
   const [spans, setSpans] = useState<ObservabilitySpan[]>([]);
   const [endpointName, setEndpointName] = useState("Billing listener");
@@ -176,9 +198,18 @@ export default function HookRelayHome() {
   const duplicateKeys = useMemo(() => new Set(events.map((event) => event.idempotency_key)), [events]);
 
   async function refreshAll() {
-    const [nextContract, nextVerificationExample, nextEndpoints, nextEvents, nextDeliveries, nextObservability] = await Promise.all([
+    const [
+      nextContract,
+      nextVerificationExample,
+      nextProducerKeys,
+      nextEndpoints,
+      nextEvents,
+      nextDeliveries,
+      nextObservability
+    ] = await Promise.all([
       requestJson<DeliveryContract>("/api/delivery-contract"),
       requestJson<ReceiverVerificationExample>("/api/receiver-verification-example"),
+      requestJson<ProducerApiKey[]>("/api/producer-api-keys"),
       requestJson<Endpoint[]>("/api/endpoints"),
       requestJson<DeliveryEvent[]>("/api/events"),
       requestJson<DeliveryAttempt[]>("/api/deliveries"),
@@ -187,6 +218,7 @@ export default function HookRelayHome() {
 
     setContract(nextContract);
     setVerificationExample(nextVerificationExample);
+    setProducerKeys(nextProducerKeys);
     setEndpoints(nextEndpoints);
     setEvents(nextEvents);
     setDeliveries(nextDeliveries);
@@ -201,6 +233,7 @@ export default function HookRelayHome() {
     try {
       const endpoint = await requestJson<Endpoint>("/api/endpoints", {
         method: "POST",
+        headers: { Authorization: `Bearer ${producerApiKey}` },
         body: JSON.stringify({
           name: endpointName,
           target_url: targetUrl,
@@ -227,6 +260,7 @@ export default function HookRelayHome() {
       const payload = JSON.parse(payloadText) as Record<string, unknown>;
       const response = await requestJson<IngestResponse>("/api/events", {
         method: "POST",
+        headers: { Authorization: `Bearer ${producerApiKey}` },
         body: JSON.stringify({
           endpoint_id: selectedEndpoint.endpoint_id,
           event_type: eventType,
@@ -242,6 +276,23 @@ export default function HookRelayHome() {
       );
     } catch (error) {
       setStatusMessage(error instanceof Error ? error.message : "Event ingestion failed.");
+    }
+  }
+
+  async function createProducerKey(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    try {
+      const key = await requestJson<ProducerApiKey>("/api/producer-api-keys", {
+        method: "POST",
+        body: JSON.stringify({ owner_id: newKeyOwnerId, name: newKeyName })
+      });
+      setProducerKeys((current) => [key, ...current]);
+      if (key.api_key) {
+        setProducerApiKey(key.api_key);
+      }
+      setStatusMessage("Producer API key created. The full key is shown once in the API response and loaded into this dashboard.");
+    } catch (error) {
+      setStatusMessage(error instanceof Error ? error.message : "Producer key creation failed.");
     }
   }
 
@@ -305,9 +356,33 @@ export default function HookRelayHome() {
             <span>Rate limit</span>
             <strong>{selectedEndpoint?.rate_limit_per_minute ?? contract?.endpoint_rate_limit.default_limit ?? 0}/min</strong>
           </div>
+          <div>
+            <span>API keys</span>
+            <strong>{producerKeys.length}</strong>
+          </div>
         </div>
 
         <section className="form-grid">
+          <form className="form-panel" onSubmit={createProducerKey}>
+            <div className="section-header">
+              <span>Producer Auth</span>
+              <strong>{contract?.producer_authentication.mode ?? "loading"}</strong>
+            </div>
+            <label>
+              <span>Active API Key</span>
+              <input value={producerApiKey} onChange={(event) => setProducerApiKey(event.target.value)} />
+            </label>
+            <label>
+              <span>Owner ID</span>
+              <input value={newKeyOwnerId} onChange={(event) => setNewKeyOwnerId(event.target.value)} />
+            </label>
+            <label>
+              <span>Key Name</span>
+              <input value={newKeyName} onChange={(event) => setNewKeyName(event.target.value)} />
+            </label>
+            <button type="submit">Create API Key</button>
+          </form>
+
           <form className="form-panel" onSubmit={createEndpoint}>
             <div className="section-header">
               <span>Endpoint</span>
@@ -441,6 +516,10 @@ export default function HookRelayHome() {
               <dd>{contract?.idempotency_key ?? "unknown"}</dd>
             </div>
             <div>
+              <dt>Producer Auth</dt>
+              <dd>{contract?.producer_authentication.owner_rule ?? "unknown"}</dd>
+            </div>
+            <div>
               <dt>Signing</dt>
               <dd>{contract?.signature_algorithm ?? "unknown"}</dd>
             </div>
@@ -546,10 +625,27 @@ export default function HookRelayHome() {
               <article className="endpoint-row" key={endpoint.endpoint_id}>
                 <strong>{endpoint.name}</strong>
                 <span>{endpoint.target_url}</span>
+                <small>{endpoint.owner_id}</small>
                 <small>
                   {endpoint.rate_limit_per_minute}/{endpoint.rate_limit_window_seconds}s
                 </small>
                 <small>{endpoint.signing_secret_preview}</small>
+              </article>
+            ))}
+          </div>
+        </section>
+
+        <section className="panel-block">
+          <div className="section-header">
+            <span>Producer Keys</span>
+            <strong>{producerKeys.length}</strong>
+          </div>
+          <div className="endpoint-list">
+            {producerKeys.map((key) => (
+              <article className="endpoint-row" key={key.key_id}>
+                <strong>{key.name}</strong>
+                <span>{key.owner_id}</span>
+                <small>{key.key_preview}</small>
               </article>
             ))}
           </div>

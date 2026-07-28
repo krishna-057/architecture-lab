@@ -32,13 +32,14 @@ API and worker operations also write provider-neutral observability spans. In me
 
 | Component | Responsibility |
 | --- | --- |
-| Fastify API | Endpoint setup, event ingestion, idempotency handling, delivery attempt creation, replay enqueueing, and contract discovery. |
+| Fastify API | Producer key bootstrap, endpoint setup, event ingestion, idempotency handling, delivery attempt creation, replay enqueueing, and contract discovery. |
 | Next.js web app | Developer/operator console for creating endpoints, submitting events, replaying deliveries, and inspecting signatures. |
 | PostgreSQL | Optional durable owner for endpoints, events, idempotency uniqueness, delivery attempt state, replay audit fields, and dead-letter status. |
 | BullMQ / Redis | Optional durable queue, jittered delayed retry scheduler, and endpoint rate-limit counter owner. |
 | Worker process | Sends signed outbound HTTP requests, records responses, schedules retries, and marks dead-letter failures. |
 | Observability span log | Captures event ingestion, enqueue, replay, worker processing, and outbound HTTP timing as local JSON spans before adding a vendor exporter. |
 | Endpoint rate limiter | Enforces fixed-window event ingestion limits per endpoint before accepting new producer events. |
+| Producer API keys | Authenticate producers and bind endpoint creation/event ingestion to an `owner_id` before a full tenant model exists. |
 | Receiver verification example | Shows receivers how to rebuild `timestamp.rawBody`, compute HMAC-SHA256, and enforce a timestamp tolerance. |
 | Replay authorization contract | Requires operator replay reasons before manual replay creates a new delivery attempt. |
 
@@ -50,10 +51,12 @@ API and worker operations also write provider-neutral observability spans. In me
 | `GET /api/delivery-contract` | Discover idempotency, signature, receiver verification, retry, replay authorization, queue, and storage rules. |
 | `GET /api/receiver-verification-example` | Return sample receiver verification inputs, required headers, and Node.js digest expression. |
 | `GET /api/observability/spans` | Return recent provider-neutral spans with trace ids, span ids, timing, status, and delivery attributes. |
+| `GET /api/producer-api-keys` | List producer key previews, owners, and status without exposing full secrets. |
+| `POST /api/producer-api-keys` | Create a local producer key and return the full secret once for development bootstrap. |
 | `GET /api/endpoints` | List webhook endpoints without exposing full signing secrets. |
-| `POST /api/endpoints` | Create a webhook target, signing secret, and endpoint rate-limit policy. |
+| `POST /api/endpoints` | Authenticate a producer key, then create a webhook target, signing secret, owner id, and endpoint rate-limit policy. |
 | `GET /api/events` | List accepted producer events. |
-| `POST /api/events` | Check the endpoint rate limit, accept one event per endpoint/idempotency key, and create the first delivery attempt. |
+| `POST /api/events` | Authenticate the producer key, require owner match, check the endpoint rate limit, accept one event per endpoint/idempotency key, and create the first delivery attempt. |
 | `GET /api/deliveries` | List delivery attempts, statuses, replay audit fields, and signature previews. |
 | `POST /api/deliveries/:delivery_id/replay` | Require replay intent, create a new queued attempt for an existing event, and enqueue it when BullMQ is configured. |
 
@@ -62,6 +65,17 @@ API and worker operations also write provider-neutral observability spans. In me
 Producer retries are keyed by `(endpoint_id, idempotency_key)`. PostgreSQL enforces that pair with a unique constraint, and in-memory mode mirrors the same rule with a map.
 
 Duplicate ingestion returns the existing event and its delivery attempts. It does not create another attempt.
+
+## Producer Authentication And Ownership
+
+Producer API keys are scoped by `owner_id`. Endpoints store the owner that created them, and event ingestion requires the producer key owner to match the endpoint owner before rate limiting or insertion runs. The API accepts either:
+
+```text
+Authorization: Bearer <api_key>
+X-HookRelay-API-Key: <api_key>
+```
+
+The first implementation stores only SHA-256 key hashes plus key previews. The full key is returned once from `POST /api/producer-api-keys`, which is a local bootstrap/admin endpoint for this portfolio slice. Full tenant users, RBAC, key rotation, audit approvals, and scoped producer permissions remain deferred.
 
 ## Endpoint Rate Limits
 
@@ -109,7 +123,7 @@ Each span has `trace_id`, `span_id`, optional parent span, delivery/event/endpoi
 
 ## Deferred Work
 
-- Tenant and endpoint ownership.
+- Full tenant user accounts and RBAC.
 - Role-based replay authorization.
 - Tenant-specific retry overrides and multi-dimensional producer quotas.
 - Receiver SDKs.

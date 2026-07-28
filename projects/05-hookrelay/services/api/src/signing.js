@@ -9,6 +9,7 @@ export function nowIso() {
 export function publicEndpoint(endpoint) {
   return {
     endpoint_id: endpoint.endpoint_id,
+    owner_id: endpoint.owner_id,
     name: endpoint.name,
     target_url: endpoint.target_url,
     status: endpoint.status,

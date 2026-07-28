@@ -113,3 +113,22 @@ Rejected alternatives:
 
 Follow-up:
 Add tenant identity, producer API keys, token-bucket smoothing, and separate read/write/admin quotas.
+
+## 2026-07-28: Add Producer API Keys And Endpoint Ownership
+
+Decision:
+Add producer API keys with hashed storage and bind endpoints to an `owner_id`. Require an active producer key for endpoint creation and event ingestion, and require the key owner to match the endpoint owner before accepting events.
+
+Why:
+- Endpoint-level rate limits are more meaningful once an endpoint belongs to an owner instead of being globally writable.
+- Producer API keys are the smallest useful authentication boundary before adding tenant users, login sessions, teams, and RBAC.
+- Hashing keys and returning only previews after creation matches the operational shape of API-key systems without bringing in a secret manager yet.
+- Checking ownership before rate limiting and insertion prevents a producer from consuming another owner's endpoint quota or creating delivery attempts.
+
+Rejected alternatives:
+- Full user accounts and OAuth now: correct later, but too much identity work for this delivery-focused lab slice.
+- Store plaintext API keys: easier for demos, but it teaches the wrong production habit.
+- Protect only event ingestion: endpoint creation also needs ownership, otherwise local users can create unowned endpoints that do not fit the later tenant model.
+
+Follow-up:
+Add key rotation, disabled/revoked key flows, tenant users, team membership, and role-based replay authorization.

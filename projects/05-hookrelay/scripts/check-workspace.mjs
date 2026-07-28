@@ -16,6 +16,7 @@ const requiredFiles = [
   "services/api/src/app.js",
   "services/api/src/storage.js",
   "services/api/src/observability.js",
+  "services/api/src/producer-auth.js",
   "services/api/src/rate-limiter.js",
   "services/api/src/retry-policy.js",
   "services/api/src/delivery-queue.js",
@@ -53,6 +54,7 @@ const apiFile = [
   "services/api/src/app.js",
   "services/api/src/storage.js",
   "services/api/src/observability.js",
+  "services/api/src/producer-auth.js",
   "services/api/src/rate-limiter.js",
   "services/api/src/retry-policy.js",
   "services/api/src/delivery-queue.js",
@@ -66,7 +68,12 @@ for (const marker of [
   "/api/delivery-contract",
   "/api/receiver-verification-example",
   "/api/observability/spans",
+  "/api/producer-api-keys",
   "HookRelay-Signature",
+  "Producer API key is required",
+  "owner_scoped_api_key",
+  "owner_id",
+  "hashProducerApiKey",
   "trace_id",
   "span_id",
   "Endpoint rate limit exceeded",
@@ -100,6 +107,9 @@ for (const marker of [
   "/api/delivery-contract",
   "/api/receiver-verification-example",
   "/api/observability/spans",
+  "/api/producer-api-keys",
+  "Producer Auth",
+  "owner_id",
   "Rate Limit",
   "rate_limit_per_minute",
   "Idempotency Key",
@@ -125,6 +135,8 @@ for (const marker of [
   "Receiver Verification",
   "Observability",
   "Rate Limit",
+  "Producer API Key",
+  "owner_id",
   "idempotency_key",
   "HookRelay-Signature"
 ]) {
@@ -146,6 +158,8 @@ for (const marker of [
   "jitter_seconds",
   "scheduled_delay_seconds",
   "delivery_observability_spans",
+  "producer_api_keys",
+  "owner_id",
   "rate_limit_per_minute"
 ]) {
   if (!schema.includes(marker)) {

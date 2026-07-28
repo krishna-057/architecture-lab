@@ -1,5 +1,17 @@
+create table if not exists producer_api_keys (
+  key_id text primary key,
+  owner_id text not null,
+  name text not null,
+  key_hash text not null unique,
+  key_preview text not null,
+  status text not null default 'active' check (status in ('active', 'disabled')),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
 create table if not exists webhook_endpoints (
   endpoint_id text primary key,
+  owner_id text not null default 'owner_demo',
   name text not null,
   target_url text not null,
   status text not null default 'active' check (status in ('active', 'disabled')),
@@ -67,11 +79,15 @@ alter table delivery_attempts
   add column if not exists replay_requested_by text;
 
 alter table webhook_endpoints
+  add column if not exists owner_id text not null default 'owner_demo',
   add column if not exists rate_limit_per_minute integer not null default 60,
   add column if not exists rate_limit_window_seconds integer not null default 60;
 
 create index if not exists idx_webhook_events_endpoint_created
   on webhook_events(endpoint_id, created_at desc);
+
+create index if not exists idx_producer_api_keys_owner_created
+  on producer_api_keys(owner_id, created_at desc);
 
 create index if not exists idx_delivery_attempts_event_created
   on delivery_attempts(event_id, created_at desc);

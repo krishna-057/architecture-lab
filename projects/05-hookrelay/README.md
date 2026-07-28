@@ -17,6 +17,7 @@ Added:
 - `services/api/src/retry-policy.js` for bounded retry jitter shared by the API, worker, and dashboard contract.
 - `services/api/src/observability.js` for bounded local delivery spans, with PostgreSQL span persistence when `DATABASE_URL` is configured.
 - `services/api/src/rate-limiter.js` for endpoint-scoped fixed-window event ingestion limits, backed by Redis when `REDIS_URL` is configured.
+- `services/api/src/producer-auth.js` for producer API-key hashing, previews, and bearer/header extraction.
 - `scripts/check-workspace.mjs` for dependency-light validation of the scaffold markers.
 
 Run locally:
@@ -66,14 +67,16 @@ Default URLs:
 | `GET /api/delivery-contract` | Discover retry, signature, replay, and idempotency rules. |
 | `GET /api/receiver-verification-example` | Show a receiver-side HMAC verification example with sample payload and headers. |
 | `GET /api/observability/spans` | List recent event ingestion, enqueue, replay, worker, and outbound HTTP spans. |
+| `GET /api/producer-api-keys` | List producer API key previews and owners. |
+| `POST /api/producer-api-keys` | Create a local producer API key and return the full secret once. |
 | `GET /api/endpoints` | List webhook endpoints. |
-| `POST /api/endpoints` | Create a webhook endpoint with a signing secret and rate limit policy. |
+| `POST /api/endpoints` | Create an owner-scoped webhook endpoint with a signing secret and rate limit policy. |
 | `GET /api/events` | List accepted producer events. |
-| `POST /api/events` | Enforce the endpoint rate limit, accept one event per endpoint/idempotency key, and queue a delivery attempt. |
+| `POST /api/events` | Authenticate the producer API key, enforce endpoint ownership and rate limit, accept one event per endpoint/idempotency key, and queue a delivery attempt. |
 | `GET /api/deliveries` | List queued delivery attempts and signature previews. |
 | `POST /api/deliveries/:delivery_id/replay` | Create a new queued attempt for an existing event after a replay reason is supplied. |
 
-When `DATABASE_URL` is set, endpoints, events, delivery attempts, and observability spans are stored in PostgreSQL. When `REDIS_URL` is set, new delivery attempts are also enqueued into BullMQ with the documented delay ladder plus bounded jitter, and endpoint rate limits use Redis fixed-window counters. Without those variables, the API still runs in in-memory mode for fast local checks.
+When `DATABASE_URL` is set, producer API key hashes, endpoints, events, delivery attempts, and observability spans are stored in PostgreSQL. When `REDIS_URL` is set, new delivery attempts are also enqueued into BullMQ with the documented delay ladder plus bounded jitter, and endpoint rate limits use Redis fixed-window counters. Without those variables, the API still runs in in-memory mode for fast local checks.
 
 ## Why This Project Matters
 
@@ -81,6 +84,6 @@ This is a strong backend/system design project because it focuses on real produc
 
 ## What Is Intentionally Deferred
 
-- Tenant/user ownership and endpoint authentication.
+- Full tenant user accounts, roles, and key rotation workflows.
 - Tenant-specific retry overrides and multi-dimensional producer quotas.
 - OpenTelemetry exporters, trace sampling, and long-retention latency dashboards.

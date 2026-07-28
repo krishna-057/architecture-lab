@@ -1,7 +1,15 @@
 import crypto from "node:crypto";
 import pg from "pg";
+import {
+  generateProducerApiKey,
+  hashProducerApiKey,
+  producerApiKeyPreview,
+  publicProducerApiKey
+} from "./producer-auth.js";
 import { buildDelivery, nowIso, publicEndpoint } from "./signing.js";
 import {
+  demoOwnerId,
+  demoProducerApiKey,
   endpointRateLimitPerMinute,
   endpointRateLimitWindowSeconds,
   retryDelaysSeconds,
@@ -33,12 +41,21 @@ export class MemoryStore {
     this.endpoints = new Map();
     this.events = new Map();
     this.deliveries = new Map();
+    this.producerApiKeys = new Map();
     this.idempotencyIndex = new Map();
   }
 
   async init() {
+    const demoKey = this.createProducerApiKeyRecord({
+      apiKey: demoProducerApiKey,
+      ownerId: demoOwnerId,
+      name: "Local demo producer"
+    });
+    this.producerApiKeys.set(demoKey.key_hash, demoKey);
+
     const endpoint = {
       endpoint_id: "endpoint_demo",
+      owner_id: demoOwnerId,
       name: "Local billing listener",
       target_url: "https://example.test/webhooks/billing",
       status: "active",
@@ -61,13 +78,46 @@ export class MemoryStore {
     return Array.from(this.endpoints.values()).map(publicEndpoint);
   }
 
+  createProducerApiKeyRecord({ apiKey, ownerId, name }) {
+    return {
+      key_id: `pkey_${crypto.randomUUID()}`,
+      owner_id: ownerId,
+      name,
+      key_hash: hashProducerApiKey(apiKey),
+      key_preview: producerApiKeyPreview(apiKey),
+      status: "active",
+      created_at: nowIso(),
+      updated_at: nowIso()
+    };
+  }
+
+  async listProducerApiKeys() {
+    return Array.from(this.producerApiKeys.values()).map(publicProducerApiKey);
+  }
+
+  async createProducerApiKey({ ownerId, name }) {
+    const apiKey = generateProducerApiKey();
+    const key = this.createProducerApiKeyRecord({ apiKey, ownerId, name });
+    this.producerApiKeys.set(key.key_hash, key);
+    return { ...publicProducerApiKey(key), api_key: apiKey };
+  }
+
+  async authenticateProducerApiKey(apiKey) {
+    const key = this.producerApiKeys.get(hashProducerApiKey(apiKey));
+    if (!key || key.status !== "active") {
+      return null;
+    }
+    return publicProducerApiKey(key);
+  }
+
   async getEndpoint(endpointId) {
     return this.endpoints.get(endpointId) ?? null;
   }
 
-  async createEndpoint({ name, targetUrl, signingSecret, rateLimitPerMinute, rateLimitWindowSeconds }) {
+  async createEndpoint({ ownerId, name, targetUrl, signingSecret, rateLimitPerMinute, rateLimitWindowSeconds }) {
     const endpoint = {
       endpoint_id: `endpoint_${crypto.randomUUID()}`,
+      owner_id: ownerId,
       name,
       target_url: targetUrl,
       status: "active",
@@ -167,21 +217,55 @@ export class PostgresStore {
   }
 
   async init() {
+    await this.withStartupRetry(() => this.pool.query(`
+      create table if not exists producer_api_keys (
+        key_id text primary key,
+        owner_id text not null,
+        name text not null,
+        key_hash text not null unique,
+        key_preview text not null,
+        status text not null default 'active',
+        created_at timestamptz not null default now(),
+        updated_at timestamptz not null default now()
+      );
+
+      alter table webhook_endpoints
+        add column if not exists owner_id text not null default 'owner_demo',
+        add column if not exists rate_limit_per_minute integer not null default 60,
+        add column if not exists rate_limit_window_seconds integer not null default 60;
+    `));
+
     await this.withStartupRetry(() => this.pool.query(
       `insert into webhook_endpoints (
-         endpoint_id, name, target_url, status, signing_secret,
+         endpoint_id, owner_id, name, target_url, status, signing_secret,
          rate_limit_per_minute, rate_limit_window_seconds
        )
-       values ($1, $2, $3, $4, $5, $6, $7)
+       values ($1, $2, $3, $4, $5, $6, $7, $8)
        on conflict (endpoint_id) do nothing`,
       [
         "endpoint_demo",
+        demoOwnerId,
         "Local billing listener",
         "https://example.test/webhooks/billing",
         "active",
         "whsec_demo_local_secret",
         endpointRateLimitPerMinute,
         endpointRateLimitWindowSeconds
+      ]
+    ));
+
+    const demoKeyHash = hashProducerApiKey(demoProducerApiKey);
+    await this.withStartupRetry(() => this.pool.query(
+      `insert into producer_api_keys (key_id, owner_id, name, key_hash, key_preview, status)
+       values ($1, $2, $3, $4, $5, $6)
+       on conflict (key_hash) do nothing`,
+      [
+        "pkey_demo",
+        demoOwnerId,
+        "Local demo producer",
+        demoKeyHash,
+        producerApiKeyPreview(demoProducerApiKey),
+        "active"
       ]
     ));
   }
@@ -210,7 +294,7 @@ export class PostgresStore {
 
   async listEndpoints() {
     const result = await this.pool.query(
-      `select endpoint_id, name, target_url, status, signing_secret,
+      `select endpoint_id, owner_id, name, target_url, status, signing_secret,
               rate_limit_per_minute, rate_limit_window_seconds, created_at
        from webhook_endpoints
        order by created_at desc`
@@ -218,21 +302,59 @@ export class PostgresStore {
     return result.rows.map((row) => publicEndpoint(normalizeRow(row)));
   }
 
+  async listProducerApiKeys() {
+    const result = await this.pool.query(
+      `select key_id, owner_id, name, key_preview, status, created_at
+       from producer_api_keys
+       order by created_at desc`
+    );
+    return result.rows.map((row) => publicProducerApiKey(normalizeRow(row)));
+  }
+
+  async createProducerApiKey({ ownerId, name }) {
+    const apiKey = generateProducerApiKey();
+    const result = await this.pool.query(
+      `insert into producer_api_keys (key_id, owner_id, name, key_hash, key_preview, status)
+       values ($1, $2, $3, $4, $5, $6)
+       returning key_id, owner_id, name, key_preview, status, created_at`,
+      [
+        `pkey_${crypto.randomUUID()}`,
+        ownerId,
+        name,
+        hashProducerApiKey(apiKey),
+        producerApiKeyPreview(apiKey),
+        "active"
+      ]
+    );
+    return { ...publicProducerApiKey(normalizeRow(result.rows[0])), api_key: apiKey };
+  }
+
+  async authenticateProducerApiKey(apiKey) {
+    const result = await this.pool.query(
+      `select key_id, owner_id, name, key_preview, status, created_at
+       from producer_api_keys
+       where key_hash = $1 and status = 'active'`,
+      [hashProducerApiKey(apiKey)]
+    );
+    return result.rows[0] ? publicProducerApiKey(normalizeRow(result.rows[0])) : null;
+  }
+
   async getEndpoint(endpointId) {
     const result = await this.pool.query("select * from webhook_endpoints where endpoint_id = $1", [endpointId]);
     return normalizeRow(result.rows[0]);
   }
 
-  async createEndpoint({ name, targetUrl, signingSecret, rateLimitPerMinute, rateLimitWindowSeconds }) {
+  async createEndpoint({ ownerId, name, targetUrl, signingSecret, rateLimitPerMinute, rateLimitWindowSeconds }) {
     const result = await this.pool.query(
       `insert into webhook_endpoints (
-         endpoint_id, name, target_url, status, signing_secret,
+         endpoint_id, owner_id, name, target_url, status, signing_secret,
          rate_limit_per_minute, rate_limit_window_seconds
        )
-       values ($1, $2, $3, $4, $5, $6, $7)
+       values ($1, $2, $3, $4, $5, $6, $7, $8)
        returning *`,
       [
         `endpoint_${crypto.randomUUID()}`,
+        ownerId,
         name,
         targetUrl,
         "active",

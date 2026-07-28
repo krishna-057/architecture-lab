@@ -1,5 +1,33 @@
 # Daily Log
 
+## 2026-07-28
+
+Added HookRelay producer API keys and endpoint ownership.
+
+Added:
+- `services/api/src/producer-auth.js` for producer API-key generation, hashing, previews, and header extraction.
+- Demo producer configuration through `HOOKRELAY_DEMO_OWNER_ID`, `HOOKRELAY_DEMO_PRODUCER_API_KEY`, and `NEXT_PUBLIC_HOOKRELAY_DEMO_PRODUCER_API_KEY`.
+- Local producer key APIs: `GET /api/producer-api-keys` for previews and `POST /api/producer-api-keys` for one-time full key creation.
+- `owner_id` on webhook endpoints, with endpoint creation bound to the authenticated producer key owner.
+- `POST /api/events` authentication through `Authorization: Bearer <api_key>` or `X-HookRelay-API-Key`, plus owner-match enforcement before rate limiting, idempotency, insertion, and enqueueing.
+- PostgreSQL `producer_api_keys` table plus endpoint `owner_id` schema migration coverage.
+- Dashboard producer key bootstrap controls, active API-key input, and endpoint owner display.
+- README, architecture, delivery contract, decision, and interview-note updates explaining why API keys are the first auth boundary before full tenant users/RBAC.
+
+Validated the work by running:
+- `node scripts/check-workspace.mjs` from `projects/05-hookrelay`
+- `npm run check -w @hookrelay/api` from `projects/05-hookrelay`
+- `npm run build -w @hookrelay/web` from `projects/05-hookrelay`
+- A local Fastify smoke test covering missing endpoint auth, key creation, owned endpoint creation, missing event auth, wrong-owner rejection, and accepted matching-owner ingestion
+- `git diff --check`
+
+Notes:
+- `WORKFLOW.md` still appears to contain binary/corrupted content in the current checkout, so it could not be meaningfully read as Markdown.
+- `POST /api/producer-api-keys` is intentionally a local bootstrap/admin endpoint for this portfolio slice; production key management remains behind future tenant users, roles, audit logs, rotation, and revocation.
+
+Next recommended task:
+- Add HookRelay producer key rotation and revocation.
+
 ## 2026-07-27
 
 Added HookRelay endpoint-level rate limits.

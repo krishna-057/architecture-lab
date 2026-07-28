@@ -6,6 +6,7 @@ HookRelay defines the HTTP contract for endpoint setup, event ingestion, deliver
 
 | Resource | API path | First-slice storage | Later durable owner |
 | --- | --- | --- | --- |
+| Producer API key | `/api/producer-api-keys` | In-memory by default, PostgreSQL when configured | Tenant identity and secret manager |
 | Endpoint | `/api/endpoints` | In-memory by default, PostgreSQL when configured | PostgreSQL `webhook_endpoints` |
 | Endpoint rate limit | `POST /api/events` | In-memory by default, Redis when configured | Redis counters plus tenant quota policy |
 | Event | `/api/events` | In-memory by default, PostgreSQL when configured | PostgreSQL `webhook_events` |
@@ -28,7 +29,34 @@ Producers submit:
 }
 ```
 
-The API accepts one event per `(endpoint_id, idempotency_key)` pair. Duplicate submissions return the existing event and do not enqueue a second delivery attempt.
+The API accepts one event per `(endpoint_id, idempotency_key)` pair after producer authentication and owner matching. Duplicate submissions return the existing event and do not enqueue a second delivery attempt.
+
+## Producer API Key Authentication
+
+Producer requests authenticate with either header:
+
+```text
+Authorization: Bearer <api_key>
+X-HookRelay-API-Key: <api_key>
+```
+
+Endpoint creation and event ingestion require an active producer API key. `POST /api/endpoints` stores the authenticated key's `owner_id` on the endpoint. `POST /api/events` requires the key owner to match the endpoint owner before rate limiting, idempotency, insertion, or enqueueing.
+
+The local bootstrap endpoint is:
+
+```text
+POST /api/producer-api-keys
+```
+
+It accepts `owner_id` and `name`, stores only a key hash and preview, and returns the full generated API key once. `GET /api/producer-api-keys` lists key previews and owners only.
+
+Authentication failures:
+
+```text
+401 Producer API key is required.
+403 Producer API key is invalid or disabled.
+403 Producer API key does not own this endpoint.
+```
 
 ## Endpoint Rate Limits
 

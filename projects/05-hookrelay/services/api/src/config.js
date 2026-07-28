@@ -5,6 +5,8 @@ export const queueName = process.env.DELIVERY_QUEUE_NAME ?? "hookrelay-deliverie
 export const deliveryHttpTimeoutMs = Number(process.env.DELIVERY_HTTP_TIMEOUT_MS ?? 5000);
 export const endpointRateLimitPerMinute = Number(process.env.ENDPOINT_RATE_LIMIT_PER_MINUTE ?? 60);
 export const endpointRateLimitWindowSeconds = Number(process.env.ENDPOINT_RATE_LIMIT_WINDOW_SECONDS ?? 60);
+export const demoOwnerId = process.env.HOOKRELAY_DEMO_OWNER_ID ?? "owner_demo";
+export const demoProducerApiKey = process.env.HOOKRELAY_DEMO_PRODUCER_API_KEY ?? "hrp_demo_local_key";
 
 export const allowedOrigins = (process.env.CORS_ALLOWED_ORIGINS ?? "http://localhost:3400")
   .split(",")
@@ -17,6 +19,7 @@ export function getRuntimeConfig() {
     redisUrl: process.env.REDIS_URL,
     endpointRateLimitPerMinute,
     endpointRateLimitWindowSeconds,
+    demoOwnerId,
     workerMode: process.env.DELIVERY_WORKER_MODE ?? "api-enqueue-only"
   };
 }

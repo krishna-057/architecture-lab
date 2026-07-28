@@ -61,3 +61,11 @@ Observability should attach one trace across event ingestion, job enqueue, each 
 - In-memory counters keep the scaffold runnable without Redis. Redis fixed-window counters become active when `REDIS_URL` is configured, so multiple API instances share the same window.
 - The API returns `429`, `Retry-After`, and `X-RateLimit-*` headers so producers have a clear backoff contract.
 - Token buckets, tenant quotas, and producer-specific limits are deferred until identity and ownership exist.
+
+## Producer API Key Talking Points
+
+- Producer API keys are the first authentication boundary because HookRelay needs to stop treating event ingestion as globally writable before adding tenant UI.
+- Endpoints store `owner_id`, and event ingestion requires the API key owner to match that endpoint owner. That prevents cross-owner event injection and quota consumption.
+- API keys are stored as hashes with previews. The full secret is returned only once at creation, which matches common API-key operational behavior.
+- The key creation endpoint is intentionally a local bootstrap/admin path for the portfolio slice. A production version would sit behind tenant users, roles, audit logs, and key rotation.
+- Ownership is checked before rate limiting and idempotency insertion, so unauthorized producers do not consume endpoint quota or create delivery records.

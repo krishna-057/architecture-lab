@@ -8,6 +8,7 @@ import {
   retryJitterRatio
 } from "./config.js";
 import { createTraceId, NoopObservability } from "./observability.js";
+import { extractProducerApiKey } from "./producer-auth.js";
 import { MemoryEndpointRateLimiter } from "./rate-limiter.js";
 import { buildReceiverVerificationExample } from "./signing.js";
 
@@ -25,6 +26,26 @@ function parsePositiveInteger(value, fallback) {
   return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
 }
 
+async function authenticateProducer({ request, reply, store }) {
+  const apiKey = extractProducerApiKey(request);
+  if (!apiKey) {
+    reply.header("WWW-Authenticate", "Bearer");
+    reply.status(401).send({
+      error: "Producer API key is required.",
+      accepted_headers: ["Authorization: Bearer <api_key>", "X-HookRelay-API-Key"]
+    });
+    return null;
+  }
+
+  const producer = await store.authenticateProducerApiKey(apiKey);
+  if (!producer) {
+    reply.status(403).send({ error: "Producer API key is invalid or disabled." });
+    return null;
+  }
+
+  return producer;
+}
+
 export function createHookRelayApp({
   store,
   queue,
@@ -40,7 +61,7 @@ export function createHookRelayApp({
     }
     reply.header("Vary", "Origin");
     reply.header("Access-Control-Allow-Methods", "GET,POST,OPTIONS");
-    reply.header("Access-Control-Allow-Headers", "Content-Type");
+    reply.header("Access-Control-Allow-Headers", "Authorization, Content-Type, X-HookRelay-API-Key");
 
     if (request.method === "OPTIONS") {
       return reply.status(204).send();
@@ -60,6 +81,12 @@ export function createHookRelayApp({
     transport: "http_webhook",
     storage_mode: store.mode,
     queue_boundary: queue.mode === "bullmq" ? "bullmq_delivery_job" : "delivery_attempt_record",
+    producer_authentication: {
+      mode: "owner_scoped_api_key",
+      accepted_headers: ["Authorization: Bearer <api_key>", "X-HookRelay-API-Key"],
+      owner_rule: "Producer API key owner_id must match the endpoint owner_id before events are accepted.",
+      demo_owner_id: getRuntimeConfig().demoOwnerId
+    },
     endpoint_rate_limit: {
       mode: rateLimiter.mode,
       scope: "endpoint_id",
@@ -121,9 +148,29 @@ export function createHookRelayApp({
     };
   });
 
+  app.get("/api/producer-api-keys", async () => store.listProducerApiKeys());
+
+  app.post("/api/producer-api-keys", async (request, reply) => {
+    const body = request.body ?? {};
+    const ownerId = String(body.owner_id ?? getRuntimeConfig().demoOwnerId).trim();
+    const name = String(body.name ?? "Local producer").trim();
+
+    if (!ownerId || !name) {
+      return reply.status(400).send({ error: "owner_id and name are required" });
+    }
+
+    const key = await store.createProducerApiKey({ ownerId, name });
+    return reply.status(201).send(key);
+  });
+
   app.get("/api/endpoints", async () => store.listEndpoints());
 
   app.post("/api/endpoints", async (request, reply) => {
+    const producer = await authenticateProducer({ request, reply, store });
+    if (!producer) {
+      return reply;
+    }
+
     const body = request.body ?? {};
     const name = String(body.name ?? "").trim();
     const targetUrl = String(body.target_url ?? "").trim();
@@ -139,6 +186,7 @@ export function createHookRelayApp({
     }
 
     const endpoint = await store.createEndpoint({
+      ownerId: producer.owner_id,
       name,
       targetUrl,
       signingSecret: body.signing_secret ? String(body.signing_secret) : null,
@@ -159,6 +207,20 @@ export function createHookRelayApp({
 
     if (!endpoint) {
       return reply.status(404).send({ error: "endpoint_id was not found" });
+    }
+
+    const producer = await authenticateProducer({ request, reply, store });
+    if (!producer) {
+      return reply;
+    }
+
+    if (producer.owner_id !== endpoint.owner_id) {
+      return reply.status(403).send({
+        error: "Producer API key does not own this endpoint.",
+        endpoint_id: endpoint.endpoint_id,
+        endpoint_owner_id: endpoint.owner_id,
+        producer_owner_id: producer.owner_id
+      });
     }
 
     if (!eventType || !idempotencyKey || typeof body.payload !== "object" || body.payload === null) {
@@ -214,6 +276,7 @@ export function createHookRelayApp({
         attributes: {
           event_type: eventType,
           idempotency_key: idempotencyKey,
+          owner_id: producer.owner_id,
           queue_mode: queue.mode,
           rate_limit_remaining: rateLimit.remaining,
           storage_mode: store.mode
