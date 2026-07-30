@@ -50,12 +50,23 @@ POST /api/producer-api-keys
 
 It accepts `owner_id` and `name`, stores only a key hash and preview, and returns the full generated API key once. `GET /api/producer-api-keys` lists key previews and owners only.
 
+Active keys can be rotated or revoked through the local admin lifecycle endpoints:
+
+```text
+POST /api/producer-api-keys/:key_id/rotate
+POST /api/producer-api-keys/:key_id/revoke
+```
+
+Rotation marks the old key as `rotated`, creates a replacement key for the same `owner_id`, records `rotated_from_key_id` on the replacement, and returns the new full API key once. Revocation marks an active key as `revoked`. Authentication only accepts `active` keys, so `disabled`, `rotated`, and `revoked` keys are rejected before ownership matching, rate limiting, idempotency insertion, or enqueueing.
+
 Authentication failures:
 
 ```text
 401 Producer API key is required.
 403 Producer API key is invalid or disabled.
 403 Producer API key does not own this endpoint.
+404 producer API key was not found
+409 producer API key is not active
 ```
 
 ## Endpoint Rate Limits

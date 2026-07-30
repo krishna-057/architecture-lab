@@ -85,6 +85,9 @@ export function createHookRelayApp({
       mode: "owner_scoped_api_key",
       accepted_headers: ["Authorization: Bearer <api_key>", "X-HookRelay-API-Key"],
       owner_rule: "Producer API key owner_id must match the endpoint owner_id before events are accepted.",
+      rotation_endpoint: "POST /api/producer-api-keys/:key_id/rotate",
+      revocation_endpoint: "POST /api/producer-api-keys/:key_id/revoke",
+      inactive_statuses: ["disabled", "rotated", "revoked"],
       demo_owner_id: getRuntimeConfig().demoOwnerId
     },
     endpoint_rate_limit: {
@@ -161,6 +164,42 @@ export function createHookRelayApp({
 
     const key = await store.createProducerApiKey({ ownerId, name });
     return reply.status(201).send(key);
+  });
+
+  app.post("/api/producer-api-keys/:key_id/rotate", async (request, reply) => {
+    const keyId = String(request.params?.key_id ?? "").trim();
+    if (!keyId) {
+      return reply.status(400).send({ error: "key_id is required" });
+    }
+
+    const result = await store.rotateProducerApiKey(keyId);
+    if (!result) {
+      return reply.status(404).send({ error: "producer API key was not found" });
+    }
+
+    if (result.error === "not_active") {
+      return reply.status(409).send({ error: "producer API key is not active", key: result.key });
+    }
+
+    return reply.status(201).send(result);
+  });
+
+  app.post("/api/producer-api-keys/:key_id/revoke", async (request, reply) => {
+    const keyId = String(request.params?.key_id ?? "").trim();
+    if (!keyId) {
+      return reply.status(400).send({ error: "key_id is required" });
+    }
+
+    const result = await store.revokeProducerApiKey(keyId);
+    if (!result) {
+      return reply.status(404).send({ error: "producer API key was not found" });
+    }
+
+    if (result.error === "not_active") {
+      return reply.status(409).send({ error: "producer API key is not active", key: result.key });
+    }
+
+    return result.key;
   });
 
   app.get("/api/endpoints", async () => store.listEndpoints());

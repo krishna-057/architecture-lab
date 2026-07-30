@@ -67,5 +67,6 @@ Observability should attach one trace across event ingestion, job enqueue, each 
 - Producer API keys are the first authentication boundary because HookRelay needs to stop treating event ingestion as globally writable before adding tenant UI.
 - Endpoints store `owner_id`, and event ingestion requires the API key owner to match that endpoint owner. That prevents cross-owner event injection and quota consumption.
 - API keys are stored as hashes with previews. The full secret is returned only once at creation, which matches common API-key operational behavior.
-- The key creation endpoint is intentionally a local bootstrap/admin path for the portfolio slice. A production version would sit behind tenant users, roles, audit logs, and key rotation.
+- Rotation creates a replacement key for the same owner and marks the old key as `rotated`. Revocation marks an active key as `revoked`. Authentication only accepts `active` keys, which keeps lifecycle enforcement in one place.
+- The key lifecycle endpoints are intentionally local bootstrap/admin paths for the portfolio slice. A production version would sit behind tenant users, roles, audit actors, approval policy, and scoped key permissions.
 - Ownership is checked before rate limiting and idempotency insertion, so unauthorized producers do not consume endpoint quota or create delivery records.

@@ -4,7 +4,9 @@ create table if not exists producer_api_keys (
   name text not null,
   key_hash text not null unique,
   key_preview text not null,
-  status text not null default 'active' check (status in ('active', 'disabled')),
+  status text not null default 'active' check (status in ('active', 'disabled', 'rotated', 'revoked')),
+  rotated_from_key_id text references producer_api_keys(key_id),
+  revoked_at timestamptz,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
@@ -82,6 +84,17 @@ alter table webhook_endpoints
   add column if not exists owner_id text not null default 'owner_demo',
   add column if not exists rate_limit_per_minute integer not null default 60,
   add column if not exists rate_limit_window_seconds integer not null default 60;
+
+alter table producer_api_keys
+  add column if not exists rotated_from_key_id text references producer_api_keys(key_id),
+  add column if not exists revoked_at timestamptz;
+
+alter table producer_api_keys
+  drop constraint if exists producer_api_keys_status_check;
+
+alter table producer_api_keys
+  add constraint producer_api_keys_status_check
+  check (status in ('active', 'disabled', 'rotated', 'revoked'));
 
 create index if not exists idx_webhook_events_endpoint_created
   on webhook_events(endpoint_id, created_at desc);

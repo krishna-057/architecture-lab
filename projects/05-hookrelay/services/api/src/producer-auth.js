@@ -19,7 +19,10 @@ export function publicProducerApiKey(key) {
     name: key.name,
     status: key.status,
     key_preview: key.key_preview,
-    created_at: key.created_at
+    rotated_from_key_id: key.rotated_from_key_id,
+    revoked_at: key.revoked_at,
+    created_at: key.created_at,
+    updated_at: key.updated_at
   };
 }
 

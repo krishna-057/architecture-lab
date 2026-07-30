@@ -39,7 +39,7 @@ API and worker operations also write provider-neutral observability spans. In me
 | Worker process | Sends signed outbound HTTP requests, records responses, schedules retries, and marks dead-letter failures. |
 | Observability span log | Captures event ingestion, enqueue, replay, worker processing, and outbound HTTP timing as local JSON spans before adding a vendor exporter. |
 | Endpoint rate limiter | Enforces fixed-window event ingestion limits per endpoint before accepting new producer events. |
-| Producer API keys | Authenticate producers and bind endpoint creation/event ingestion to an `owner_id` before a full tenant model exists. |
+| Producer API keys | Authenticate producers, bind endpoint creation/event ingestion to an `owner_id`, and support active/rotated/revoked lifecycle state before a full tenant model exists. |
 | Receiver verification example | Shows receivers how to rebuild `timestamp.rawBody`, compute HMAC-SHA256, and enforce a timestamp tolerance. |
 | Replay authorization contract | Requires operator replay reasons before manual replay creates a new delivery attempt. |
 
@@ -53,6 +53,8 @@ API and worker operations also write provider-neutral observability spans. In me
 | `GET /api/observability/spans` | Return recent provider-neutral spans with trace ids, span ids, timing, status, and delivery attributes. |
 | `GET /api/producer-api-keys` | List producer key previews, owners, and status without exposing full secrets. |
 | `POST /api/producer-api-keys` | Create a local producer key and return the full secret once for development bootstrap. |
+| `POST /api/producer-api-keys/:key_id/rotate` | Replace an active key with a new one for the same owner and mark the old key as rotated. |
+| `POST /api/producer-api-keys/:key_id/revoke` | Mark an active key as revoked so it no longer authenticates. |
 | `GET /api/endpoints` | List webhook endpoints without exposing full signing secrets. |
 | `POST /api/endpoints` | Authenticate a producer key, then create a webhook target, signing secret, owner id, and endpoint rate-limit policy. |
 | `GET /api/events` | List accepted producer events. |
@@ -75,7 +77,9 @@ Authorization: Bearer <api_key>
 X-HookRelay-API-Key: <api_key>
 ```
 
-The first implementation stores only SHA-256 key hashes plus key previews. The full key is returned once from `POST /api/producer-api-keys`, which is a local bootstrap/admin endpoint for this portfolio slice. Full tenant users, RBAC, key rotation, audit approvals, and scoped producer permissions remain deferred.
+The implementation stores only SHA-256 key hashes plus key previews. The full key is returned once from creation or rotation responses. Rotation changes the old key status to `rotated`, creates a replacement key for the same `owner_id`, and links the replacement through `rotated_from_key_id`. Revocation changes an active key status to `revoked`. Authentication only accepts `active` keys, so rotated, revoked, and disabled keys stop at the auth boundary before endpoint creation, ownership checks, rate limiting, or event insertion.
+
+The key creation, rotation, and revocation endpoints are local bootstrap/admin endpoints for this portfolio slice. Full tenant users, RBAC, approval workflows, audit actors, and scoped producer permissions remain deferred.
 
 ## Endpoint Rate Limits
 
@@ -125,6 +129,7 @@ Each span has `trace_id`, `span_id`, optional parent span, delivery/event/endpoi
 
 - Full tenant user accounts and RBAC.
 - Role-based replay authorization.
+- Approval-backed producer key lifecycle audit.
 - Tenant-specific retry overrides and multi-dimensional producer quotas.
 - Receiver SDKs.
 - OpenTelemetry exporters, trace sampling, and long-retention latency dashboards.

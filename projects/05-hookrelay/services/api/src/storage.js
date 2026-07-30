@@ -31,6 +31,7 @@ function normalizeRow(row) {
     ...row,
     created_at: row.created_at instanceof Date ? row.created_at.toISOString() : row.created_at,
     updated_at: row.updated_at instanceof Date ? row.updated_at.toISOString() : row.updated_at,
+    revoked_at: row.revoked_at instanceof Date ? row.revoked_at.toISOString() : row.revoked_at,
     next_attempt_at: row.next_attempt_at instanceof Date ? row.next_attempt_at.toISOString() : row.next_attempt_at
   };
 }
@@ -78,7 +79,7 @@ export class MemoryStore {
     return Array.from(this.endpoints.values()).map(publicEndpoint);
   }
 
-  createProducerApiKeyRecord({ apiKey, ownerId, name }) {
+  createProducerApiKeyRecord({ apiKey, ownerId, name, rotatedFromKeyId = null }) {
     return {
       key_id: `pkey_${crypto.randomUUID()}`,
       owner_id: ownerId,
@@ -86,6 +87,8 @@ export class MemoryStore {
       key_hash: hashProducerApiKey(apiKey),
       key_preview: producerApiKeyPreview(apiKey),
       status: "active",
+      rotated_from_key_id: rotatedFromKeyId,
+      revoked_at: null,
       created_at: nowIso(),
       updated_at: nowIso()
     };
@@ -100,6 +103,53 @@ export class MemoryStore {
     const key = this.createProducerApiKeyRecord({ apiKey, ownerId, name });
     this.producerApiKeys.set(key.key_hash, key);
     return { ...publicProducerApiKey(key), api_key: apiKey };
+  }
+
+  async rotateProducerApiKey(keyId) {
+    const current = Array.from(this.producerApiKeys.values()).find((key) => key.key_id === keyId);
+    if (!current) {
+      return null;
+    }
+
+    if (current.status !== "active") {
+      return { error: "not_active", key: publicProducerApiKey(current) };
+    }
+
+    const now = nowIso();
+    current.status = "rotated";
+    current.revoked_at = now;
+    current.updated_at = now;
+
+    const apiKey = generateProducerApiKey();
+    const next = this.createProducerApiKeyRecord({
+      apiKey,
+      ownerId: current.owner_id,
+      name: current.name,
+      rotatedFromKeyId: current.key_id
+    });
+    this.producerApiKeys.set(next.key_hash, next);
+
+    return {
+      previous: publicProducerApiKey(current),
+      next: { ...publicProducerApiKey(next), api_key: apiKey }
+    };
+  }
+
+  async revokeProducerApiKey(keyId) {
+    const current = Array.from(this.producerApiKeys.values()).find((key) => key.key_id === keyId);
+    if (!current) {
+      return null;
+    }
+
+    if (current.status !== "active") {
+      return { error: "not_active", key: publicProducerApiKey(current) };
+    }
+
+    const now = nowIso();
+    current.status = "revoked";
+    current.revoked_at = now;
+    current.updated_at = now;
+    return { key: publicProducerApiKey(current) };
   }
 
   async authenticateProducerApiKey(apiKey) {
@@ -225,9 +275,22 @@ export class PostgresStore {
         key_hash text not null unique,
         key_preview text not null,
         status text not null default 'active',
+        rotated_from_key_id text references producer_api_keys(key_id),
+        revoked_at timestamptz,
         created_at timestamptz not null default now(),
         updated_at timestamptz not null default now()
       );
+
+      alter table producer_api_keys
+        add column if not exists rotated_from_key_id text references producer_api_keys(key_id),
+        add column if not exists revoked_at timestamptz;
+
+      alter table producer_api_keys
+        drop constraint if exists producer_api_keys_status_check;
+
+      alter table producer_api_keys
+        add constraint producer_api_keys_status_check
+        check (status in ('active', 'disabled', 'rotated', 'revoked'));
 
       alter table webhook_endpoints
         add column if not exists owner_id text not null default 'owner_demo',
@@ -304,7 +367,7 @@ export class PostgresStore {
 
   async listProducerApiKeys() {
     const result = await this.pool.query(
-      `select key_id, owner_id, name, key_preview, status, created_at
+      `select key_id, owner_id, name, key_preview, status, rotated_from_key_id, revoked_at, created_at, updated_at
        from producer_api_keys
        order by created_at desc`
     );
@@ -316,7 +379,7 @@ export class PostgresStore {
     const result = await this.pool.query(
       `insert into producer_api_keys (key_id, owner_id, name, key_hash, key_preview, status)
        values ($1, $2, $3, $4, $5, $6)
-       returning key_id, owner_id, name, key_preview, status, created_at`,
+       returning key_id, owner_id, name, key_preview, status, rotated_from_key_id, revoked_at, created_at, updated_at`,
       [
         `pkey_${crypto.randomUUID()}`,
         ownerId,
@@ -329,9 +392,94 @@ export class PostgresStore {
     return { ...publicProducerApiKey(normalizeRow(result.rows[0])), api_key: apiKey };
   }
 
+  async rotateProducerApiKey(keyId) {
+    const client = await this.pool.connect();
+    try {
+      await client.query("begin");
+      const currentResult = await client.query(
+        `select key_id, owner_id, name, key_preview, status, rotated_from_key_id, revoked_at, created_at, updated_at
+         from producer_api_keys
+         where key_id = $1
+         for update`,
+        [keyId]
+      );
+      const current = normalizeRow(currentResult.rows[0]);
+      if (!current) {
+        await client.query("rollback");
+        return null;
+      }
+
+      if (current.status !== "active") {
+        await client.query("rollback");
+        return { error: "not_active", key: publicProducerApiKey(current) };
+      }
+
+      const previousResult = await client.query(
+        `update producer_api_keys
+         set status = 'rotated', revoked_at = now(), updated_at = now()
+         where key_id = $1
+         returning key_id, owner_id, name, key_preview, status, rotated_from_key_id, revoked_at, created_at, updated_at`,
+        [keyId]
+      );
+      const apiKey = generateProducerApiKey();
+      const nextResult = await client.query(
+        `insert into producer_api_keys (
+           key_id, owner_id, name, key_hash, key_preview, status, rotated_from_key_id
+         )
+         values ($1, $2, $3, $4, $5, $6, $7)
+         returning key_id, owner_id, name, key_preview, status, rotated_from_key_id, revoked_at, created_at, updated_at`,
+        [
+          `pkey_${crypto.randomUUID()}`,
+          current.owner_id,
+          current.name,
+          hashProducerApiKey(apiKey),
+          producerApiKeyPreview(apiKey),
+          "active",
+          current.key_id
+        ]
+      );
+      await client.query("commit");
+      return {
+        previous: publicProducerApiKey(normalizeRow(previousResult.rows[0])),
+        next: { ...publicProducerApiKey(normalizeRow(nextResult.rows[0])), api_key: apiKey }
+      };
+    } catch (error) {
+      await client.query("rollback");
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  async revokeProducerApiKey(keyId) {
+    const currentResult = await this.pool.query(
+      `select key_id, owner_id, name, key_preview, status, rotated_from_key_id, revoked_at, created_at, updated_at
+       from producer_api_keys
+       where key_id = $1`,
+      [keyId]
+    );
+    const current = normalizeRow(currentResult.rows[0]);
+    if (!current) {
+      return null;
+    }
+
+    if (current.status !== "active") {
+      return { error: "not_active", key: publicProducerApiKey(current) };
+    }
+
+    const result = await this.pool.query(
+      `update producer_api_keys
+       set status = 'revoked', revoked_at = now(), updated_at = now()
+       where key_id = $1
+       returning key_id, owner_id, name, key_preview, status, rotated_from_key_id, revoked_at, created_at, updated_at`,
+      [keyId]
+    );
+    return { key: publicProducerApiKey(normalizeRow(result.rows[0])) };
+  }
+
   async authenticateProducerApiKey(apiKey) {
     const result = await this.pool.query(
-      `select key_id, owner_id, name, key_preview, status, created_at
+      `select key_id, owner_id, name, key_preview, status, rotated_from_key_id, revoked_at, created_at, updated_at
        from producer_api_keys
        where key_hash = $1 and status = 'active'`,
       [hashProducerApiKey(apiKey)]

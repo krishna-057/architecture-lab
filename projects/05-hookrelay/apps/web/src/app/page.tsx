@@ -68,6 +68,9 @@ type DeliveryContract = {
     mode: string;
     accepted_headers: string[];
     owner_rule: string;
+    rotation_endpoint: string;
+    revocation_endpoint: string;
+    inactive_statuses: string[];
     demo_owner_id: string;
   };
   endpoint_rate_limit: {
@@ -134,10 +137,18 @@ type ProducerApiKey = {
   key_id: string;
   owner_id: string;
   name: string;
-  status: "active";
+  status: "active" | "disabled" | "rotated" | "revoked";
   key_preview: string;
+  rotated_from_key_id?: string | null;
+  revoked_at?: string | null;
   created_at: string;
+  updated_at?: string;
   api_key?: string;
+};
+
+type ProducerApiKeyRotation = {
+  previous: ProducerApiKey;
+  next: ProducerApiKey;
 };
 
 const apiBaseUrl = (process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8400").replace(/\/$/, "");
@@ -293,6 +304,33 @@ export default function HookRelayHome() {
       setStatusMessage("Producer API key created. The full key is shown once in the API response and loaded into this dashboard.");
     } catch (error) {
       setStatusMessage(error instanceof Error ? error.message : "Producer key creation failed.");
+    }
+  }
+
+  async function rotateProducerKey(keyId: string) {
+    try {
+      const rotation = await requestJson<ProducerApiKeyRotation>(`/api/producer-api-keys/${keyId}/rotate`, {
+        method: "POST"
+      });
+      await refreshAll();
+      if (rotation.next.api_key) {
+        setProducerApiKey(rotation.next.api_key);
+      }
+      setStatusMessage("Producer API key rotated. The old key is inactive and the replacement key is loaded into this dashboard.");
+    } catch (error) {
+      setStatusMessage(error instanceof Error ? error.message : "Producer key rotation failed.");
+    }
+  }
+
+  async function revokeProducerKey(keyId: string) {
+    try {
+      await requestJson<ProducerApiKey>(`/api/producer-api-keys/${keyId}/revoke`, {
+        method: "POST"
+      });
+      await refreshAll();
+      setStatusMessage("Producer API key revoked. Revoked keys can no longer create endpoints or ingest events.");
+    } catch (error) {
+      setStatusMessage(error instanceof Error ? error.message : "Producer key revocation failed.");
     }
   }
 
@@ -520,6 +558,14 @@ export default function HookRelayHome() {
               <dd>{contract?.producer_authentication.owner_rule ?? "unknown"}</dd>
             </div>
             <div>
+              <dt>Key Lifecycle</dt>
+              <dd>
+                {contract
+                  ? `${contract.producer_authentication.rotation_endpoint} / ${contract.producer_authentication.revocation_endpoint}`
+                  : "unknown"}
+              </dd>
+            </div>
+            <div>
               <dt>Signing</dt>
               <dd>{contract?.signature_algorithm ?? "unknown"}</dd>
             </div>
@@ -645,7 +691,19 @@ export default function HookRelayHome() {
               <article className="endpoint-row" key={key.key_id}>
                 <strong>{key.name}</strong>
                 <span>{key.owner_id}</span>
-                <small>{key.key_preview}</small>
+                <small>
+                  {key.key_preview} / {key.status}
+                </small>
+                {key.rotated_from_key_id ? <small>rotated from {key.rotated_from_key_id}</small> : null}
+                {key.revoked_at ? <small>inactive since {formatTime(key.revoked_at)}</small> : null}
+                <div className="key-actions">
+                  <button type="button" disabled={key.status !== "active"} onClick={() => void rotateProducerKey(key.key_id)}>
+                    Rotate
+                  </button>
+                  <button type="button" disabled={key.status !== "active"} onClick={() => void revokeProducerKey(key.key_id)}>
+                    Revoke
+                  </button>
+                </div>
               </article>
             ))}
           </div>

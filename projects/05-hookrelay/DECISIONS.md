@@ -132,3 +132,22 @@ Rejected alternatives:
 
 Follow-up:
 Add key rotation, disabled/revoked key flows, tenant users, team membership, and role-based replay authorization.
+
+## 2026-07-30: Add Producer Key Rotation And Revocation
+
+Decision:
+Add producer API key lifecycle endpoints for rotation and revocation. Rotation marks the current key as `rotated`, creates a replacement key for the same `owner_id`, links it with `rotated_from_key_id`, and returns the new secret once. Revocation marks an active key as `revoked`.
+
+Why:
+- Producers need a low-friction way to replace exposed or aging credentials without changing endpoint ownership.
+- Keeping the replacement key on the same `owner_id` preserves the existing ownership rule and avoids introducing tenant users before they are needed.
+- Storing terminal statuses plus `revoked_at` makes key state explainable in the dashboard and durable schema while keeping authentication simple: only `active` keys pass.
+- Returning the full key only on creation or rotation keeps the secret-handling behavior consistent.
+
+Rejected alternatives:
+- Add full tenant RBAC for key lifecycle now: correct later, but too broad for this slice.
+- Physically delete revoked keys: simpler storage, but it removes audit context and makes support/debugging weaker.
+- Allow rotating inactive keys: convenient in demos, but it muddies the lifecycle and can hide operational mistakes.
+
+Follow-up:
+Add tenant users, lifecycle audit actors, approval-backed revocation, scoped producer permissions, and role-based replay authorization.

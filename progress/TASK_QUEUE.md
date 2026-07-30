@@ -6,10 +6,11 @@ Tasks should stay small enough for one focused session.
 
 ### Ready
 
-- [ ] Add HookRelay producer key rotation and revocation.
+- [ ] Add HookRelay role-based replay authorization.
 
 ### Completed
 
+- [x] Add HookRelay producer key rotation and revocation.
 - [x] Add HookRelay producer API keys and endpoint ownership.
 - [x] Add HookRelay endpoint-level rate limits.
 - [x] Add HookRelay delivery observability spans.

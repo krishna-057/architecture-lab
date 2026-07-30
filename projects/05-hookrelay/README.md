@@ -17,7 +17,7 @@ Added:
 - `services/api/src/retry-policy.js` for bounded retry jitter shared by the API, worker, and dashboard contract.
 - `services/api/src/observability.js` for bounded local delivery spans, with PostgreSQL span persistence when `DATABASE_URL` is configured.
 - `services/api/src/rate-limiter.js` for endpoint-scoped fixed-window event ingestion limits, backed by Redis when `REDIS_URL` is configured.
-- `services/api/src/producer-auth.js` for producer API-key hashing, previews, and bearer/header extraction.
+- `services/api/src/producer-auth.js` for producer API-key hashing, previews, lifecycle statuses, and bearer/header extraction.
 - `scripts/check-workspace.mjs` for dependency-light validation of the scaffold markers.
 
 Run locally:
@@ -69,6 +69,8 @@ Default URLs:
 | `GET /api/observability/spans` | List recent event ingestion, enqueue, replay, worker, and outbound HTTP spans. |
 | `GET /api/producer-api-keys` | List producer API key previews and owners. |
 | `POST /api/producer-api-keys` | Create a local producer API key and return the full secret once. |
+| `POST /api/producer-api-keys/:key_id/rotate` | Mark an active key as rotated and return one replacement secret for the same owner. |
+| `POST /api/producer-api-keys/:key_id/revoke` | Revoke an active producer key so it can no longer create endpoints or ingest events. |
 | `GET /api/endpoints` | List webhook endpoints. |
 | `POST /api/endpoints` | Create an owner-scoped webhook endpoint with a signing secret and rate limit policy. |
 | `GET /api/events` | List accepted producer events. |
@@ -84,6 +86,6 @@ This is a strong backend/system design project because it focuses on real produc
 
 ## What Is Intentionally Deferred
 
-- Full tenant user accounts, roles, and key rotation workflows.
+- Full tenant user accounts, roles, scoped key permissions, and approval-backed key lifecycle workflows.
 - Tenant-specific retry overrides and multi-dimensional producer quotas.
 - OpenTelemetry exporters, trace sampling, and long-retention latency dashboards.

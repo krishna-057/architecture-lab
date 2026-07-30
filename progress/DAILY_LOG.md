@@ -1,5 +1,31 @@
 # Daily Log
 
+## 2026-07-30
+
+Added HookRelay producer API key rotation and revocation.
+
+Added:
+- `POST /api/producer-api-keys/:key_id/rotate` to mark an active key as `rotated`, create a replacement for the same `owner_id`, link it with `rotated_from_key_id`, and return the new full secret once.
+- `POST /api/producer-api-keys/:key_id/revoke` to mark active keys as `revoked`.
+- In-memory and PostgreSQL key lifecycle support with `revoked_at`, `updated_at`, inactive status handling, and an expanded durable status constraint.
+- Delivery contract fields for rotation, revocation, and inactive producer key statuses.
+- Dashboard Rotate/Revoke actions, status display, and key lifecycle contract readout.
+- README, architecture, delivery contract, decision, and interview-note updates explaining the lifecycle design before full tenant RBAC.
+
+Validated the work by running:
+- `node scripts/check-workspace.mjs` from `projects/05-hookrelay`
+- `npm run check -w @hookrelay/api` from `projects/05-hookrelay`
+- `npm run build -w @hookrelay/web` from `projects/05-hookrelay`
+- A local Fastify smoke test covering key creation, owned endpoint creation, rotation, old-key rejection, new-key ingestion, revocation, and revoked-key rejection
+- `git diff --check`
+
+Notes:
+- `WORKFLOW.md` still appears to contain binary/corrupted content in the current checkout, so it could not be meaningfully read as Markdown.
+- Producer key lifecycle endpoints remain local bootstrap/admin routes until tenant users, role checks, and lifecycle audit actors are added.
+
+Next recommended task:
+- Add HookRelay role-based replay authorization.
+
 ## 2026-07-28
 
 Added HookRelay producer API keys and endpoint ownership.
