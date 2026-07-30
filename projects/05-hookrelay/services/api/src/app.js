@@ -26,7 +26,16 @@ function parsePositiveInteger(value, fallback) {
   return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
 }
 
-async function authenticateProducer({ request, reply, store }) {
+const validApiKeyRoles = ["producer", "operator", "admin"];
+const producerRoles = ["producer", "admin"];
+const replayRoles = ["operator", "admin"];
+
+function parseApiKeyRole(value) {
+  const role = String(value ?? "producer").trim();
+  return validApiKeyRoles.includes(role) ? role : null;
+}
+
+async function authenticateProducer({ request, reply, store, requiredRoles = producerRoles, action = "Producer" }) {
   const apiKey = extractProducerApiKey(request);
   if (!apiKey) {
     reply.header("WWW-Authenticate", "Bearer");
@@ -40,6 +49,15 @@ async function authenticateProducer({ request, reply, store }) {
   const producer = await store.authenticateProducerApiKey(apiKey);
   if (!producer) {
     reply.status(403).send({ error: "Producer API key is invalid or disabled." });
+    return null;
+  }
+
+  if (!requiredRoles.includes(producer.role)) {
+    reply.status(403).send({
+      error: `${action} API key role is not authorized.`,
+      required_roles: requiredRoles,
+      actual_role: producer.role
+    });
     return null;
   }
 
@@ -85,6 +103,8 @@ export function createHookRelayApp({
       mode: "owner_scoped_api_key",
       accepted_headers: ["Authorization: Bearer <api_key>", "X-HookRelay-API-Key"],
       owner_rule: "Producer API key owner_id must match the endpoint owner_id before events are accepted.",
+      roles: validApiKeyRoles,
+      producer_roles: producerRoles,
       rotation_endpoint: "POST /api/producer-api-keys/:key_id/rotate",
       revocation_endpoint: "POST /api/producer-api-keys/:key_id/revoke",
       inactive_statuses: ["disabled", "rotated", "revoked"],
@@ -129,10 +149,13 @@ export function createHookRelayApp({
     },
     replay_rule: "Manual replay creates a new queued delivery attempt for the same event payload.",
     replay_authorization: {
-      mode: "operator_intent",
+      mode: "owner_scoped_operator_api_key",
+      accepted_headers: ["Authorization: Bearer <api_key>", "X-HookRelay-API-Key"],
+      required_roles: replayRoles,
+      owner_rule: "Replay API key owner_id must match the delivery endpoint owner_id.",
       required_body_fields: ["reason"],
       optional_body_fields: ["requested_by"],
-      audit_rule: "Replay requests must include a human-readable reason before a new delivery attempt is queued."
+      audit_rule: "Replay requests require an operator/admin API key plus a human-readable reason before a new delivery attempt is queued."
     },
     receiver_verification: {
       timestamp_tolerance_seconds: 300,
@@ -157,12 +180,17 @@ export function createHookRelayApp({
     const body = request.body ?? {};
     const ownerId = String(body.owner_id ?? getRuntimeConfig().demoOwnerId).trim();
     const name = String(body.name ?? "Local producer").trim();
+    const role = parseApiKeyRole(body.role);
 
     if (!ownerId || !name) {
       return reply.status(400).send({ error: "owner_id and name are required" });
     }
 
-    const key = await store.createProducerApiKey({ ownerId, name });
+    if (!role) {
+      return reply.status(400).send({ error: "role must be producer, operator, or admin" });
+    }
+
+    const key = await store.createProducerApiKey({ ownerId, name, role });
     return reply.status(201).send(key);
   });
 
@@ -367,6 +395,17 @@ export function createHookRelayApp({
     const reason = String(body.reason ?? "").trim();
     const requestedBy = String(body.requested_by ?? "local-operator").trim() || "local-operator";
 
+    const operator = await authenticateProducer({
+      request,
+      reply,
+      store,
+      requiredRoles: replayRoles,
+      action: "Replay"
+    });
+    if (!operator) {
+      return reply;
+    }
+
     if (reason.length < 8) {
       return reply.status(400).send({ error: "Replay reason must be at least 8 characters." });
     }
@@ -382,6 +421,15 @@ export function createHookRelayApp({
       return reply.status(409).send({ error: "delivery event or endpoint is missing" });
     }
 
+    if (operator.owner_id !== endpoint.owner_id) {
+      return reply.status(403).send({
+        error: "Replay API key does not own this endpoint.",
+        endpoint_id: endpoint.endpoint_id,
+        endpoint_owner_id: endpoint.owner_id,
+        operator_owner_id: operator.owner_id
+      });
+    }
+
     const traceId = createTraceId();
     const replay = await observability.traceSpan(
       {
@@ -393,7 +441,9 @@ export function createHookRelayApp({
         attributes: {
           replayed_from_delivery_id: existingDelivery.delivery_id,
           replay_requested_by: requestedBy,
-          replay_reason: reason
+          replay_reason: reason,
+          replay_operator_key_id: operator.key_id,
+          replay_operator_role: operator.role
         }
       },
       async (span) => {

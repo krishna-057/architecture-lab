@@ -40,7 +40,7 @@ Authorization: Bearer <api_key>
 X-HookRelay-API-Key: <api_key>
 ```
 
-Endpoint creation and event ingestion require an active producer API key. `POST /api/endpoints` stores the authenticated key's `owner_id` on the endpoint. `POST /api/events` requires the key owner to match the endpoint owner before rate limiting, idempotency, insertion, or enqueueing.
+Endpoint creation and event ingestion require an active API key with the `producer` or `admin` role. `POST /api/endpoints` stores the authenticated key's `owner_id` on the endpoint. `POST /api/events` requires the key owner to match the endpoint owner before rate limiting, idempotency, insertion, or enqueueing.
 
 The local bootstrap endpoint is:
 
@@ -48,7 +48,15 @@ The local bootstrap endpoint is:
 POST /api/producer-api-keys
 ```
 
-It accepts `owner_id` and `name`, stores only a key hash and preview, and returns the full generated API key once. `GET /api/producer-api-keys` lists key previews and owners only.
+It accepts `owner_id`, `name`, and `role`, stores only a key hash and preview, and returns the full generated API key once. Valid roles are:
+
+```text
+producer
+operator
+admin
+```
+
+`GET /api/producer-api-keys` lists key previews, owners, roles, and statuses only.
 
 Active keys can be rotated or revoked through the local admin lifecycle endpoints:
 
@@ -57,13 +65,14 @@ POST /api/producer-api-keys/:key_id/rotate
 POST /api/producer-api-keys/:key_id/revoke
 ```
 
-Rotation marks the old key as `rotated`, creates a replacement key for the same `owner_id`, records `rotated_from_key_id` on the replacement, and returns the new full API key once. Revocation marks an active key as `revoked`. Authentication only accepts `active` keys, so `disabled`, `rotated`, and `revoked` keys are rejected before ownership matching, rate limiting, idempotency insertion, or enqueueing.
+Rotation marks the old key as `rotated`, creates a replacement key for the same `owner_id` and role, records `rotated_from_key_id` on the replacement, and returns the new full API key once. Revocation marks an active key as `revoked`. Authentication only accepts `active` keys, so `disabled`, `rotated`, and `revoked` keys are rejected before ownership matching, role checks, rate limiting, idempotency insertion, or enqueueing.
 
 Authentication failures:
 
 ```text
 401 Producer API key is required.
 403 Producer API key is invalid or disabled.
+403 Producer API key role is not authorized.
 403 Producer API key does not own this endpoint.
 404 producer API key was not found
 409 producer API key is not active
@@ -165,7 +174,14 @@ Manual replay creates a new queued delivery attempt for an existing event. The e
 
 ## Replay Authorization
 
-Manual replay is an operator action, not an automatic retry. The replay endpoint requires a human-readable `reason` in the request body before it queues a new delivery attempt:
+Manual replay is an operator action, not an automatic retry. The replay endpoint requires an active API key with the `operator` or `admin` role:
+
+```text
+Authorization: Bearer <api_key>
+X-HookRelay-API-Key: <api_key>
+```
+
+The key's `owner_id` must match the delivery endpoint owner. The request body must also include a human-readable `reason` before it queues a new delivery attempt:
 
 ```json
 {
@@ -174,7 +190,17 @@ Manual replay is an operator action, not an automatic retry. The replay endpoint
 }
 ```
 
-The reason and requester are stored on the replay delivery attempt as `replay_reason` and `replay_requested_by`. This keeps the first authorization rule simple while preserving the audit trail needed before adding tenant users, roles, or approval workflows.
+Contract discovery exposes replay authorization as:
+
+```json
+{
+  "mode": "owner_scoped_operator_api_key",
+  "required_roles": ["operator", "admin"],
+  "owner_rule": "Replay API key owner_id must match the delivery endpoint owner_id."
+}
+```
+
+The reason and requester are stored on the replay delivery attempt as `replay_reason` and `replay_requested_by`. This keeps the first role boundary simple while preserving the audit trail needed before adding tenant users, signed user identity, or approval workflows.
 
 ## Observability
 

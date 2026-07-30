@@ -17,6 +17,7 @@ export function publicProducerApiKey(key) {
     key_id: key.key_id,
     owner_id: key.owner_id,
     name: key.name,
+    role: key.role ?? "producer",
     status: key.status,
     key_preview: key.key_preview,
     rotated_from_key_id: key.rotated_from_key_id,

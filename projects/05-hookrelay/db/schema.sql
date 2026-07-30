@@ -2,6 +2,7 @@ create table if not exists producer_api_keys (
   key_id text primary key,
   owner_id text not null,
   name text not null,
+  role text not null default 'producer' check (role in ('producer', 'operator', 'admin')),
   key_hash text not null unique,
   key_preview text not null,
   status text not null default 'active' check (status in ('active', 'disabled', 'rotated', 'revoked')),
@@ -86,8 +87,16 @@ alter table webhook_endpoints
   add column if not exists rate_limit_window_seconds integer not null default 60;
 
 alter table producer_api_keys
+  add column if not exists role text not null default 'producer',
   add column if not exists rotated_from_key_id text references producer_api_keys(key_id),
   add column if not exists revoked_at timestamptz;
+
+alter table producer_api_keys
+  drop constraint if exists producer_api_keys_role_check;
+
+alter table producer_api_keys
+  add constraint producer_api_keys_role_check
+  check (role in ('producer', 'operator', 'admin'));
 
 alter table producer_api_keys
   drop constraint if exists producer_api_keys_status_check;

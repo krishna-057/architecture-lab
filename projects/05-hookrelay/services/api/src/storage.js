@@ -50,7 +50,8 @@ export class MemoryStore {
     const demoKey = this.createProducerApiKeyRecord({
       apiKey: demoProducerApiKey,
       ownerId: demoOwnerId,
-      name: "Local demo producer"
+      name: "Local demo producer",
+      role: "admin"
     });
     this.producerApiKeys.set(demoKey.key_hash, demoKey);
 
@@ -79,11 +80,12 @@ export class MemoryStore {
     return Array.from(this.endpoints.values()).map(publicEndpoint);
   }
 
-  createProducerApiKeyRecord({ apiKey, ownerId, name, rotatedFromKeyId = null }) {
+  createProducerApiKeyRecord({ apiKey, ownerId, name, role = "producer", rotatedFromKeyId = null }) {
     return {
       key_id: `pkey_${crypto.randomUUID()}`,
       owner_id: ownerId,
       name,
+      role,
       key_hash: hashProducerApiKey(apiKey),
       key_preview: producerApiKeyPreview(apiKey),
       status: "active",
@@ -98,9 +100,9 @@ export class MemoryStore {
     return Array.from(this.producerApiKeys.values()).map(publicProducerApiKey);
   }
 
-  async createProducerApiKey({ ownerId, name }) {
+  async createProducerApiKey({ ownerId, name, role = "producer" }) {
     const apiKey = generateProducerApiKey();
-    const key = this.createProducerApiKeyRecord({ apiKey, ownerId, name });
+    const key = this.createProducerApiKeyRecord({ apiKey, ownerId, name, role });
     this.producerApiKeys.set(key.key_hash, key);
     return { ...publicProducerApiKey(key), api_key: apiKey };
   }
@@ -125,6 +127,7 @@ export class MemoryStore {
       apiKey,
       ownerId: current.owner_id,
       name: current.name,
+      role: current.role,
       rotatedFromKeyId: current.key_id
     });
     this.producerApiKeys.set(next.key_hash, next);
@@ -272,6 +275,7 @@ export class PostgresStore {
         key_id text primary key,
         owner_id text not null,
         name text not null,
+        role text not null default 'producer',
         key_hash text not null unique,
         key_preview text not null,
         status text not null default 'active',
@@ -282,8 +286,16 @@ export class PostgresStore {
       );
 
       alter table producer_api_keys
+        add column if not exists role text not null default 'producer',
         add column if not exists rotated_from_key_id text references producer_api_keys(key_id),
         add column if not exists revoked_at timestamptz;
+
+      alter table producer_api_keys
+        drop constraint if exists producer_api_keys_role_check;
+
+      alter table producer_api_keys
+        add constraint producer_api_keys_role_check
+        check (role in ('producer', 'operator', 'admin'));
 
       alter table producer_api_keys
         drop constraint if exists producer_api_keys_status_check;
@@ -319,13 +331,16 @@ export class PostgresStore {
 
     const demoKeyHash = hashProducerApiKey(demoProducerApiKey);
     await this.withStartupRetry(() => this.pool.query(
-      `insert into producer_api_keys (key_id, owner_id, name, key_hash, key_preview, status)
-       values ($1, $2, $3, $4, $5, $6)
-       on conflict (key_hash) do nothing`,
+      `insert into producer_api_keys (key_id, owner_id, name, role, key_hash, key_preview, status)
+       values ($1, $2, $3, $4, $5, $6, $7)
+       on conflict (key_hash) do update
+         set role = excluded.role,
+             updated_at = now()`,
       [
         "pkey_demo",
         demoOwnerId,
         "Local demo producer",
+        "admin",
         demoKeyHash,
         producerApiKeyPreview(demoProducerApiKey),
         "active"
@@ -367,23 +382,24 @@ export class PostgresStore {
 
   async listProducerApiKeys() {
     const result = await this.pool.query(
-      `select key_id, owner_id, name, key_preview, status, rotated_from_key_id, revoked_at, created_at, updated_at
+      `select key_id, owner_id, name, role, key_preview, status, rotated_from_key_id, revoked_at, created_at, updated_at
        from producer_api_keys
        order by created_at desc`
     );
     return result.rows.map((row) => publicProducerApiKey(normalizeRow(row)));
   }
 
-  async createProducerApiKey({ ownerId, name }) {
+  async createProducerApiKey({ ownerId, name, role = "producer" }) {
     const apiKey = generateProducerApiKey();
     const result = await this.pool.query(
-      `insert into producer_api_keys (key_id, owner_id, name, key_hash, key_preview, status)
-       values ($1, $2, $3, $4, $5, $6)
-       returning key_id, owner_id, name, key_preview, status, rotated_from_key_id, revoked_at, created_at, updated_at`,
+      `insert into producer_api_keys (key_id, owner_id, name, role, key_hash, key_preview, status)
+       values ($1, $2, $3, $4, $5, $6, $7)
+       returning key_id, owner_id, name, role, key_preview, status, rotated_from_key_id, revoked_at, created_at, updated_at`,
       [
         `pkey_${crypto.randomUUID()}`,
         ownerId,
         name,
+        role,
         hashProducerApiKey(apiKey),
         producerApiKeyPreview(apiKey),
         "active"
@@ -397,7 +413,7 @@ export class PostgresStore {
     try {
       await client.query("begin");
       const currentResult = await client.query(
-        `select key_id, owner_id, name, key_preview, status, rotated_from_key_id, revoked_at, created_at, updated_at
+        `select key_id, owner_id, name, role, key_preview, status, rotated_from_key_id, revoked_at, created_at, updated_at
          from producer_api_keys
          where key_id = $1
          for update`,
@@ -418,20 +434,21 @@ export class PostgresStore {
         `update producer_api_keys
          set status = 'rotated', revoked_at = now(), updated_at = now()
          where key_id = $1
-         returning key_id, owner_id, name, key_preview, status, rotated_from_key_id, revoked_at, created_at, updated_at`,
+         returning key_id, owner_id, name, role, key_preview, status, rotated_from_key_id, revoked_at, created_at, updated_at`,
         [keyId]
       );
       const apiKey = generateProducerApiKey();
       const nextResult = await client.query(
         `insert into producer_api_keys (
-           key_id, owner_id, name, key_hash, key_preview, status, rotated_from_key_id
+           key_id, owner_id, name, role, key_hash, key_preview, status, rotated_from_key_id
          )
-         values ($1, $2, $3, $4, $5, $6, $7)
-         returning key_id, owner_id, name, key_preview, status, rotated_from_key_id, revoked_at, created_at, updated_at`,
+         values ($1, $2, $3, $4, $5, $6, $7, $8)
+         returning key_id, owner_id, name, role, key_preview, status, rotated_from_key_id, revoked_at, created_at, updated_at`,
         [
           `pkey_${crypto.randomUUID()}`,
           current.owner_id,
           current.name,
+          current.role,
           hashProducerApiKey(apiKey),
           producerApiKeyPreview(apiKey),
           "active",
@@ -453,7 +470,7 @@ export class PostgresStore {
 
   async revokeProducerApiKey(keyId) {
     const currentResult = await this.pool.query(
-      `select key_id, owner_id, name, key_preview, status, rotated_from_key_id, revoked_at, created_at, updated_at
+      `select key_id, owner_id, name, role, key_preview, status, rotated_from_key_id, revoked_at, created_at, updated_at
        from producer_api_keys
        where key_id = $1`,
       [keyId]
@@ -471,7 +488,7 @@ export class PostgresStore {
       `update producer_api_keys
        set status = 'revoked', revoked_at = now(), updated_at = now()
        where key_id = $1
-       returning key_id, owner_id, name, key_preview, status, rotated_from_key_id, revoked_at, created_at, updated_at`,
+       returning key_id, owner_id, name, role, key_preview, status, rotated_from_key_id, revoked_at, created_at, updated_at`,
       [keyId]
     );
     return { key: publicProducerApiKey(normalizeRow(result.rows[0])) };
@@ -479,7 +496,7 @@ export class PostgresStore {
 
   async authenticateProducerApiKey(apiKey) {
     const result = await this.pool.query(
-      `select key_id, owner_id, name, key_preview, status, rotated_from_key_id, revoked_at, created_at, updated_at
+      `select key_id, owner_id, name, role, key_preview, status, rotated_from_key_id, revoked_at, created_at, updated_at
        from producer_api_keys
        where key_hash = $1 and status = 'active'`,
       [hashProducerApiKey(apiKey)]

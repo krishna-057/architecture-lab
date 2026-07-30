@@ -151,3 +151,22 @@ Rejected alternatives:
 
 Follow-up:
 Add tenant users, lifecycle audit actors, approval-backed revocation, scoped producer permissions, and role-based replay authorization.
+
+## 2026-07-31: Add Role-Based Replay Authorization
+
+Decision:
+Add a minimal role field to producer API keys and require `operator` or `admin` for manual replay. Keep `producer` or `admin` for endpoint creation and event ingestion. Replay still requires the key `owner_id` to match the delivery endpoint owner and still requires a human-readable replay reason.
+
+Why:
+- Manual replay can resend customer-facing webhooks, so it should not be authorized by intent text alone.
+- API-key roles reuse the existing hashed key and owner model, avoiding a premature tenant user/RBAC build.
+- Separating `producer` and `operator` gives the portfolio slice a concrete least-privilege story while keeping local bootstrap simple.
+- Keeping owner matching on replay prevents one tenant operator key from replaying another tenant's delivery.
+
+Rejected alternatives:
+- Full tenant users and team RBAC now: the final shape is right, but it would dominate the delivery-platform slice.
+- A shared static operator token: fast to implement, but it would bypass owner scope and duplicate the API-key auth path.
+- Keep replay unauthenticated with only `requested_by`: useful for a first demo, but too weak once producer keys and ownership exist.
+
+Follow-up:
+Add signed user identity to replay audit records, approval workflows for sensitive replays, scoped permissions per endpoint, and tenant-managed team membership.

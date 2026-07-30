@@ -68,6 +68,8 @@ type DeliveryContract = {
     mode: string;
     accepted_headers: string[];
     owner_rule: string;
+    roles: string[];
+    producer_roles: string[];
     rotation_endpoint: string;
     revocation_endpoint: string;
     inactive_statuses: string[];
@@ -101,6 +103,9 @@ type DeliveryContract = {
   replay_rule: string;
   replay_authorization: {
     mode: string;
+    accepted_headers: string[];
+    required_roles: string[];
+    owner_rule: string;
     required_body_fields: string[];
     optional_body_fields: string[];
     audit_rule: string;
@@ -137,6 +142,7 @@ type ProducerApiKey = {
   key_id: string;
   owner_id: string;
   name: string;
+  role: "producer" | "operator" | "admin";
   status: "active" | "disabled" | "rotated" | "revoked";
   key_preview: string;
   rotated_from_key_id?: string | null;
@@ -190,6 +196,7 @@ export default function HookRelayHome() {
   const [producerApiKey, setProducerApiKey] = useState(defaultProducerApiKey);
   const [newKeyOwnerId, setNewKeyOwnerId] = useState("owner_demo");
   const [newKeyName, setNewKeyName] = useState("Local dashboard producer");
+  const [newKeyRole, setNewKeyRole] = useState<ProducerApiKey["role"]>("producer");
   const [observabilityMode, setObservabilityMode] = useState("loading");
   const [spans, setSpans] = useState<ObservabilitySpan[]>([]);
   const [endpointName, setEndpointName] = useState("Billing listener");
@@ -295,7 +302,7 @@ export default function HookRelayHome() {
     try {
       const key = await requestJson<ProducerApiKey>("/api/producer-api-keys", {
         method: "POST",
-        body: JSON.stringify({ owner_id: newKeyOwnerId, name: newKeyName })
+        body: JSON.stringify({ owner_id: newKeyOwnerId, name: newKeyName, role: newKeyRole })
       });
       setProducerKeys((current) => [key, ...current]);
       if (key.api_key) {
@@ -338,13 +345,14 @@ export default function HookRelayHome() {
     try {
       await requestJson<DeliveryAttempt>(`/api/deliveries/${deliveryId}/replay`, {
         method: "POST",
+        headers: { Authorization: `Bearer ${producerApiKey}` },
         body: JSON.stringify({
           reason: "Operator requested replay after receiver recovery",
           requested_by: "local-dashboard"
         })
       });
       await refreshAll();
-      setStatusMessage("Replay authorized with operator intent and queued as a new delivery attempt.");
+      setStatusMessage("Replay authorized with an operator/admin key and queued as a new delivery attempt.");
     } catch (error) {
       setStatusMessage(error instanceof Error ? error.message : "Replay failed.");
     }
@@ -417,6 +425,14 @@ export default function HookRelayHome() {
             <label>
               <span>Key Name</span>
               <input value={newKeyName} onChange={(event) => setNewKeyName(event.target.value)} />
+            </label>
+            <label>
+              <span>Role</span>
+              <select value={newKeyRole} onChange={(event) => setNewKeyRole(event.target.value as ProducerApiKey["role"])}>
+                <option value="producer">producer</option>
+                <option value="operator">operator</option>
+                <option value="admin">admin</option>
+              </select>
             </label>
             <button type="submit">Create API Key</button>
           </form>
@@ -571,7 +587,11 @@ export default function HookRelayHome() {
             </div>
             <div>
               <dt>Replay Auth</dt>
-              <dd>{contract?.replay_authorization.mode ?? "unknown"}</dd>
+              <dd>
+                {contract
+                  ? `${contract.replay_authorization.mode}: ${contract.replay_authorization.required_roles.join(", ")}`
+                  : "unknown"}
+              </dd>
             </div>
             <div>
               <dt>Rate Limit</dt>
@@ -692,7 +712,7 @@ export default function HookRelayHome() {
                 <strong>{key.name}</strong>
                 <span>{key.owner_id}</span>
                 <small>
-                  {key.key_preview} / {key.status}
+                  {key.key_preview} / {key.role} / {key.status}
                 </small>
                 {key.rotated_from_key_id ? <small>rotated from {key.rotated_from_key_id}</small> : null}
                 {key.revoked_at ? <small>inactive since {formatTime(key.revoked_at)}</small> : null}

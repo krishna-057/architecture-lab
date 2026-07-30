@@ -32,14 +32,14 @@ API and worker operations also write provider-neutral observability spans. In me
 
 | Component | Responsibility |
 | --- | --- |
-| Fastify API | Producer key bootstrap, endpoint setup, event ingestion, idempotency handling, delivery attempt creation, replay enqueueing, and contract discovery. |
+| Fastify API | API-key bootstrap, endpoint setup, event ingestion, idempotency handling, role-gated replay enqueueing, and contract discovery. |
 | Next.js web app | Developer/operator console for creating endpoints, submitting events, replaying deliveries, and inspecting signatures. |
 | PostgreSQL | Optional durable owner for endpoints, events, idempotency uniqueness, delivery attempt state, replay audit fields, and dead-letter status. |
 | BullMQ / Redis | Optional durable queue, jittered delayed retry scheduler, and endpoint rate-limit counter owner. |
 | Worker process | Sends signed outbound HTTP requests, records responses, schedules retries, and marks dead-letter failures. |
 | Observability span log | Captures event ingestion, enqueue, replay, worker processing, and outbound HTTP timing as local JSON spans before adding a vendor exporter. |
 | Endpoint rate limiter | Enforces fixed-window event ingestion limits per endpoint before accepting new producer events. |
-| Producer API keys | Authenticate producers, bind endpoint creation/event ingestion to an `owner_id`, and support active/rotated/revoked lifecycle state before a full tenant model exists. |
+| Producer API keys | Authenticate producers/operators, bind actions to an `owner_id`, carry a minimal role, and support active/rotated/revoked lifecycle state before a full tenant model exists. |
 | Receiver verification example | Shows receivers how to rebuild `timestamp.rawBody`, compute HMAC-SHA256, and enforce a timestamp tolerance. |
 | Replay authorization contract | Requires operator replay reasons before manual replay creates a new delivery attempt. |
 
@@ -52,7 +52,7 @@ API and worker operations also write provider-neutral observability spans. In me
 | `GET /api/receiver-verification-example` | Return sample receiver verification inputs, required headers, and Node.js digest expression. |
 | `GET /api/observability/spans` | Return recent provider-neutral spans with trace ids, span ids, timing, status, and delivery attributes. |
 | `GET /api/producer-api-keys` | List producer key previews, owners, and status without exposing full secrets. |
-| `POST /api/producer-api-keys` | Create a local producer key and return the full secret once for development bootstrap. |
+| `POST /api/producer-api-keys` | Create a local producer/operator/admin key and return the full secret once for development bootstrap. |
 | `POST /api/producer-api-keys/:key_id/rotate` | Replace an active key with a new one for the same owner and mark the old key as rotated. |
 | `POST /api/producer-api-keys/:key_id/revoke` | Mark an active key as revoked so it no longer authenticates. |
 | `GET /api/endpoints` | List webhook endpoints without exposing full signing secrets. |
@@ -60,7 +60,7 @@ API and worker operations also write provider-neutral observability spans. In me
 | `GET /api/events` | List accepted producer events. |
 | `POST /api/events` | Authenticate the producer key, require owner match, check the endpoint rate limit, accept one event per endpoint/idempotency key, and create the first delivery attempt. |
 | `GET /api/deliveries` | List delivery attempts, statuses, replay audit fields, and signature previews. |
-| `POST /api/deliveries/:delivery_id/replay` | Require replay intent, create a new queued attempt for an existing event, and enqueue it when BullMQ is configured. |
+| `POST /api/deliveries/:delivery_id/replay` | Require an owner-scoped operator/admin key plus replay intent, create a new queued attempt for an existing event, and enqueue it when BullMQ is configured. |
 
 ## Idempotency
 
@@ -77,9 +77,17 @@ Authorization: Bearer <api_key>
 X-HookRelay-API-Key: <api_key>
 ```
 
-The implementation stores only SHA-256 key hashes plus key previews. The full key is returned once from creation or rotation responses. Rotation changes the old key status to `rotated`, creates a replacement key for the same `owner_id`, and links the replacement through `rotated_from_key_id`. Revocation changes an active key status to `revoked`. Authentication only accepts `active` keys, so rotated, revoked, and disabled keys stop at the auth boundary before endpoint creation, ownership checks, rate limiting, or event insertion.
+The implementation stores only SHA-256 key hashes plus key previews. Each key has a minimal role:
 
-The key creation, rotation, and revocation endpoints are local bootstrap/admin endpoints for this portfolio slice. Full tenant users, RBAC, approval workflows, audit actors, and scoped producer permissions remain deferred.
+```text
+producer: endpoint creation and event ingestion
+operator: manual replay
+admin: producer and operator actions
+```
+
+The full key is returned once from creation or rotation responses. Rotation changes the old key status to `rotated`, creates a replacement key for the same `owner_id` and role, and links the replacement through `rotated_from_key_id`. Revocation changes an active key status to `revoked`. Authentication only accepts `active` keys, so rotated, revoked, and disabled keys stop at the auth boundary before endpoint creation, ownership checks, rate limiting, or event insertion.
+
+The key creation, rotation, and revocation endpoints are local bootstrap/admin endpoints for this portfolio slice. Full tenant users, team membership, approval workflows, audit actors, and scoped permissions remain deferred.
 
 ## Endpoint Rate Limits
 
@@ -109,7 +117,7 @@ The default jitter ratio is 20%, configurable through `DELIVERY_RETRY_JITTER_RAT
 
 `delivery_attempts` is append-friendly. Automatic retries and manual replays create new attempts rather than overwriting the original attempt. Final failures are marked `dead_letter` on the attempt, which keeps the first dead-letter model simple.
 
-Manual replay attempts store `replay_reason` and `replay_requested_by`. That gives the operator action an audit trail before HookRelay has tenant users, roles, or approval policies.
+Manual replay requires an active `operator` or `admin` API key whose `owner_id` matches the delivery endpoint owner. Replay attempts store `replay_reason` and `replay_requested_by`. That gives the operator action an audit trail before HookRelay has tenant users, approval policies, or signed user identities.
 
 ## Observability
 
@@ -128,7 +136,7 @@ Each span has `trace_id`, `span_id`, optional parent span, delivery/event/endpoi
 ## Deferred Work
 
 - Full tenant user accounts and RBAC.
-- Role-based replay authorization.
+- Signed user identity on replay audit records.
 - Approval-backed producer key lifecycle audit.
 - Tenant-specific retry overrides and multi-dimensional producer quotas.
 - Receiver SDKs.

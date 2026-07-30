@@ -1,5 +1,32 @@
 # Daily Log
 
+## 2026-07-31
+
+Added HookRelay role-based replay authorization.
+
+Added:
+- API-key roles: `producer`, `operator`, and `admin`.
+- Producer/admin role enforcement for endpoint creation and event ingestion.
+- Operator/admin role enforcement on `POST /api/deliveries/:delivery_id/replay`.
+- Replay owner matching so an operator key can only replay deliveries for endpoints with the same `owner_id`.
+- PostgreSQL and in-memory role storage, including schema migration coverage and demo key promotion to `admin`.
+- Dashboard role selection for new API keys, replay requests using the active API key, and role/status display in the key list.
+- Delivery contract, architecture, decision, and interview-note updates explaining why this uses minimal API-key roles before full tenant RBAC.
+
+Validated the work by running:
+- `npm run check -w @hookrelay/api` from `projects/05-hookrelay`
+- `node scripts/check-workspace.mjs` from `projects/05-hookrelay`
+- `npm run build -w @hookrelay/web` from `projects/05-hookrelay`
+- A local Fastify smoke test covering no-auth replay rejection, producer-role replay rejection, wrong-owner operator rejection, valid operator replay, and operator endpoint-creation rejection
+- `git diff --check`
+
+Notes:
+- `WORKFLOW.md` still appears to contain binary/corrupted content in the current checkout, so it could not be meaningfully read as Markdown.
+- This intentionally stops at API-key roles; signed user identities, approvals, teams, and scoped permissions remain deferred.
+
+Next recommended task:
+- Add HookRelay receiver failure classification.
+
 ## 2026-07-30
 
 Added HookRelay producer API key rotation and revocation.

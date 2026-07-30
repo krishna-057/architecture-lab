@@ -66,7 +66,15 @@ Observability should attach one trace across event ingestion, job enqueue, each 
 
 - Producer API keys are the first authentication boundary because HookRelay needs to stop treating event ingestion as globally writable before adding tenant UI.
 - Endpoints store `owner_id`, and event ingestion requires the API key owner to match that endpoint owner. That prevents cross-owner event injection and quota consumption.
+- API keys carry a minimal role. `producer` keys can create endpoints and ingest events, `operator` keys can replay deliveries, and `admin` keys can do both.
 - API keys are stored as hashes with previews. The full secret is returned only once at creation, which matches common API-key operational behavior.
 - Rotation creates a replacement key for the same owner and marks the old key as `rotated`. Revocation marks an active key as `revoked`. Authentication only accepts `active` keys, which keeps lifecycle enforcement in one place.
 - The key lifecycle endpoints are intentionally local bootstrap/admin paths for the portfolio slice. A production version would sit behind tenant users, roles, audit actors, approval policy, and scoped key permissions.
 - Ownership is checked before rate limiting and idempotency insertion, so unauthorized producers do not consume endpoint quota or create delivery records.
+
+## Role-Based Replay Talking Points
+
+- Manual replay is now protected by the same API-key system as producer traffic, but it requires `operator` or `admin`.
+- Replay authorization checks role and endpoint owner before it creates a new delivery attempt, so a valid operator key cannot replay another owner's webhook.
+- The replay reason remains required because role answers "who is allowed" while reason answers "why this operational action happened."
+- This is deliberately smaller than full tenant RBAC. It proves least privilege at the delivery boundary before adding users, teams, approval flows, and signed audit actors.
