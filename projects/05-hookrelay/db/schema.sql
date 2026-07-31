@@ -49,6 +49,7 @@ create table if not exists delivery_attempts (
   jitter_seconds integer not null default 0,
   scheduled_delay_seconds integer not null default 0,
   response_status integer,
+  failure_class text,
   error text,
   replayed_from_delivery_id text references delivery_attempts(delivery_id),
   replay_reason text,
@@ -78,6 +79,7 @@ alter table delivery_attempts
   add column if not exists base_delay_seconds integer not null default 0,
   add column if not exists jitter_seconds integer not null default 0,
   add column if not exists scheduled_delay_seconds integer not null default 0,
+  add column if not exists failure_class text,
   add column if not exists replay_reason text,
   add column if not exists replay_requested_by text;
 

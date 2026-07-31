@@ -10,6 +10,7 @@ import {
 import { createTraceId, NoopObservability } from "./observability.js";
 import { extractProducerApiKey } from "./producer-auth.js";
 import { MemoryEndpointRateLimiter } from "./rate-limiter.js";
+import { receiverFailureClasses } from "./receiver-failure.js";
 import { buildReceiverVerificationExample } from "./signing.js";
 
 function validateAbsoluteUrl(value) {
@@ -146,6 +147,13 @@ export function createHookRelayApp({
       jitter_ratio: retryJitterRatio,
       jitter_mode: "bounded_symmetric_per_attempt",
       dead_letter_after_attempts: retryDelaysSeconds.length
+    },
+    receiver_failure_classification: {
+      field: "failure_class",
+      classes: receiverFailureClasses,
+      stored_on: "delivery_attempts",
+      classified_on: "worker receiver response or fetch error",
+      retry_rule: "Failure classification is recorded before retry scheduling or dead-letter promotion."
     },
     replay_rule: "Manual replay creates a new queued delivery attempt for the same event payload.",
     replay_authorization: {

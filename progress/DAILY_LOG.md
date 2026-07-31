@@ -2,6 +2,33 @@
 
 ## 2026-07-31
 
+Added HookRelay receiver failure classification.
+
+Added:
+- `services/api/src/receiver-failure.js` with a small worker-owned failure taxonomy.
+- `failure_class` on delivery attempts for `receiver_http_4xx`, `receiver_http_5xx`, `receiver_http_other`, `receiver_timeout`, `receiver_network`, and `internal_error`.
+- Worker classification before retry scheduling or dead-letter promotion, with response status retained on HTTP failures.
+- PostgreSQL schema and runtime migration coverage for `delivery_attempts.failure_class`.
+- Delivery contract discovery for receiver failure classification.
+- Dashboard failure-class display in the delivery log.
+- README, architecture, delivery contract, decision, and interview-note updates explaining why this creates a stable grouping field before alerting/analytics.
+
+Validated the work by running:
+- `npm run check -w @hookrelay/api` from `projects/05-hookrelay`
+- `node scripts/check-workspace.mjs` from `projects/05-hookrelay`
+- `npm run build -w @hookrelay/web` from `projects/05-hookrelay`
+- A local worker smoke test covering 4xx/5xx/timeout classifier rules plus a 503 receiver attempt recorded as `receiver_http_5xx` with a clean retry attempt
+- `git diff --check`
+
+Notes:
+- `WORKFLOW.md` still appears to contain binary/corrupted content in the current checkout, so it could not be meaningfully read as Markdown.
+- Failure classification is intentionally stored on delivery attempts first; dashboards, alert routing, and endpoint-specific retry policy remain follow-up work.
+
+Next recommended task:
+- Add HookRelay failure-class dashboard filters.
+
+## 2026-07-31
+
 Added HookRelay role-based replay authorization.
 
 Added:

@@ -308,6 +308,14 @@ export class PostgresStore {
         add column if not exists owner_id text not null default 'owner_demo',
         add column if not exists rate_limit_per_minute integer not null default 60,
         add column if not exists rate_limit_window_seconds integer not null default 60;
+
+      do $$
+      begin
+        if to_regclass('public.delivery_attempts') is not null then
+          alter table delivery_attempts
+            add column if not exists failure_class text;
+        end if;
+      end $$;
     `));
 
     await this.withStartupRetry(() => this.pool.query(
@@ -623,10 +631,10 @@ export class PostgresStore {
       `insert into delivery_attempts (
          delivery_id, event_id, endpoint_id, target_url, status, attempt_number,
          next_attempt_at, base_delay_seconds, jitter_seconds, scheduled_delay_seconds,
-         response_status, error, replayed_from_delivery_id, replay_reason,
-         replay_requested_by, signature_headers
+         response_status, failure_class, error, replayed_from_delivery_id,
+         replay_reason, replay_requested_by, signature_headers
        )
-       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16::jsonb)
+       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17::jsonb)
        returning *`,
       [
         delivery.delivery_id,
@@ -640,6 +648,7 @@ export class PostgresStore {
         delivery.jitter_seconds,
         delivery.scheduled_delay_seconds,
         delivery.response_status,
+        delivery.failure_class,
         delivery.error,
         delivery.replayed_from_delivery_id,
         delivery.replay_reason,
@@ -651,7 +660,7 @@ export class PostgresStore {
   }
 
   async updateDelivery(deliveryId, updates) {
-    const allowed = ["status", "response_status", "error", "next_attempt_at"];
+    const allowed = ["status", "response_status", "failure_class", "error", "next_attempt_at"];
     const entries = Object.entries(updates).filter(([key]) => allowed.includes(key));
     if (entries.length === 0) {
       return this.getDelivery(deliveryId);

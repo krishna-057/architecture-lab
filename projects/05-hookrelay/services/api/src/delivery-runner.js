@@ -1,5 +1,6 @@
 import { deliveryHttpTimeoutMs, retryDelaysSeconds } from "./config.js";
 import { createTraceId, NoopObservability } from "./observability.js";
+import { classifyReceiverFailure } from "./receiver-failure.js";
 
 function eventPayload(event) {
   return {
@@ -43,19 +44,23 @@ export async function processDelivery({ store, queue, deliveryId, observability 
       const event = await store.getEvent(delivery.event_id);
       const endpoint = await store.getEndpoint(delivery.endpoint_id);
       if (!event || !endpoint) {
+        const failureClass = classifyReceiverFailure();
         await store.updateDelivery(delivery.delivery_id, {
           status: "dead_letter",
+          failure_class: failureClass,
           error: "Delivery cannot run because its event or endpoint is missing."
         });
         processSpan.attributes.final_status = "dead_letter";
+        processSpan.attributes.failure_class = failureClass;
         processSpan.attributes.error = "missing_event_or_endpoint";
         return;
       }
 
-      await store.updateDelivery(delivery.delivery_id, { status: "delivering", error: null });
+      await store.updateDelivery(delivery.delivery_id, { status: "delivering", response_status: null, failure_class: null, error: null });
 
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), deliveryHttpTimeoutMs);
+      let responseStatus = null;
 
       try {
         const response = await observability.traceSpan(
@@ -81,8 +86,10 @@ export async function processDelivery({ store, queue, deliveryId, observability 
               body: JSON.stringify(eventPayload(event)),
               signal: controller.signal
             });
+            responseStatus = receiverResponse.status;
             httpSpan.attributes.response_status = receiverResponse.status;
             if (!receiverResponse.ok) {
+              httpSpan.attributes.failure_class = classifyReceiverFailure({ responseStatus });
               throw new Error(`Receiver returned HTTP ${receiverResponse.status}`);
             }
             return receiverResponse;
@@ -92,18 +99,24 @@ export async function processDelivery({ store, queue, deliveryId, observability 
         await store.updateDelivery(delivery.delivery_id, {
           status: "succeeded",
           response_status: response.status,
+          failure_class: null,
           error: null
         });
         processSpan.attributes.final_status = "succeeded";
         processSpan.attributes.response_status = response.status;
       } catch (error) {
+        const failureClass = classifyReceiverFailure({ responseStatus, error });
         const shouldDeadLetter = delivery.attempt_number >= retryDelaysSeconds.length;
         const finalStatus = shouldDeadLetter ? "dead_letter" : "failed";
         await store.updateDelivery(delivery.delivery_id, {
           status: finalStatus,
+          response_status: responseStatus,
+          failure_class: failureClass,
           error: errorMessage(error)
         });
         processSpan.attributes.final_status = finalStatus;
+        processSpan.attributes.response_status = responseStatus;
+        processSpan.attributes.failure_class = failureClass;
         processSpan.attributes.error = errorMessage(error);
 
         if (!shouldDeadLetter) {

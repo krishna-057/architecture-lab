@@ -90,6 +90,7 @@ export function buildDelivery({
     jitter_seconds: schedule.jitter_seconds,
     scheduled_delay_seconds: schedule.scheduled_delay_seconds,
     response_status: null,
+    failure_class: null,
     error: null,
     replayed_from_delivery_id: replayedFrom,
     replay_reason: replayReason,

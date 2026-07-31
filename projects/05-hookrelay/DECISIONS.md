@@ -170,3 +170,22 @@ Rejected alternatives:
 
 Follow-up:
 Add signed user identity to replay audit records, approval workflows for sensitive replays, scoped permissions per endpoint, and tenant-managed team membership.
+
+## 2026-07-31: Add Receiver Failure Classification
+
+Decision:
+Classify failed delivery attempts with a stable `failure_class` field before retry scheduling or dead-letter promotion. Use a small first taxonomy: `receiver_http_4xx`, `receiver_http_5xx`, `receiver_http_other`, `receiver_timeout`, `receiver_network`, and `internal_error`.
+
+Why:
+- Operators need to know whether failures are receiver application errors, receiver outages, network path issues, timeouts, or worker/internal problems without parsing free-form error strings.
+- Classification belongs in the worker because that is where HookRelay sees the receiver response or fetch error.
+- Keeping the class on `delivery_attempts` makes retries, dead letters, dashboards, and future alerts query the same durable field.
+- A small text taxonomy is enough for this slice and avoids premature alert routing or incident workflow modeling.
+
+Rejected alternatives:
+- Store only raw error messages: easy, but too brittle for dashboards and interview discussion.
+- Add a separate failure analytics table now: useful later, but overkill before the delivery attempt lifecycle needs aggregation.
+- Classify only in the dashboard: presentation-only classification would drift from worker behavior and would not help durable alerting.
+
+Follow-up:
+Add receiver failure trend charts, alert routing by failure class, endpoint-specific retry policies, and richer receiver diagnostics.

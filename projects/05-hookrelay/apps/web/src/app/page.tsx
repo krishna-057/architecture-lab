@@ -36,6 +36,7 @@ type DeliveryAttempt = {
   jitter_seconds: number;
   scheduled_delay_seconds: number;
   response_status: number | null;
+  failure_class: string | null;
   error: string | null;
   replayed_from_delivery_id: string | null;
   replay_reason: string | null;
@@ -99,6 +100,13 @@ type DeliveryContract = {
     jitter_ratio: number;
     jitter_mode: string;
     dead_letter_after_attempts: number;
+  };
+  receiver_failure_classification: {
+    field: string;
+    classes: string[];
+    stored_on: string;
+    classified_on: string;
+    retry_rule: string;
   };
   replay_rule: string;
   replay_authorization: {
@@ -537,6 +545,10 @@ export default function HookRelayHome() {
                   </strong>
                 </div>
                 <div>
+                  <span>Failure</span>
+                  <strong>{delivery.failure_class ?? "none"}</strong>
+                </div>
+                <div>
                   <span>Replay</span>
                   <strong>{delivery.replay_requested_by ?? "original"}</strong>
                 </div>
@@ -594,6 +606,10 @@ export default function HookRelayHome() {
               </dd>
             </div>
             <div>
+              <dt>Failure Class</dt>
+              <dd>{contract?.receiver_failure_classification.field ?? "unknown"}</dd>
+            </div>
+            <div>
               <dt>Rate Limit</dt>
               <dd>
                 {contract
@@ -629,6 +645,7 @@ export default function HookRelayHome() {
           <p>
             {contract ? `${contract.retry_policy.jitter_mode} at ${Math.round(contract.retry_policy.jitter_ratio * 100)}% per attempt.` : ""}
           </p>
+          <p>{contract?.receiver_failure_classification.retry_rule}</p>
           <p>{contract?.replay_rule}</p>
           <p>{contract?.replay_authorization.audit_rule}</p>
         </section>

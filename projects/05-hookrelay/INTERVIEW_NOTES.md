@@ -54,6 +54,14 @@ Observability should attach one trace across event ingestion, job enqueue, each 
 - The span names are intentionally domain-specific (`hookrelay.delivery.process`, `hookrelay.delivery.http_request`) so an interview discussion can move from product behavior to OpenTelemetry mapping naturally.
 - Full OpenTelemetry export is deferred until there is a clear collector, sampling, retention, and dashboard choice.
 
+## Receiver Failure Classification Talking Points
+
+- Delivery attempts now store `failure_class` in addition to raw `error`, so operators can group failures without parsing unstable messages.
+- HTTP 4xx and 5xx are separated because they usually mean different ownership: producer/receiver contract mistakes versus receiver outage or overload.
+- Timeout and network failures are separate from HTTP failures because there may be no receiver response at all.
+- Classification happens inside the worker before retry scheduling and dead-letter promotion, so every retry attempt keeps the reason HookRelay observed at that boundary.
+- This is intentionally not a full alerting system yet; it creates the durable field that later dashboards, alerts, and endpoint-specific retry policy can use.
+
 ## Endpoint Rate Limit Talking Points
 
 - Rate limiting runs before event insertion and queue creation, which protects the request path and the worker backlog from a noisy endpoint.

@@ -36,7 +36,7 @@ API and worker operations also write provider-neutral observability spans. In me
 | Next.js web app | Developer/operator console for creating endpoints, submitting events, replaying deliveries, and inspecting signatures. |
 | PostgreSQL | Optional durable owner for endpoints, events, idempotency uniqueness, delivery attempt state, replay audit fields, and dead-letter status. |
 | BullMQ / Redis | Optional durable queue, jittered delayed retry scheduler, and endpoint rate-limit counter owner. |
-| Worker process | Sends signed outbound HTTP requests, records responses, schedules retries, and marks dead-letter failures. |
+| Worker process | Sends signed outbound HTTP requests, classifies receiver failures, records responses, schedules retries, and marks dead-letter failures. |
 | Observability span log | Captures event ingestion, enqueue, replay, worker processing, and outbound HTTP timing as local JSON spans before adding a vendor exporter. |
 | Endpoint rate limiter | Enforces fixed-window event ingestion limits per endpoint before accepting new producer events. |
 | Producer API keys | Authenticate producers/operators, bind actions to an `owner_id`, carry a minimal role, and support active/rotated/revoked lifecycle state before a full tenant model exists. |
@@ -59,7 +59,7 @@ API and worker operations also write provider-neutral observability spans. In me
 | `POST /api/endpoints` | Authenticate a producer key, then create a webhook target, signing secret, owner id, and endpoint rate-limit policy. |
 | `GET /api/events` | List accepted producer events. |
 | `POST /api/events` | Authenticate the producer key, require owner match, check the endpoint rate limit, accept one event per endpoint/idempotency key, and create the first delivery attempt. |
-| `GET /api/deliveries` | List delivery attempts, statuses, replay audit fields, and signature previews. |
+| `GET /api/deliveries` | List delivery attempts, statuses, replay audit fields, receiver failure classes, and signature previews. |
 | `POST /api/deliveries/:delivery_id/replay` | Require an owner-scoped operator/admin key plus replay intent, create a new queued attempt for an existing event, and enqueue it when BullMQ is configured. |
 
 ## Idempotency
@@ -119,6 +119,21 @@ The default jitter ratio is 20%, configurable through `DELIVERY_RETRY_JITTER_RAT
 
 Manual replay requires an active `operator` or `admin` API key whose `owner_id` matches the delivery endpoint owner. Replay attempts store `replay_reason` and `replay_requested_by`. That gives the operator action an audit trail before HookRelay has tenant users, approval policies, or signed user identities.
 
+## Receiver Failure Classification
+
+Failed worker attempts store a `failure_class` on the delivery attempt before retry scheduling or dead-letter promotion. The first taxonomy is intentionally small:
+
+```text
+receiver_http_4xx
+receiver_http_5xx
+receiver_http_other
+receiver_timeout
+receiver_network
+internal_error
+```
+
+The class is derived from the receiver HTTP status when one exists, otherwise from fetch/abort error signals. Operators still get the raw `error` message, but `failure_class` gives dashboards and interview explanations a stable grouping for "bad request to receiver", "receiver outage", "network path broke", and "worker/internal issue".
+
 ## Observability
 
 HookRelay records a small span envelope for the operations that explain delivery lifecycle behavior:
@@ -140,4 +155,5 @@ Each span has `trace_id`, `span_id`, optional parent span, delivery/event/endpoi
 - Approval-backed producer key lifecycle audit.
 - Tenant-specific retry overrides and multi-dimensional producer quotas.
 - Receiver SDKs.
+- Receiver-specific failure dashboards and alert routing.
 - OpenTelemetry exporters, trace sampling, and long-retention latency dashboards.

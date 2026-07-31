@@ -6,10 +6,11 @@ Tasks should stay small enough for one focused session.
 
 ### Ready
 
-- [ ] Add HookRelay receiver failure classification.
+- [ ] Add HookRelay failure-class dashboard filters.
 
 ### Completed
 
+- [x] Add HookRelay receiver failure classification.
 - [x] Add HookRelay role-based replay authorization.
 - [x] Add HookRelay producer key rotation and revocation.
 - [x] Add HookRelay producer API keys and endpoint ownership.

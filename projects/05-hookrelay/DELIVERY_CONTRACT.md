@@ -11,6 +11,7 @@ HookRelay defines the HTTP contract for endpoint setup, event ingestion, deliver
 | Endpoint rate limit | `POST /api/events` | In-memory by default, Redis when configured | Redis counters plus tenant quota policy |
 | Event | `/api/events` | In-memory by default, PostgreSQL when configured | PostgreSQL `webhook_events` |
 | Delivery attempt | `/api/deliveries` | In-memory by default, PostgreSQL plus BullMQ when configured | PostgreSQL `delivery_attempts` plus BullMQ jobs |
+| Failure classification | `failure_class` on delivery attempts | In-memory by default, PostgreSQL when configured | Delivery analytics and alert policy |
 | Observability span | `/api/observability/spans` | In-memory by default, PostgreSQL when configured | OpenTelemetry exporter plus query store |
 | Contract discovery | `/api/delivery-contract` | Static API response | Versioned API contract |
 
@@ -167,6 +168,33 @@ next_attempt_at
 ```
 
 The API stores queued delivery records. When Redis is configured, it also creates delayed BullMQ jobs from `next_attempt_at`. The worker sends the signed event payload to the endpoint URL, records success or failure, creates the next retry attempt with a fresh jittered schedule, and promotes the final failed attempt to `dead_letter`.
+
+## Failure Classification
+
+Failed receiver attempts set `failure_class` before retry scheduling or dead-letter promotion. The current classes are:
+
+```text
+receiver_http_4xx
+receiver_http_5xx
+receiver_http_other
+receiver_timeout
+receiver_network
+internal_error
+```
+
+HTTP classes are derived from the receiver response status. Timeout and network classes are derived from fetch/abort errors when no response status exists. The raw `error` string remains on the attempt for diagnostics, but `failure_class` is the stable field dashboards and alerts should group by.
+
+Contract discovery exposes this as:
+
+```json
+{
+  "receiver_failure_classification": {
+    "field": "failure_class",
+    "classes": ["receiver_http_4xx", "receiver_http_5xx", "receiver_http_other", "receiver_timeout", "receiver_network", "internal_error"],
+    "stored_on": "delivery_attempts"
+  }
+}
+```
 
 ## Replay Rule
 

@@ -18,6 +18,7 @@ Added:
 - `services/api/src/observability.js` for bounded local delivery spans, with PostgreSQL span persistence when `DATABASE_URL` is configured.
 - `services/api/src/rate-limiter.js` for endpoint-scoped fixed-window event ingestion limits, backed by Redis when `REDIS_URL` is configured.
 - `services/api/src/producer-auth.js` for API-key hashing, previews, roles, lifecycle statuses, and bearer/header extraction.
+- `services/api/src/receiver-failure.js` for classifying receiver HTTP, timeout, network, and internal delivery failures.
 - `scripts/check-workspace.mjs` for dependency-light validation of the scaffold markers.
 
 Run locally:
@@ -75,10 +76,10 @@ Default URLs:
 | `POST /api/endpoints` | Create an owner-scoped webhook endpoint with a signing secret and rate limit policy. |
 | `GET /api/events` | List accepted producer events. |
 | `POST /api/events` | Authenticate the producer API key, enforce endpoint ownership and rate limit, accept one event per endpoint/idempotency key, and queue a delivery attempt. |
-| `GET /api/deliveries` | List queued delivery attempts and signature previews. |
+| `GET /api/deliveries` | List delivery attempts, signature previews, response status, and receiver failure classification. |
 | `POST /api/deliveries/:delivery_id/replay` | Require an owner-scoped operator/admin key and replay reason, then create a new queued attempt for an existing event. |
 
-When `DATABASE_URL` is set, producer API key hashes, endpoints, events, delivery attempts, and observability spans are stored in PostgreSQL. When `REDIS_URL` is set, new delivery attempts are also enqueued into BullMQ with the documented delay ladder plus bounded jitter, and endpoint rate limits use Redis fixed-window counters. Without those variables, the API still runs in in-memory mode for fast local checks.
+When `DATABASE_URL` is set, producer API key hashes, endpoints, events, delivery attempts, receiver failure classes, and observability spans are stored in PostgreSQL. When `REDIS_URL` is set, new delivery attempts are also enqueued into BullMQ with the documented delay ladder plus bounded jitter, and endpoint rate limits use Redis fixed-window counters. Without those variables, the API still runs in in-memory mode for fast local checks.
 
 ## Why This Project Matters
 
