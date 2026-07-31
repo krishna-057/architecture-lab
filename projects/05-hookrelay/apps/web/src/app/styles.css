@@ -175,6 +175,11 @@ label {
   gap: 12px;
 }
 
+.filter-row {
+  display: grid;
+  max-width: 380px;
+}
+
 .delivery-list,
 .endpoint-list,
 .span-list,

@@ -9,7 +9,7 @@ The current implementation keeps the local in-memory scaffold as the dependency-
 Added:
 
 - `services/api` Fastify API for endpoint creation, event ingestion, delivery attempt records, signature previews, and replay enqueueing.
-- `apps/web` Next.js dashboard for creating endpoints, submitting events, inspecting queued deliveries, replaying attempts, and viewing the delivery contract.
+- `apps/web` Next.js dashboard for creating endpoints, submitting events, filtering delivery attempts by failure class, replaying attempts, and viewing the delivery contract.
 - `db/schema.sql` for durable endpoints, events, idempotency keys, and delivery attempts.
 - `compose.yaml` with PostgreSQL, Redis, API, and worker services. Local data is bind-mounted under `projects/05-hookrelay/.data/`.
 - `services/api/src/worker.js` as the BullMQ worker boundary for outbound HTTP delivery attempts, retry creation, and dead-letter promotion.
@@ -76,7 +76,7 @@ Default URLs:
 | `POST /api/endpoints` | Create an owner-scoped webhook endpoint with a signing secret and rate limit policy. |
 | `GET /api/events` | List accepted producer events. |
 | `POST /api/events` | Authenticate the producer API key, enforce endpoint ownership and rate limit, accept one event per endpoint/idempotency key, and queue a delivery attempt. |
-| `GET /api/deliveries` | List delivery attempts, signature previews, response status, and receiver failure classification. |
+| `GET /api/deliveries` | List delivery attempts, signature previews, response status, and receiver failure classification for dashboard filtering. |
 | `POST /api/deliveries/:delivery_id/replay` | Require an owner-scoped operator/admin key and replay reason, then create a new queued attempt for an existing event. |
 
 When `DATABASE_URL` is set, producer API key hashes, endpoints, events, delivery attempts, receiver failure classes, and observability spans are stored in PostgreSQL. When `REDIS_URL` is set, new delivery attempts are also enqueued into BullMQ with the documented delay ladder plus bounded jitter, and endpoint rate limits use Redis fixed-window counters. Without those variables, the API still runs in in-memory mode for fast local checks.

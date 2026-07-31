@@ -184,6 +184,8 @@ internal_error
 
 HTTP classes are derived from the receiver response status. Timeout and network classes are derived from fetch/abort errors when no response status exists. The raw `error` string remains on the attempt for diagnostics, but `failure_class` is the stable field dashboards and alerts should group by.
 
+The dashboard applies a client-side `failure_class` filter over `GET /api/deliveries`. It always exposes `all`, `none`, and each contract-published class with current counts. This keeps the first operator workflow simple while the delivery list remains bounded.
+
 Contract discovery exposes this as:
 
 ```json

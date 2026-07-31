@@ -189,3 +189,22 @@ Rejected alternatives:
 
 Follow-up:
 Add receiver failure trend charts, alert routing by failure class, endpoint-specific retry policies, and richer receiver diagnostics.
+
+## 2026-08-01: Add Failure-Class Dashboard Filters
+
+Decision:
+Add client-side failure-class filtering to the delivery log. The dashboard exposes `all`, `none`, and every contract-published/observed `failure_class` with live counts, then filters the already-loaded delivery attempts in memory.
+
+Why:
+- Operators need to isolate receiver failures quickly once `failure_class` exists.
+- The current `/api/deliveries` endpoint returns a bounded local list, so client-side filtering is simpler than adding query parameters before pagination or long-retention search exists.
+- Counts beside each class make the filter useful even when the selected class has no matching attempts.
+- Including `none` keeps successful, queued, and not-yet-run attempts visible as a deliberate operational state.
+
+Rejected alternatives:
+- Add server-side filtering now: useful later, but premature without pagination, saved views, or delivery history retention.
+- Build charts immediately: attractive, but filtering is the smaller operator workflow that proves the classification is usable.
+- Hard-code only current classes in the UI: contract-published classes keep the dashboard aligned with the API if the taxonomy grows.
+
+Follow-up:
+Add server-side delivery search, failure trend charts, saved operator views, and alert routing by failure class.

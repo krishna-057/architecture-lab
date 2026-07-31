@@ -6,10 +6,11 @@ Tasks should stay small enough for one focused session.
 
 ### Ready
 
-- [ ] Add HookRelay failure-class dashboard filters.
+- [ ] Add HookRelay server-side delivery search.
 
 ### Completed
 
+- [x] Add HookRelay failure-class dashboard filters.
 - [x] Add HookRelay receiver failure classification.
 - [x] Add HookRelay role-based replay authorization.
 - [x] Add HookRelay producer key rotation and revocation.

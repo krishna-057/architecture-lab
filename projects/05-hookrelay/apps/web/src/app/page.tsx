@@ -222,6 +222,38 @@ export default function HookRelayHome() {
   const latestSpan = spans[0];
   const queuedCount = deliveries.filter((delivery) => delivery.status === "queued").length;
   const duplicateKeys = useMemo(() => new Set(events.map((event) => event.idempotency_key)), [events]);
+  const [failureClassFilter, setFailureClassFilter] = useState("all");
+  const failureClassOptions = useMemo(() => {
+    const contractClasses = contract?.receiver_failure_classification.classes ?? [];
+    const observedClasses = deliveries
+      .map((delivery) => delivery.failure_class)
+      .filter((failureClass): failureClass is string => Boolean(failureClass));
+
+    return Array.from(new Set([...contractClasses, ...observedClasses]));
+  }, [contract, deliveries]);
+  const failureClassCounts = useMemo(() => {
+    const counts = new Map<string, number>([
+      ["all", deliveries.length],
+      ["none", deliveries.filter((delivery) => !delivery.failure_class).length]
+    ]);
+
+    for (const failureClass of failureClassOptions) {
+      counts.set(failureClass, deliveries.filter((delivery) => delivery.failure_class === failureClass).length);
+    }
+
+    return counts;
+  }, [deliveries, failureClassOptions]);
+  const filteredDeliveries = useMemo(() => {
+    if (failureClassFilter === "all") {
+      return deliveries;
+    }
+
+    if (failureClassFilter === "none") {
+      return deliveries.filter((delivery) => !delivery.failure_class);
+    }
+
+    return deliveries.filter((delivery) => delivery.failure_class === failureClassFilter);
+  }, [deliveries, failureClassFilter]);
 
   async function refreshAll() {
     const [
@@ -515,11 +547,30 @@ export default function HookRelayHome() {
         <section className="table-section" aria-label="Delivery attempts">
           <div className="section-header">
             <span>Delivery Log</span>
-            <strong>{deliveries.length}</strong>
+            <strong>
+              {filteredDeliveries.length}/{deliveries.length}
+            </strong>
+          </div>
+          <div className="filter-row" aria-label="Failure class filters">
+            <label>
+              <span>Failure Class</span>
+              <select value={failureClassFilter} onChange={(event) => setFailureClassFilter(event.target.value)}>
+                <option value="all">all ({failureClassCounts.get("all") ?? 0})</option>
+                <option value="none">none ({failureClassCounts.get("none") ?? 0})</option>
+                {failureClassOptions.map((failureClass) => (
+                  <option key={failureClass} value={failureClass}>
+                    {failureClass} ({failureClassCounts.get(failureClass) ?? 0})
+                  </option>
+                ))}
+              </select>
+            </label>
           </div>
           <div className="delivery-list">
             {deliveries.length === 0 ? <p className="empty-state">No delivery attempts queued yet.</p> : null}
-            {deliveries.map((delivery) => (
+            {deliveries.length > 0 && filteredDeliveries.length === 0 ? (
+              <p className="empty-state">No delivery attempts match this failure class.</p>
+            ) : null}
+            {filteredDeliveries.map((delivery) => (
               <article className="delivery-row" key={delivery.delivery_id}>
                 <div>
                   <strong>{delivery.delivery_id}</strong>

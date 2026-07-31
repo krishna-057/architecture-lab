@@ -140,6 +140,9 @@ for (const marker of [
   "Replay Auth",
   "Retry Jitter",
   "Failure Class",
+  "failureClassFilter",
+  "filteredDeliveries",
+  "No delivery attempts match this failure class.",
   "Signature Preview",
   "Replay"
 ]) {
@@ -166,6 +169,7 @@ for (const marker of [
   "admin",
   "required_roles",
   "failure_class",
+  "client-side `failure_class` filter",
   "receiver_http_5xx",
   "owner_id",
   "idempotency_key",

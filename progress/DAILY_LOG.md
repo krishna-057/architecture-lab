@@ -1,5 +1,29 @@
 # Daily Log
 
+## 2026-08-01
+
+Added HookRelay failure-class dashboard filters.
+
+Added:
+- Client-side delivery-log filtering by `failure_class`.
+- Filter options for `all`, `none`, and each contract-published or observed failure class.
+- Live filter counts and a filtered/total delivery-log header.
+- Empty-state handling when a failure class has no matching delivery attempts.
+- README, architecture, delivery contract, decision, and interview-note updates explaining why dashboard filtering is the right first operator workflow before server-side delivery search.
+
+Validated the work by running:
+- `npm run build -w @hookrelay/web` from `projects/05-hookrelay`
+- `node scripts/check-workspace.mjs` from `projects/05-hookrelay`
+- `npm run check -w @hookrelay/api` from `projects/05-hookrelay`
+- `git diff --check`
+
+Notes:
+- `WORKFLOW.md` still appears to contain binary/corrupted content in the current checkout, so it could not be meaningfully read as Markdown.
+- Filtering stays client-side while `/api/deliveries` is a bounded local list; server-side search remains deferred until pagination or long-retention history exists.
+
+Next recommended task:
+- Add HookRelay server-side delivery search.
+
 ## 2026-07-31
 
 Added HookRelay receiver failure classification.

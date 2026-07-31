@@ -33,7 +33,7 @@ API and worker operations also write provider-neutral observability spans. In me
 | Component | Responsibility |
 | --- | --- |
 | Fastify API | API-key bootstrap, endpoint setup, event ingestion, idempotency handling, role-gated replay enqueueing, and contract discovery. |
-| Next.js web app | Developer/operator console for creating endpoints, submitting events, replaying deliveries, and inspecting signatures. |
+| Next.js web app | Developer/operator console for creating endpoints, submitting events, filtering delivery failures, replaying deliveries, and inspecting signatures. |
 | PostgreSQL | Optional durable owner for endpoints, events, idempotency uniqueness, delivery attempt state, replay audit fields, and dead-letter status. |
 | BullMQ / Redis | Optional durable queue, jittered delayed retry scheduler, and endpoint rate-limit counter owner. |
 | Worker process | Sends signed outbound HTTP requests, classifies receiver failures, records responses, schedules retries, and marks dead-letter failures. |
@@ -134,6 +134,8 @@ internal_error
 
 The class is derived from the receiver HTTP status when one exists, otherwise from fetch/abort error signals. Operators still get the raw `error` message, but `failure_class` gives dashboards and interview explanations a stable grouping for "bad request to receiver", "receiver outage", "network path broke", and "worker/internal issue".
 
+The dashboard filters the delivery log by `failure_class` using the contract-published class list plus any observed classes. The filter stays client-side for this slice because `/api/deliveries` already returns the bounded local delivery list; server-side filtering can be added when pagination or long-retention delivery search exists.
+
 ## Observability
 
 HookRelay records a small span envelope for the operations that explain delivery lifecycle behavior:
@@ -155,5 +157,5 @@ Each span has `trace_id`, `span_id`, optional parent span, delivery/event/endpoi
 - Approval-backed producer key lifecycle audit.
 - Tenant-specific retry overrides and multi-dimensional producer quotas.
 - Receiver SDKs.
-- Receiver-specific failure dashboards and alert routing.
+- Server-side delivery search, receiver-specific failure dashboards, and alert routing.
 - OpenTelemetry exporters, trace sampling, and long-retention latency dashboards.
