@@ -2,6 +2,33 @@
 
 ## 2026-08-01
 
+Added HookRelay server-side delivery search.
+
+Added:
+- `GET /api/deliveries` query parameters for `status`, `failure_class`, `endpoint_id`, `event_id`, `q`, and bounded `limit`.
+- In-memory and PostgreSQL delivery search paths that preserve the existing delivery-attempt response shape.
+- `failure_class=none` handling for attempts without a receiver failure classification.
+- PostgreSQL indexes for common endpoint and failure-class delivery search paths.
+- Dashboard server-side delivery search controls for status, failure class, endpoint, and text query.
+- Delivery contract discovery, README, architecture, delivery contract, decision, and interview-note updates explaining why exact filters come before pagination and saved views.
+
+Validated the work by running:
+- `npm run build -w @hookrelay/web` from `projects/05-hookrelay`
+- `npm run check` from `projects/05-hookrelay`
+- `npm run check -w @hookrelay/api` from `projects/05-hookrelay`
+- A local Fastify smoke test covering filtered delivery search, `failure_class=none`, and invalid status rejection
+- `docker compose -f projects\05-hookrelay\compose.yaml config`
+- `git diff --check`
+
+Notes:
+- `WORKFLOW.md` still appears to contain binary/corrupted content in the current checkout, so it could not be meaningfully read as Markdown.
+- Delivery search intentionally returns the existing delivery-attempt array; pagination cursors and saved operator views remain deferred until delivery history needs long retention.
+
+Next recommended task:
+- Add HookRelay delivery pagination cursors.
+
+## 2026-08-01
+
 Added HookRelay failure-class dashboard filters.
 
 Added:

@@ -36,6 +36,52 @@ function normalizeRow(row) {
   };
 }
 
+function normalizeDeliverySearch(search = {}) {
+  return {
+    status: search.status ?? null,
+    failureClass: search.failureClass ?? null,
+    endpointId: search.endpointId ?? null,
+    eventId: search.eventId ?? null,
+    text: search.text ? String(search.text).toLowerCase() : null,
+    limit: Math.min(Math.max(Number(search.limit ?? 100), 1), 200)
+  };
+}
+
+function deliverySearchText(delivery) {
+  return [
+    delivery.delivery_id,
+    delivery.event_id,
+    delivery.endpoint_id,
+    delivery.target_url,
+    delivery.status,
+    delivery.response_status,
+    delivery.failure_class,
+    delivery.error,
+    delivery.replay_reason,
+    delivery.replay_requested_by,
+    delivery.replayed_from_delivery_id
+  ].filter(Boolean).join(" ").toLowerCase();
+}
+
+function applyDeliverySearch(deliveries, search) {
+  const filters = normalizeDeliverySearch(search);
+  return sortNewest(deliveries)
+    .filter((delivery) => !filters.status || delivery.status === filters.status)
+    .filter((delivery) => {
+      if (!filters.failureClass) {
+        return true;
+      }
+
+      return filters.failureClass === "none"
+        ? !delivery.failure_class
+        : delivery.failure_class === filters.failureClass;
+    })
+    .filter((delivery) => !filters.endpointId || delivery.endpoint_id === filters.endpointId)
+    .filter((delivery) => !filters.eventId || delivery.event_id === filters.eventId)
+    .filter((delivery) => !filters.text || deliverySearchText(delivery).includes(filters.text))
+    .slice(0, filters.limit);
+}
+
 export class MemoryStore {
   constructor() {
     this.mode = "in_memory_scaffold";
@@ -193,8 +239,8 @@ export class MemoryStore {
     return this.events.get(eventId) ?? null;
   }
 
-  async listDeliveries() {
-    return sortNewest(Array.from(this.deliveries.values()));
+  async listDeliveries(search = {}) {
+    return applyDeliverySearch(Array.from(this.deliveries.values()), search);
   }
 
   async getDelivery(deliveryId) {
@@ -316,6 +362,12 @@ export class PostgresStore {
             add column if not exists failure_class text;
         end if;
       end $$;
+
+      create index if not exists idx_delivery_attempts_endpoint_created
+        on delivery_attempts(endpoint_id, created_at desc);
+
+      create index if not exists idx_delivery_attempts_failure_created
+        on delivery_attempts(failure_class, created_at desc);
     `));
 
     await this.withStartupRetry(() => this.pool.query(
@@ -549,8 +601,60 @@ export class PostgresStore {
     return normalizeRow(result.rows[0]);
   }
 
-  async listDeliveries() {
-    const result = await this.pool.query("select * from delivery_attempts order by created_at desc");
+  async listDeliveries(search = {}) {
+    const filters = normalizeDeliverySearch(search);
+    const where = [];
+    const values = [];
+
+    if (filters.status) {
+      values.push(filters.status);
+      where.push(`status = $${values.length}`);
+    }
+
+    if (filters.failureClass) {
+      if (filters.failureClass === "none") {
+        where.push("failure_class is null");
+      } else {
+        values.push(filters.failureClass);
+        where.push(`failure_class = $${values.length}`);
+      }
+    }
+
+    if (filters.endpointId) {
+      values.push(filters.endpointId);
+      where.push(`endpoint_id = $${values.length}`);
+    }
+
+    if (filters.eventId) {
+      values.push(filters.eventId);
+      where.push(`event_id = $${values.length}`);
+    }
+
+    if (filters.text) {
+      values.push(`%${filters.text}%`);
+      where.push(`concat_ws(' ',
+        delivery_id,
+        event_id,
+        endpoint_id,
+        target_url,
+        status,
+        response_status::text,
+        failure_class,
+        error,
+        replay_reason,
+        replay_requested_by,
+        replayed_from_delivery_id
+      ) ilike $${values.length}`);
+    }
+
+    values.push(filters.limit);
+    const result = await this.pool.query(
+      `select * from delivery_attempts
+       ${where.length ? `where ${where.join(" and ")}` : ""}
+       order by created_at desc
+       limit $${values.length}`,
+      values
+    );
     return result.rows.map(normalizeRow);
   }
 

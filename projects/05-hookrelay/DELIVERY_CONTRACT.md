@@ -184,7 +184,28 @@ internal_error
 
 HTTP classes are derived from the receiver response status. Timeout and network classes are derived from fetch/abort errors when no response status exists. The raw `error` string remains on the attempt for diagnostics, but `failure_class` is the stable field dashboards and alerts should group by.
 
-The dashboard applies a client-side `failure_class` filter over `GET /api/deliveries`. It always exposes `all`, `none`, and each contract-published class with current counts. This keeps the first operator workflow simple while the delivery list remains bounded.
+The dashboard applies a server-side `failure_class` filter through `GET /api/deliveries`. It always exposes `all`, `none`, and each contract-published class. The `none` value maps to delivery attempts whose `failure_class` is null.
+
+## Delivery Search
+
+The server-side delivery search stays on the existing delivery collection endpoint:
+
+```text
+GET /api/deliveries?status=failed&failure_class=receiver_http_5xx&endpoint_id=endpoint_demo&limit=100
+```
+
+Supported query parameters:
+
+| Parameter | Meaning |
+| --- | --- |
+| `status` | One of `queued`, `delivering`, `succeeded`, `failed`, or `dead_letter`. |
+| `failure_class` | One of the receiver failure classes, or `none` for attempts without a class. |
+| `endpoint_id` | Exact endpoint id. |
+| `event_id` | Exact event id. |
+| `q` | Case-insensitive text search over delivery ids, event ids, endpoint ids, target URL, status, response status, failure class, error, and replay audit fields. |
+| `limit` | Result cap from `1` to `200`, defaulting to `100`. |
+
+Results are ordered by newest `created_at` first. PostgreSQL mode uses parameterized predicates for structured filters and keeps endpoint/failure-class indexes for the common operator paths. The `q` filter is intentionally simple until pagination cursors, saved views, or long-retention analytics justify a dedicated search index.
 
 Contract discovery exposes this as:
 
@@ -194,6 +215,21 @@ Contract discovery exposes this as:
     "field": "failure_class",
     "classes": ["receiver_http_4xx", "receiver_http_5xx", "receiver_http_other", "receiver_timeout", "receiver_network", "internal_error"],
     "stored_on": "delivery_attempts"
+  }
+}
+```
+
+Contract discovery exposes delivery search as:
+
+```json
+{
+  "delivery_search": {
+    "endpoint": "GET /api/deliveries",
+    "sort": "created_at_desc",
+    "default_limit": 100,
+    "max_limit": 200,
+    "filters": ["status", "failure_class", "endpoint_id", "event_id", "q", "limit"],
+    "failure_class_none": "none"
   }
 }
 ```

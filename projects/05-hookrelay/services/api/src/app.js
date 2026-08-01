@@ -30,10 +30,39 @@ function parsePositiveInteger(value, fallback) {
 const validApiKeyRoles = ["producer", "operator", "admin"];
 const producerRoles = ["producer", "admin"];
 const replayRoles = ["operator", "admin"];
+const deliveryStatuses = ["queued", "delivering", "succeeded", "failed", "dead_letter"];
 
 function parseApiKeyRole(value) {
   const role = String(value ?? "producer").trim();
   return validApiKeyRoles.includes(role) ? role : null;
+}
+
+function parseOptionalQueryValue(value) {
+  if (Array.isArray(value)) {
+    return parseOptionalQueryValue(value[0]);
+  }
+
+  const text = String(value ?? "").trim();
+  return text.length > 0 && text !== "all" ? text : null;
+}
+
+function parseDeliverySearch(query = {}) {
+  const status = parseOptionalQueryValue(query.status);
+  if (status && !deliveryStatuses.includes(status)) {
+    return { error: "status must be queued, delivering, succeeded, failed, dead_letter, or all" };
+  }
+
+  const limit = Math.min(Math.max(parsePositiveInteger(query.limit, 100), 1), 200);
+  return {
+    filters: {
+      status,
+      failureClass: parseOptionalQueryValue(query.failure_class),
+      endpointId: parseOptionalQueryValue(query.endpoint_id),
+      eventId: parseOptionalQueryValue(query.event_id),
+      text: parseOptionalQueryValue(query.q),
+      limit
+    }
+  };
 }
 
 async function authenticateProducer({ request, reply, store, requiredRoles = producerRoles, action = "Producer" }) {
@@ -154,6 +183,14 @@ export function createHookRelayApp({
       stored_on: "delivery_attempts",
       classified_on: "worker receiver response or fetch error",
       retry_rule: "Failure classification is recorded before retry scheduling or dead-letter promotion."
+    },
+    delivery_search: {
+      endpoint: "GET /api/deliveries",
+      sort: "created_at_desc",
+      default_limit: 100,
+      max_limit: 200,
+      filters: ["status", "failure_class", "endpoint_id", "event_id", "q", "limit"],
+      failure_class_none: "none"
     },
     replay_rule: "Manual replay creates a new queued delivery attempt for the same event payload.",
     replay_authorization: {
@@ -396,7 +433,14 @@ export function createHookRelayApp({
     return reply.status(result.duplicate ? 200 : 202).send(result);
   });
 
-  app.get("/api/deliveries", async () => store.listDeliveries());
+  app.get("/api/deliveries", async (request, reply) => {
+    const search = parseDeliverySearch(request.query);
+    if (search.error) {
+      return reply.status(400).send({ error: search.error });
+    }
+
+    return store.listDeliveries(search.filters);
+  });
 
   app.post("/api/deliveries/:delivery_id/replay", async (request, reply) => {
     const body = request.body ?? {};

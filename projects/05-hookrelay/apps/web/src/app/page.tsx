@@ -108,6 +108,14 @@ type DeliveryContract = {
     classified_on: string;
     retry_rule: string;
   };
+  delivery_search: {
+    endpoint: string;
+    sort: string;
+    default_limit: number;
+    max_limit: number;
+    filters: string[];
+    failure_class_none: string;
+  };
   replay_rule: string;
   replay_authorization: {
     mode: string;
@@ -215,14 +223,17 @@ export default function HookRelayHome() {
   const [eventType, setEventType] = useState("invoice.paid");
   const [idempotencyKey, setIdempotencyKey] = useState("invoice-1001-paid");
   const [payloadText, setPayloadText] = useState('{"invoice_id":"inv_1001","amount":4900,"currency":"USD"}');
+  const [deliveryStatusFilter, setDeliveryStatusFilter] = useState("all");
   const [statusMessage, setStatusMessage] = useState("Loading HookRelay scaffold state...");
+  const [failureClassFilter, setFailureClassFilter] = useState("all");
+  const [deliveryEndpointFilter, setDeliveryEndpointFilter] = useState("all");
+  const [deliverySearchText, setDeliverySearchText] = useState("");
 
   const selectedEndpoint = endpoints.find((endpoint) => endpoint.endpoint_id === selectedEndpointId) ?? endpoints[0];
   const latestDelivery = deliveries[0];
   const latestSpan = spans[0];
   const queuedCount = deliveries.filter((delivery) => delivery.status === "queued").length;
   const duplicateKeys = useMemo(() => new Set(events.map((event) => event.idempotency_key)), [events]);
-  const [failureClassFilter, setFailureClassFilter] = useState("all");
   const failureClassOptions = useMemo(() => {
     const contractClasses = contract?.receiver_failure_classification.classes ?? [];
     const observedClasses = deliveries
@@ -231,29 +242,35 @@ export default function HookRelayHome() {
 
     return Array.from(new Set([...contractClasses, ...observedClasses]));
   }, [contract, deliveries]);
-  const failureClassCounts = useMemo(() => {
-    const counts = new Map<string, number>([
-      ["all", deliveries.length],
-      ["none", deliveries.filter((delivery) => !delivery.failure_class).length]
-    ]);
 
-    for (const failureClass of failureClassOptions) {
-      counts.set(failureClass, deliveries.filter((delivery) => delivery.failure_class === failureClass).length);
+  function buildDeliverySearchPath() {
+    const params = new URLSearchParams();
+    params.set("limit", String(contract?.delivery_search.default_limit ?? 100));
+
+    if (deliveryStatusFilter !== "all") {
+      params.set("status", deliveryStatusFilter);
     }
 
-    return counts;
-  }, [deliveries, failureClassOptions]);
-  const filteredDeliveries = useMemo(() => {
-    if (failureClassFilter === "all") {
-      return deliveries;
+    if (failureClassFilter !== "all") {
+      params.set("failure_class", failureClassFilter);
     }
 
-    if (failureClassFilter === "none") {
-      return deliveries.filter((delivery) => !delivery.failure_class);
+    if (deliveryEndpointFilter !== "all") {
+      params.set("endpoint_id", deliveryEndpointFilter);
     }
 
-    return deliveries.filter((delivery) => delivery.failure_class === failureClassFilter);
-  }, [deliveries, failureClassFilter]);
+    if (deliverySearchText.trim()) {
+      params.set("q", deliverySearchText.trim());
+    }
+
+    return `/api/deliveries?${params.toString()}`;
+  }
+
+  async function refreshDeliveries() {
+    const nextDeliveries = await requestJson<DeliveryAttempt[]>(buildDeliverySearchPath());
+    setDeliveries(nextDeliveries);
+    return nextDeliveries;
+  }
 
   async function refreshAll() {
     const [
@@ -270,7 +287,7 @@ export default function HookRelayHome() {
       requestJson<ProducerApiKey[]>("/api/producer-api-keys"),
       requestJson<Endpoint[]>("/api/endpoints"),
       requestJson<DeliveryEvent[]>("/api/events"),
-      requestJson<DeliveryAttempt[]>("/api/deliveries"),
+      requestJson<DeliveryAttempt[]>(buildDeliverySearchPath()),
       requestJson<ObservabilityResponse>("/api/observability/spans")
     ]);
 
@@ -284,6 +301,16 @@ export default function HookRelayHome() {
     setSpans(nextObservability.spans);
     setSelectedEndpointId((current) => current || nextEndpoints[0]?.endpoint_id || "");
     setStatusMessage("Scaffold API is reachable.");
+  }
+
+  async function searchDeliveries(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    try {
+      const nextDeliveries = await refreshDeliveries();
+      setStatusMessage(`Delivery search returned ${nextDeliveries.length} attempts.`);
+    } catch (error) {
+      setStatusMessage(error instanceof Error ? error.message : "Delivery search failed.");
+    }
   }
 
   async function createEndpoint(event: FormEvent<HTMLFormElement>) {
@@ -547,30 +574,52 @@ export default function HookRelayHome() {
         <section className="table-section" aria-label="Delivery attempts">
           <div className="section-header">
             <span>Delivery Log</span>
-            <strong>
-              {filteredDeliveries.length}/{deliveries.length}
-            </strong>
+            <strong>{deliveries.length}</strong>
           </div>
-          <div className="filter-row" aria-label="Failure class filters">
+          <form className="filter-row" aria-label="Server-side delivery search" onSubmit={searchDeliveries}>
+            <label>
+              <span>Status</span>
+              <select value={deliveryStatusFilter} onChange={(event) => setDeliveryStatusFilter(event.target.value)}>
+                <option value="all">all</option>
+                <option value="queued">queued</option>
+                <option value="delivering">delivering</option>
+                <option value="succeeded">succeeded</option>
+                <option value="failed">failed</option>
+                <option value="dead_letter">dead_letter</option>
+              </select>
+            </label>
             <label>
               <span>Failure Class</span>
               <select value={failureClassFilter} onChange={(event) => setFailureClassFilter(event.target.value)}>
-                <option value="all">all ({failureClassCounts.get("all") ?? 0})</option>
-                <option value="none">none ({failureClassCounts.get("none") ?? 0})</option>
+                <option value="all">all</option>
+                <option value="none">none</option>
                 {failureClassOptions.map((failureClass) => (
                   <option key={failureClass} value={failureClass}>
-                    {failureClass} ({failureClassCounts.get(failureClass) ?? 0})
+                    {failureClass}
                   </option>
                 ))}
               </select>
             </label>
-          </div>
+            <label>
+              <span>Endpoint</span>
+              <select value={deliveryEndpointFilter} onChange={(event) => setDeliveryEndpointFilter(event.target.value)}>
+                <option value="all">all</option>
+                {endpoints.map((endpoint) => (
+                  <option key={endpoint.endpoint_id} value={endpoint.endpoint_id}>
+                    {endpoint.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              <span>Search</span>
+              <input value={deliverySearchText} onChange={(event) => setDeliverySearchText(event.target.value)} />
+            </label>
+            <button type="submit">Search Deliveries</button>
+          </form>
           <div className="delivery-list">
-            {deliveries.length === 0 ? <p className="empty-state">No delivery attempts queued yet.</p> : null}
-            {deliveries.length > 0 && filteredDeliveries.length === 0 ? (
-              <p className="empty-state">No delivery attempts match this failure class.</p>
-            ) : null}
-            {filteredDeliveries.map((delivery) => (
+            {deliveries.length === 0 ? <p className="empty-state">No delivery attempts match the delivery search.</p> : null}
+            {deliveries.map((delivery) => (
               <article className="delivery-row" key={delivery.delivery_id}>
                 <div>
                   <strong>{delivery.delivery_id}</strong>
@@ -659,6 +708,10 @@ export default function HookRelayHome() {
             <div>
               <dt>Failure Class</dt>
               <dd>{contract?.receiver_failure_classification.field ?? "unknown"}</dd>
+            </div>
+            <div>
+              <dt>Delivery Search</dt>
+              <dd>{contract?.delivery_search.filters.join(", ") ?? "unknown"}</dd>
             </div>
             <div>
               <dt>Rate Limit</dt>

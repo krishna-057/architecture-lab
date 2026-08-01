@@ -208,3 +208,22 @@ Rejected alternatives:
 
 Follow-up:
 Add server-side delivery search, failure trend charts, saved operator views, and alert routing by failure class.
+
+## 2026-08-01: Add Server-Side Delivery Search
+
+Decision:
+Move delivery-log filtering behind `GET /api/deliveries` query parameters. Support exact filters for `status`, `failure_class`, `endpoint_id`, and `event_id`, plus a small text query `q` and a bounded `limit`.
+
+Why:
+- Operators need the API to own delivery search before delivery history grows beyond a single dashboard session.
+- Exact filters cover the most useful troubleshooting paths: failed attempts, one failure class, one endpoint, or one event chain.
+- Keeping the response shape as the existing delivery-attempt array avoids a dashboard migration and keeps replay/signature display unchanged.
+- Bounded limits and parameterized PostgreSQL predicates are enough for the current portfolio slice without adding a search service.
+
+Rejected alternatives:
+- Add cursor pagination now: useful once there is long-retention history, but unnecessary before the product needs infinite scroll or exports.
+- Add a full-text index immediately: better for large datasets, but premature while `q` is a small diagnostic convenience.
+- Create a separate `/api/delivery-search` resource: noisier than extending the collection endpoint with query parameters.
+
+Follow-up:
+Add pagination cursors, saved operator views, richer event metadata search, failure trend charts, and alert routing by failure class.

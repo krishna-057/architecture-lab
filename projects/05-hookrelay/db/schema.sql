@@ -119,6 +119,12 @@ create index if not exists idx_delivery_attempts_event_created
 create index if not exists idx_delivery_attempts_status_next
   on delivery_attempts(status, next_attempt_at);
 
+create index if not exists idx_delivery_attempts_endpoint_created
+  on delivery_attempts(endpoint_id, created_at desc);
+
+create index if not exists idx_delivery_attempts_failure_created
+  on delivery_attempts(failure_class, created_at desc);
+
 create index if not exists idx_delivery_observability_spans_trace
   on delivery_observability_spans(trace_id, started_at desc);
 

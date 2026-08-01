@@ -60,7 +60,8 @@ Observability should attach one trace across event ingestion, job enqueue, each 
 - HTTP 4xx and 5xx are separated because they usually mean different ownership: producer/receiver contract mistakes versus receiver outage or overload.
 - Timeout and network failures are separate from HTTP failures because there may be no receiver response at all.
 - Classification happens inside the worker before retry scheduling and dead-letter promotion, so every retry attempt keeps the reason HookRelay observed at that boundary.
-- The dashboard filters the delivery log by `failure_class`, including a `none` option for queued/succeeded attempts that do not have a failure.
+- The dashboard searches the delivery log through server-side query parameters, including `failure_class=none` for queued/succeeded attempts that do not have a failure.
+- Delivery search deliberately starts with exact filters and a bounded text query before pagination, saved views, or a full-text index.
 - This is intentionally not a full alerting system yet; it creates the durable field that later dashboards, alerts, and endpoint-specific retry policy can use.
 
 ## Endpoint Rate Limit Talking Points

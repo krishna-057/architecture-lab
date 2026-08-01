@@ -95,6 +95,8 @@ for (const marker of [
   "Retry-After",
   "hookrelay.delivery.process",
   "receiver_failure_classification",
+  "delivery_search",
+  "parseDeliverySearch",
   "classifyReceiverFailure",
   "failure_class",
   "receiver_http_5xx",
@@ -141,8 +143,10 @@ for (const marker of [
   "Retry Jitter",
   "Failure Class",
   "failureClassFilter",
-  "filteredDeliveries",
-  "No delivery attempts match this failure class.",
+  "deliveryStatusFilter",
+  "Server-side delivery search",
+  "Search Deliveries",
+  "No delivery attempts match the delivery search.",
   "Signature Preview",
   "Replay"
 ]) {
@@ -169,7 +173,9 @@ for (const marker of [
   "admin",
   "required_roles",
   "failure_class",
-  "client-side `failure_class` filter",
+  "server-side `failure_class` filter",
+  "server-side delivery search",
+  "GET /api/deliveries?status=",
   "receiver_http_5xx",
   "owner_id",
   "idempotency_key",
@@ -199,7 +205,9 @@ for (const marker of [
   "role",
   "rotated_from_key_id",
   "revoked_at",
-  "rate_limit_per_minute"
+  "rate_limit_per_minute",
+  "idx_delivery_attempts_endpoint_created",
+  "idx_delivery_attempts_failure_created"
 ]) {
   if (!schema.includes(marker)) {
     throw new Error(`PostgreSQL schema is missing required marker: ${marker}`);

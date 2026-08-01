@@ -33,7 +33,7 @@ API and worker operations also write provider-neutral observability spans. In me
 | Component | Responsibility |
 | --- | --- |
 | Fastify API | API-key bootstrap, endpoint setup, event ingestion, idempotency handling, role-gated replay enqueueing, and contract discovery. |
-| Next.js web app | Developer/operator console for creating endpoints, submitting events, filtering delivery failures, replaying deliveries, and inspecting signatures. |
+| Next.js web app | Developer/operator console for creating endpoints, submitting events, searching delivery attempts, replaying deliveries, and inspecting signatures. |
 | PostgreSQL | Optional durable owner for endpoints, events, idempotency uniqueness, delivery attempt state, replay audit fields, and dead-letter status. |
 | BullMQ / Redis | Optional durable queue, jittered delayed retry scheduler, and endpoint rate-limit counter owner. |
 | Worker process | Sends signed outbound HTTP requests, classifies receiver failures, records responses, schedules retries, and marks dead-letter failures. |
@@ -59,7 +59,7 @@ API and worker operations also write provider-neutral observability spans. In me
 | `POST /api/endpoints` | Authenticate a producer key, then create a webhook target, signing secret, owner id, and endpoint rate-limit policy. |
 | `GET /api/events` | List accepted producer events. |
 | `POST /api/events` | Authenticate the producer key, require owner match, check the endpoint rate limit, accept one event per endpoint/idempotency key, and create the first delivery attempt. |
-| `GET /api/deliveries` | List delivery attempts, statuses, replay audit fields, receiver failure classes, and signature previews. |
+| `GET /api/deliveries` | Search recent delivery attempts by status, failure class, endpoint, event id, text query, and limit. |
 | `POST /api/deliveries/:delivery_id/replay` | Require an owner-scoped operator/admin key plus replay intent, create a new queued attempt for an existing event, and enqueue it when BullMQ is configured. |
 
 ## Idempotency
@@ -134,7 +134,9 @@ internal_error
 
 The class is derived from the receiver HTTP status when one exists, otherwise from fetch/abort error signals. Operators still get the raw `error` message, but `failure_class` gives dashboards and interview explanations a stable grouping for "bad request to receiver", "receiver outage", "network path broke", and "worker/internal issue".
 
-The dashboard filters the delivery log by `failure_class` using the contract-published class list plus any observed classes. The filter stays client-side for this slice because `/api/deliveries` already returns the bounded local delivery list; server-side filtering can be added when pagination or long-retention delivery search exists.
+The dashboard searches the delivery log through `GET /api/deliveries` query parameters. It can filter by `status`, `failure_class`, `endpoint_id`, `event_id`, a small text query `q`, and `limit`. The special `failure_class=none` value finds queued, succeeded, or not-yet-run attempts without a failure class. This keeps the operator workflow server-owned while still avoiding a broader saved-view or analytics model.
+
+PostgreSQL durable mode keeps supporting indexes for endpoint and failure-class delivery searches. The free-text `q` search remains a small `ILIKE` over delivery identifiers and diagnostic fields; full-text search and pagination cursors are deferred until long-retention delivery history exists.
 
 ## Observability
 
@@ -157,5 +159,5 @@ Each span has `trace_id`, `span_id`, optional parent span, delivery/event/endpoi
 - Approval-backed producer key lifecycle audit.
 - Tenant-specific retry overrides and multi-dimensional producer quotas.
 - Receiver SDKs.
-- Server-side delivery search, receiver-specific failure dashboards, and alert routing.
+- Receiver-specific failure dashboards, saved delivery views, pagination cursors, and alert routing.
 - OpenTelemetry exporters, trace sampling, and long-retention latency dashboards.
