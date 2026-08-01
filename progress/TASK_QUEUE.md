@@ -6,10 +6,11 @@ Tasks should stay small enough for one focused session.
 
 ### Ready
 
-- [ ] Add HookRelay delivery pagination cursors.
+- [ ] Add HookRelay saved delivery views.
 
 ### Completed
 
+- [x] Add HookRelay delivery pagination cursors.
 - [x] Add HookRelay server-side delivery search.
 - [x] Add HookRelay failure-class dashboard filters.
 - [x] Add HookRelay receiver failure classification.

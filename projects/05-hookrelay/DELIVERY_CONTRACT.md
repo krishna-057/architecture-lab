@@ -191,7 +191,7 @@ The dashboard applies a server-side `failure_class` filter through `GET /api/del
 The server-side delivery search stays on the existing delivery collection endpoint:
 
 ```text
-GET /api/deliveries?status=failed&failure_class=receiver_http_5xx&endpoint_id=endpoint_demo&limit=100
+GET /api/deliveries?status=failed&failure_class=receiver_http_5xx&endpoint_id=endpoint_demo&limit=50
 ```
 
 Supported query parameters:
@@ -203,9 +203,29 @@ Supported query parameters:
 | `endpoint_id` | Exact endpoint id. |
 | `event_id` | Exact event id. |
 | `q` | Case-insensitive text search over delivery ids, event ids, endpoint ids, target URL, status, response status, failure class, error, and replay audit fields. |
+| `cursor` | Opaque pagination cursor returned as `page_info.next_cursor`. |
 | `limit` | Result cap from `1` to `200`, defaulting to `100`. |
 
-Results are ordered by newest `created_at` first. PostgreSQL mode uses parameterized predicates for structured filters and keeps endpoint/failure-class indexes for the common operator paths. The `q` filter is intentionally simple until pagination cursors, saved views, or long-retention analytics justify a dedicated search index.
+Results are ordered by newest delivery attempt first, using `created_at desc, delivery_id desc` so ties are stable. Responses use a page envelope:
+
+```json
+{
+  "items": [
+    {
+      "delivery_id": "delivery_...",
+      "created_at": "2026-08-01T00:00:00.000Z"
+    }
+  ],
+  "page_info": {
+    "limit": 50,
+    "sort": "created_at_desc_delivery_id_desc",
+    "has_more": true,
+    "next_cursor": "opaque-base64url-cursor"
+  }
+}
+```
+
+Clients request the next page by preserving the same filters and sending `cursor=<page_info.next_cursor>`. The cursor encodes only the last row's `created_at` and `delivery_id`; clients should treat it as opaque. PostgreSQL mode uses parameterized predicates for structured filters and keeps endpoint/failure-class indexes for the common operator paths. The `q` filter is intentionally simple until saved views or long-retention analytics justify a dedicated search index.
 
 Contract discovery exposes this as:
 
@@ -225,11 +245,15 @@ Contract discovery exposes delivery search as:
 {
   "delivery_search": {
     "endpoint": "GET /api/deliveries",
-    "sort": "created_at_desc",
+    "sort": "created_at_desc_delivery_id_desc",
     "default_limit": 100,
     "max_limit": 200,
-    "filters": ["status", "failure_class", "endpoint_id", "event_id", "q", "limit"],
-    "failure_class_none": "none"
+    "filters": ["status", "failure_class", "endpoint_id", "event_id", "q", "cursor", "limit"],
+    "failure_class_none": "none",
+    "cursor": {
+      "mode": "opaque_base64url_json",
+      "fields": ["created_at", "delivery_id"]
+    }
   }
 }
 ```

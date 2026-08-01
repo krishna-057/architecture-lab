@@ -227,3 +227,22 @@ Rejected alternatives:
 
 Follow-up:
 Add pagination cursors, saved operator views, richer event metadata search, failure trend charts, and alert routing by failure class.
+
+## 2026-08-01: Add Delivery Pagination Cursors
+
+Decision:
+Return delivery search results as `{ items, page_info }` and paginate `GET /api/deliveries` with an opaque cursor over `(created_at, delivery_id)`. Keep the existing search filters and add `cursor` as the only new query parameter.
+
+Why:
+- Delivery attempts are append-friendly, so offset pagination can skip or duplicate rows when workers add new attempts between page requests.
+- `(created_at, delivery_id)` matches the newest-first operator view and gives a deterministic tie-breaker when attempts share a timestamp.
+- The envelope keeps pagination metadata out of individual delivery records while preserving the delivery attempt shape used by replay and signature display.
+- An opaque base64url cursor is enough for this slice and avoids introducing a pagination library or separate read model.
+
+Rejected alternatives:
+- Offset pagination: simpler to type, but unstable for an append-heavy delivery log.
+- Timestamp-only cursors: compact, but ambiguous when multiple attempts have the same timestamp.
+- Separate history table or search index: useful at scale, but premature while PostgreSQL can answer the bounded operational search.
+
+Follow-up:
+Add saved delivery views, export workflows, cursor-aware observability joins, and long-retention delivery analytics.

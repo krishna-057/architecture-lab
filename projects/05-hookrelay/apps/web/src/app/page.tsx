@@ -115,6 +115,10 @@ type DeliveryContract = {
     max_limit: number;
     filters: string[];
     failure_class_none: string;
+    cursor: {
+      mode: string;
+      fields: string[];
+    };
   };
   replay_rule: string;
   replay_authorization: {
@@ -152,6 +156,18 @@ type IngestResponse = {
 type ObservabilityResponse = {
   mode: string;
   spans: ObservabilitySpan[];
+};
+
+type DeliverySearchPageInfo = {
+  limit: number;
+  sort: string;
+  has_more: boolean;
+  next_cursor: string | null;
+};
+
+type DeliverySearchResponse = {
+  items: DeliveryAttempt[];
+  page_info: DeliverySearchPageInfo;
 };
 
 type ProducerApiKey = {
@@ -208,6 +224,7 @@ export default function HookRelayHome() {
   const [endpoints, setEndpoints] = useState<Endpoint[]>([]);
   const [events, setEvents] = useState<DeliveryEvent[]>([]);
   const [deliveries, setDeliveries] = useState<DeliveryAttempt[]>([]);
+  const [deliveryPageInfo, setDeliveryPageInfo] = useState<DeliverySearchPageInfo | null>(null);
   const [producerKeys, setProducerKeys] = useState<ProducerApiKey[]>([]);
   const [producerApiKey, setProducerApiKey] = useState(defaultProducerApiKey);
   const [newKeyOwnerId, setNewKeyOwnerId] = useState("owner_demo");
@@ -243,7 +260,7 @@ export default function HookRelayHome() {
     return Array.from(new Set([...contractClasses, ...observedClasses]));
   }, [contract, deliveries]);
 
-  function buildDeliverySearchPath() {
+  function buildDeliverySearchPath(cursor?: string | null) {
     const params = new URLSearchParams();
     params.set("limit", String(contract?.delivery_search.default_limit ?? 100));
 
@@ -263,13 +280,18 @@ export default function HookRelayHome() {
       params.set("q", deliverySearchText.trim());
     }
 
+    if (cursor) {
+      params.set("cursor", cursor);
+    }
+
     return `/api/deliveries?${params.toString()}`;
   }
 
-  async function refreshDeliveries() {
-    const nextDeliveries = await requestJson<DeliveryAttempt[]>(buildDeliverySearchPath());
-    setDeliveries(nextDeliveries);
-    return nextDeliveries;
+  async function refreshDeliveries({ cursor = null, append = false }: { cursor?: string | null; append?: boolean } = {}) {
+    const response = await requestJson<DeliverySearchResponse>(buildDeliverySearchPath(cursor));
+    setDeliveries((current) => (append ? [...current, ...response.items] : response.items));
+    setDeliveryPageInfo(response.page_info);
+    return response;
   }
 
   async function refreshAll() {
@@ -279,7 +301,7 @@ export default function HookRelayHome() {
       nextProducerKeys,
       nextEndpoints,
       nextEvents,
-      nextDeliveries,
+      nextDeliverySearch,
       nextObservability
     ] = await Promise.all([
       requestJson<DeliveryContract>("/api/delivery-contract"),
@@ -287,7 +309,7 @@ export default function HookRelayHome() {
       requestJson<ProducerApiKey[]>("/api/producer-api-keys"),
       requestJson<Endpoint[]>("/api/endpoints"),
       requestJson<DeliveryEvent[]>("/api/events"),
-      requestJson<DeliveryAttempt[]>(buildDeliverySearchPath()),
+      requestJson<DeliverySearchResponse>(buildDeliverySearchPath()),
       requestJson<ObservabilityResponse>("/api/observability/spans")
     ]);
 
@@ -296,7 +318,8 @@ export default function HookRelayHome() {
     setProducerKeys(nextProducerKeys);
     setEndpoints(nextEndpoints);
     setEvents(nextEvents);
-    setDeliveries(nextDeliveries);
+    setDeliveries(nextDeliverySearch.items);
+    setDeliveryPageInfo(nextDeliverySearch.page_info);
     setObservabilityMode(nextObservability.mode);
     setSpans(nextObservability.spans);
     setSelectedEndpointId((current) => current || nextEndpoints[0]?.endpoint_id || "");
@@ -306,10 +329,23 @@ export default function HookRelayHome() {
   async function searchDeliveries(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     try {
-      const nextDeliveries = await refreshDeliveries();
-      setStatusMessage(`Delivery search returned ${nextDeliveries.length} attempts.`);
+      const response = await refreshDeliveries();
+      setStatusMessage(`Delivery search returned ${response.items.length} attempts.`);
     } catch (error) {
       setStatusMessage(error instanceof Error ? error.message : "Delivery search failed.");
+    }
+  }
+
+  async function loadMoreDeliveries() {
+    if (!deliveryPageInfo?.next_cursor) {
+      return;
+    }
+
+    try {
+      const response = await refreshDeliveries({ cursor: deliveryPageInfo.next_cursor, append: true });
+      setStatusMessage(`Loaded ${response.items.length} more delivery attempts.`);
+    } catch (error) {
+      setStatusMessage(error instanceof Error ? error.message : "Loading the next delivery page failed.");
     }
   }
 
@@ -574,12 +610,21 @@ export default function HookRelayHome() {
         <section className="table-section" aria-label="Delivery attempts">
           <div className="section-header">
             <span>Delivery Log</span>
-            <strong>{deliveries.length}</strong>
+            <strong>
+              {deliveries.length}
+              {deliveryPageInfo?.has_more ? "+" : ""}
+            </strong>
           </div>
           <form className="filter-row" aria-label="Server-side delivery search" onSubmit={searchDeliveries}>
             <label>
               <span>Status</span>
-              <select value={deliveryStatusFilter} onChange={(event) => setDeliveryStatusFilter(event.target.value)}>
+              <select
+                value={deliveryStatusFilter}
+                onChange={(event) => {
+                  setDeliveryStatusFilter(event.target.value);
+                  setDeliveryPageInfo(null);
+                }}
+              >
                 <option value="all">all</option>
                 <option value="queued">queued</option>
                 <option value="delivering">delivering</option>
@@ -590,7 +635,13 @@ export default function HookRelayHome() {
             </label>
             <label>
               <span>Failure Class</span>
-              <select value={failureClassFilter} onChange={(event) => setFailureClassFilter(event.target.value)}>
+              <select
+                value={failureClassFilter}
+                onChange={(event) => {
+                  setFailureClassFilter(event.target.value);
+                  setDeliveryPageInfo(null);
+                }}
+              >
                 <option value="all">all</option>
                 <option value="none">none</option>
                 {failureClassOptions.map((failureClass) => (
@@ -602,7 +653,13 @@ export default function HookRelayHome() {
             </label>
             <label>
               <span>Endpoint</span>
-              <select value={deliveryEndpointFilter} onChange={(event) => setDeliveryEndpointFilter(event.target.value)}>
+              <select
+                value={deliveryEndpointFilter}
+                onChange={(event) => {
+                  setDeliveryEndpointFilter(event.target.value);
+                  setDeliveryPageInfo(null);
+                }}
+              >
                 <option value="all">all</option>
                 {endpoints.map((endpoint) => (
                   <option key={endpoint.endpoint_id} value={endpoint.endpoint_id}>
@@ -613,7 +670,13 @@ export default function HookRelayHome() {
             </label>
             <label>
               <span>Search</span>
-              <input value={deliverySearchText} onChange={(event) => setDeliverySearchText(event.target.value)} />
+              <input
+                value={deliverySearchText}
+                onChange={(event) => {
+                  setDeliverySearchText(event.target.value);
+                  setDeliveryPageInfo(null);
+                }}
+              />
             </label>
             <button type="submit">Search Deliveries</button>
           </form>
@@ -658,6 +721,11 @@ export default function HookRelayHome() {
                 {delivery.replay_reason ? <p>{delivery.replay_reason}</p> : null}
               </article>
             ))}
+            {deliveryPageInfo?.has_more ? (
+              <button className="load-more" type="button" onClick={() => void loadMoreDeliveries()}>
+                Load More
+              </button>
+            ) : null}
           </div>
         </section>
       </section>
@@ -711,7 +779,11 @@ export default function HookRelayHome() {
             </div>
             <div>
               <dt>Delivery Search</dt>
-              <dd>{contract?.delivery_search.filters.join(", ") ?? "unknown"}</dd>
+              <dd>
+                {contract
+                  ? `${contract.delivery_search.filters.join(", ")} / ${contract.delivery_search.cursor.mode}`
+                  : "unknown"}
+              </dd>
             </div>
             <div>
               <dt>Rate Limit</dt>

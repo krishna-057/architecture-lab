@@ -219,6 +219,12 @@ label {
   background: var(--focus);
 }
 
+.load-more {
+  justify-self: center;
+  min-width: 138px;
+  background: var(--focus);
+}
+
 .delivery-row p {
   flex-basis: 100%;
   margin: 0;

@@ -97,6 +97,9 @@ for (const marker of [
   "receiver_failure_classification",
   "delivery_search",
   "parseDeliverySearch",
+  "parseDeliveryCursor",
+  "next_cursor",
+  "created_at_desc_delivery_id_desc",
   "classifyReceiverFailure",
   "failure_class",
   "receiver_http_5xx",
@@ -146,6 +149,8 @@ for (const marker of [
   "deliveryStatusFilter",
   "Server-side delivery search",
   "Search Deliveries",
+  "Load More",
+  "DeliverySearchResponse",
   "No delivery attempts match the delivery search.",
   "Signature Preview",
   "Replay"
@@ -176,6 +181,9 @@ for (const marker of [
   "server-side `failure_class` filter",
   "server-side delivery search",
   "GET /api/deliveries?status=",
+  "next_cursor",
+  "created_at_desc_delivery_id_desc",
+  "opaque_base64url_json",
   "receiver_http_5xx",
   "owner_id",
   "idempotency_key",
@@ -207,7 +215,9 @@ for (const marker of [
   "revoked_at",
   "rate_limit_per_minute",
   "idx_delivery_attempts_endpoint_created",
-  "idx_delivery_attempts_failure_created"
+  "idx_delivery_attempts_failure_created",
+  "idx_delivery_attempts_endpoint_cursor",
+  "idx_delivery_attempts_failure_cursor"
 ]) {
   if (!schema.includes(marker)) {
     throw new Error(`PostgreSQL schema is missing required marker: ${marker}`);

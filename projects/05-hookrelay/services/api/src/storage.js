@@ -19,7 +19,10 @@ import {
 const { Pool } = pg;
 
 function sortNewest(items) {
-  return items.sort((left, right) => right.created_at.localeCompare(left.created_at));
+  return items.sort((left, right) => {
+    const createdAtOrder = right.created_at.localeCompare(left.created_at);
+    return createdAtOrder === 0 ? right.delivery_id?.localeCompare(left.delivery_id) ?? 0 : createdAtOrder;
+  });
 }
 
 function normalizeRow(row) {
@@ -43,6 +46,7 @@ function normalizeDeliverySearch(search = {}) {
     endpointId: search.endpointId ?? null,
     eventId: search.eventId ?? null,
     text: search.text ? String(search.text).toLowerCase() : null,
+    cursor: search.cursor ?? null,
     limit: Math.min(Math.max(Number(search.limit ?? 100), 1), 200)
   };
 }
@@ -65,7 +69,7 @@ function deliverySearchText(delivery) {
 
 function applyDeliverySearch(deliveries, search) {
   const filters = normalizeDeliverySearch(search);
-  return sortNewest(deliveries)
+  const matches = sortNewest(deliveries)
     .filter((delivery) => !filters.status || delivery.status === filters.status)
     .filter((delivery) => {
       if (!filters.failureClass) {
@@ -79,7 +83,48 @@ function applyDeliverySearch(deliveries, search) {
     .filter((delivery) => !filters.endpointId || delivery.endpoint_id === filters.endpointId)
     .filter((delivery) => !filters.eventId || delivery.event_id === filters.eventId)
     .filter((delivery) => !filters.text || deliverySearchText(delivery).includes(filters.text))
-    .slice(0, filters.limit);
+    .filter((delivery) => isAfterDeliveryCursor(delivery, filters.cursor));
+
+  return buildDeliveryPage(matches, filters);
+}
+
+function isAfterDeliveryCursor(delivery, cursor) {
+  if (!cursor) {
+    return true;
+  }
+
+  if (delivery.created_at < cursor.created_at) {
+    return true;
+  }
+
+  return delivery.created_at === cursor.created_at && delivery.delivery_id < cursor.delivery_id;
+}
+
+function encodeDeliveryCursor(delivery) {
+  if (!delivery) {
+    return null;
+  }
+
+  return Buffer.from(JSON.stringify({
+    created_at: delivery.created_at,
+    delivery_id: delivery.delivery_id
+  })).toString("base64url");
+}
+
+function buildDeliveryPage(matches, filters) {
+  const rows = matches.slice(0, filters.limit + 1);
+  const items = rows.slice(0, filters.limit);
+  const hasMore = rows.length > filters.limit;
+
+  return {
+    items,
+    page_info: {
+      limit: filters.limit,
+      sort: "created_at_desc_delivery_id_desc",
+      has_more: hasMore,
+      next_cursor: hasMore ? encodeDeliveryCursor(items.at(-1)) : null
+    }
+  };
 }
 
 export class MemoryStore {
@@ -364,10 +409,16 @@ export class PostgresStore {
       end $$;
 
       create index if not exists idx_delivery_attempts_endpoint_created
-        on delivery_attempts(endpoint_id, created_at desc);
+        on delivery_attempts(endpoint_id, created_at desc, delivery_id desc);
 
       create index if not exists idx_delivery_attempts_failure_created
-        on delivery_attempts(failure_class, created_at desc);
+        on delivery_attempts(failure_class, created_at desc, delivery_id desc);
+
+      create index if not exists idx_delivery_attempts_endpoint_cursor
+        on delivery_attempts(endpoint_id, created_at desc, delivery_id desc);
+
+      create index if not exists idx_delivery_attempts_failure_cursor
+        on delivery_attempts(failure_class, created_at desc, delivery_id desc);
     `));
 
     await this.withStartupRetry(() => this.pool.query(
@@ -647,15 +698,21 @@ export class PostgresStore {
       ) ilike $${values.length}`);
     }
 
-    values.push(filters.limit);
+    if (filters.cursor) {
+      values.push(filters.cursor.created_at);
+      values.push(filters.cursor.delivery_id);
+      where.push(`(created_at, delivery_id) < ($${values.length - 1}::timestamptz, $${values.length})`);
+    }
+
+    values.push(filters.limit + 1);
     const result = await this.pool.query(
       `select * from delivery_attempts
        ${where.length ? `where ${where.join(" and ")}` : ""}
-       order by created_at desc
+       order by created_at desc, delivery_id desc
        limit $${values.length}`,
       values
     );
-    return result.rows.map(normalizeRow);
+    return buildDeliveryPage(result.rows.map(normalizeRow), filters);
   }
 
   async getDelivery(deliveryId) {

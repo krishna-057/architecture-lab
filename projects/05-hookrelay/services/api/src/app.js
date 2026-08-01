@@ -46,10 +46,33 @@ function parseOptionalQueryValue(value) {
   return text.length > 0 && text !== "all" ? text : null;
 }
 
+function parseDeliveryCursor(value) {
+  const cursor = parseOptionalQueryValue(value);
+  if (!cursor) {
+    return { cursor: null };
+  }
+
+  try {
+    const decoded = JSON.parse(Buffer.from(cursor, "base64url").toString("utf8"));
+    if (typeof decoded.created_at !== "string" || typeof decoded.delivery_id !== "string") {
+      return { error: "cursor is invalid" };
+    }
+
+    return { cursor: decoded };
+  } catch {
+    return { error: "cursor is invalid" };
+  }
+}
+
 function parseDeliverySearch(query = {}) {
   const status = parseOptionalQueryValue(query.status);
   if (status && !deliveryStatuses.includes(status)) {
     return { error: "status must be queued, delivering, succeeded, failed, dead_letter, or all" };
+  }
+
+  const cursor = parseDeliveryCursor(query.cursor);
+  if (cursor.error) {
+    return cursor;
   }
 
   const limit = Math.min(Math.max(parsePositiveInteger(query.limit, 100), 1), 200);
@@ -60,6 +83,7 @@ function parseDeliverySearch(query = {}) {
       endpointId: parseOptionalQueryValue(query.endpoint_id),
       eventId: parseOptionalQueryValue(query.event_id),
       text: parseOptionalQueryValue(query.q),
+      cursor: cursor.cursor,
       limit
     }
   };
@@ -186,11 +210,15 @@ export function createHookRelayApp({
     },
     delivery_search: {
       endpoint: "GET /api/deliveries",
-      sort: "created_at_desc",
+      sort: "created_at_desc_delivery_id_desc",
       default_limit: 100,
       max_limit: 200,
-      filters: ["status", "failure_class", "endpoint_id", "event_id", "q", "limit"],
-      failure_class_none: "none"
+      filters: ["status", "failure_class", "endpoint_id", "event_id", "q", "cursor", "limit"],
+      failure_class_none: "none",
+      cursor: {
+        mode: "opaque_base64url_json",
+        fields: ["created_at", "delivery_id"]
+      }
     },
     replay_rule: "Manual replay creates a new queued delivery attempt for the same event payload.",
     replay_authorization: {

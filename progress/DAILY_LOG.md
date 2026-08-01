@@ -2,6 +2,33 @@
 
 ## 2026-08-01
 
+Added HookRelay delivery pagination cursors.
+
+Added:
+- `GET /api/deliveries` cursor parsing and validation with `400` responses for malformed cursors.
+- A paginated delivery search response envelope: `{ items, page_info }`.
+- Opaque base64url cursors over `(created_at, delivery_id)` with newest-first ordering by `created_at desc, delivery_id desc`.
+- In-memory and PostgreSQL cursor paths that keep the same filters from server-side delivery search.
+- Dashboard `Load More` support that appends the next delivery page while preserving current filters.
+- Delivery contract discovery, README, architecture, delivery contract, decision, and interview-note updates explaining why cursor pagination is the right fit for append-heavy delivery logs.
+
+Validated the work by running:
+- `npm run check -w @hookrelay/api` from `projects/05-hookrelay`
+- `npm run build -w @hookrelay/web` from `projects/05-hookrelay`
+- `npm run check` from `projects/05-hookrelay`
+- A local Fastify smoke test covering first-page/next-page cursor behavior, no duplicate/skipped delivery attempts, and invalid cursor rejection
+- `docker compose -f projects\05-hookrelay\compose.yaml config`
+- `git diff --check`
+
+Notes:
+- `WORKFLOW.md` still appears to contain binary/corrupted content in the current checkout, so it could not be meaningfully read as Markdown.
+- Cursor internals are intentionally documented as opaque so clients do not depend on the current base64url JSON representation.
+
+Next recommended task:
+- Add HookRelay saved delivery views.
+
+## 2026-08-01
+
 Added HookRelay server-side delivery search.
 
 Added:
