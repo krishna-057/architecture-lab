@@ -32,9 +32,9 @@ API and worker operations also write provider-neutral observability spans. In me
 
 | Component | Responsibility |
 | --- | --- |
-| Fastify API | API-key bootstrap, endpoint setup, event ingestion, idempotency handling, role-gated saved delivery views and exports, role-gated replay enqueueing, and contract discovery. |
-| Next.js web app | Developer/operator console for creating endpoints, submitting events, searching paginated delivery attempts, saving/applying delivery views, exporting CSV snapshots, replaying deliveries, and inspecting signatures. |
-| PostgreSQL | Optional durable owner for endpoints, events, idempotency uniqueness, delivery attempt state, saved delivery views, replay audit fields, and dead-letter status. |
+| Fastify API | API-key bootstrap, endpoint setup, event ingestion, idempotency handling, role-gated saved delivery views, exports, alert routing, role-gated replay enqueueing, and contract discovery. |
+| Next.js web app | Developer/operator console for creating endpoints, submitting events, searching paginated delivery attempts, saving/applying delivery views, exporting CSV snapshots, routing receiver failure alerts, replaying deliveries, and inspecting signatures. |
+| PostgreSQL | Optional durable owner for endpoints, events, idempotency uniqueness, delivery attempt state, alert routes, alert records, saved delivery views, replay audit fields, and dead-letter status. |
 | BullMQ / Redis | Optional durable queue, jittered delayed retry scheduler, and endpoint rate-limit counter owner. |
 | Worker process | Sends signed outbound HTTP requests, classifies receiver failures, records responses, schedules retries, and marks dead-letter failures. |
 | Observability span log | Captures event ingestion, enqueue, replay, worker processing, and outbound HTTP timing as local JSON spans before adding a vendor exporter. |
@@ -51,6 +51,10 @@ API and worker operations also write provider-neutral observability spans. In me
 | `GET /api/delivery-contract` | Discover idempotency, signature, receiver verification, retry, replay authorization, queue, and storage rules. |
 | `GET /api/receiver-verification-example` | Return sample receiver verification inputs, required headers, and Node.js digest expression. |
 | `GET /api/observability/spans` | Return recent provider-neutral spans with trace ids, span ids, timing, status, and delivery attributes. |
+| `GET /api/failure-alerts` | Return recent owner-scoped receiver failure alerts. |
+| `GET /api/alert-routes` | List owner-scoped receiver failure alert routing rules. |
+| `POST /api/alert-routes` | Create an enabled local alert route for failed/dead-letter deliveries. |
+| `DELETE /api/alert-routes/:route_id` | Delete one owner-scoped alert route. |
 | `GET /api/producer-api-keys` | List producer key previews, owners, and status without exposing full secrets. |
 | `POST /api/producer-api-keys` | Create a local producer/operator/admin key and return the full secret once for development bootstrap. |
 | `POST /api/producer-api-keys/:key_id/rotate` | Replace an active key with a new one for the same owner and mark the old key as rotated. |
@@ -146,6 +150,8 @@ Saved delivery views are an operator/admin convenience on top of the same delive
 
 Delivery export uses the same search filters but returns a synchronous `text/csv` snapshot from `GET /api/deliveries/export`. Exports require an active `operator` or `admin` key and join delivery attempts back to endpoint ownership, so the exported rows are limited to the key's `owner_id`. The first export path is capped at 1000 newest matching rows and ignores cursors; scheduled/background export jobs are deferred until delivery history has real retention and file lifecycle requirements.
 
+Receiver failure alert routing stays local for this slice. Operators/admins define owner-scoped routes through `/api/alert-routes`, matching on `failed` or `dead_letter` status plus an optional `failure_class`. When the worker records a failed or dead-letter attempt, it asks storage to create local alert records for matching enabled routes. This proves where alert policy attaches to the delivery lifecycle without introducing external webhook/email delivery, escalation schedules, or tenant team notification preferences too early.
+
 ## Observability
 
 HookRelay records a small span envelope for the operations that explain delivery lifecycle behavior:
@@ -167,5 +173,5 @@ Each span has `trace_id`, `span_id`, optional parent span, delivery/event/endpoi
 - Approval-backed producer key lifecycle audit.
 - Tenant-specific retry overrides and multi-dimensional producer quotas.
 - Receiver SDKs.
-- Receiver-specific failure dashboards, shared/team delivery views, scheduled exports, and alert routing.
+- Receiver-specific failure dashboards, shared/team delivery views, external alert integrations, scheduled exports, and escalation policies.
 - OpenTelemetry exporters, trace sampling, and long-retention latency dashboards.

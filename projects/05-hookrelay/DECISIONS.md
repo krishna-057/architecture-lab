@@ -284,3 +284,22 @@ Rejected alternatives:
 
 Follow-up:
 Add scheduled exports, durable export files, JSONL format, and long-retention delivery analytics.
+
+## 2026-08-03: Add Local Receiver Failure Alert Routing
+
+Decision:
+Add owner-scoped receiver failure alert routes and local alert records. Routes match worker-recorded `failed` or `dead_letter` delivery attempts by endpoint owner, delivery status, and optional `failure_class`. Keep dispatch local as persisted alert records exposed through `/api/failure-alerts` before adding external notification integrations.
+
+Why:
+- Alert policy belongs where HookRelay already knows the receiver failure class and final delivery status: immediately after the worker records the failed attempt.
+- Owner-scoped routes reuse the existing API-key authorization model and prevent cross-tenant alert visibility.
+- Local alert records prove the policy and audit surface without needing email, Slack, PagerDuty, or webhook delivery credentials.
+- Matching on status plus optional failure class gives useful operator routing while keeping the first rule model small.
+
+Rejected alternatives:
+- Send external email/webhook alerts now: useful later, but it adds secrets, retries, and delivery failure handling before local policy is stable.
+- Alert only on `dead_letter`: lower noise, but operators may want early warnings on every failed attempt for selected receiver classes.
+- Build escalation schedules now: correct for production incident response, but too much tenant/team modeling for this portfolio slice.
+
+Follow-up:
+Add external notification delivery, per-route throttling, escalation policies, and alert acknowledgement workflows.

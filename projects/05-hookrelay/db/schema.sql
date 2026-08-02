@@ -84,6 +84,34 @@ create table if not exists delivery_saved_views (
   updated_at timestamptz not null default now()
 );
 
+create table if not exists receiver_failure_alert_routes (
+  route_id text primary key,
+  owner_id text not null,
+  name text not null,
+  failure_class text,
+  delivery_status text not null default 'dead_letter' check (delivery_status in ('failed', 'dead_letter', 'any')),
+  target_type text not null default 'dashboard' check (target_type in ('dashboard', 'email', 'webhook')),
+  target text not null,
+  enabled boolean not null default true,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create table if not exists receiver_failure_alerts (
+  alert_id text primary key,
+  route_id text not null references receiver_failure_alert_routes(route_id) on delete cascade,
+  owner_id text not null,
+  delivery_id text not null,
+  endpoint_id text not null,
+  event_id text not null,
+  failure_class text,
+  delivery_status text not null,
+  target_type text not null,
+  target text not null,
+  message text not null,
+  created_at timestamptz not null default now()
+);
+
 alter table delivery_attempts
   add column if not exists base_delay_seconds integer not null default 0,
   add column if not exists jitter_seconds integer not null default 0,
@@ -142,6 +170,12 @@ create index if not exists idx_delivery_attempts_failure_cursor
 
 create index if not exists idx_delivery_saved_views_owner_created
   on delivery_saved_views(owner_id, created_at desc);
+
+create index if not exists idx_failure_alert_routes_owner_created
+  on receiver_failure_alert_routes(owner_id, created_at desc);
+
+create index if not exists idx_failure_alerts_owner_created
+  on receiver_failure_alerts(owner_id, created_at desc);
 
 create index if not exists idx_delivery_observability_spans_trace
   on delivery_observability_spans(trace_id, started_at desc);

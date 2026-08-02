@@ -32,8 +32,11 @@ const producerRoles = ["producer", "admin"];
 const replayRoles = ["operator", "admin"];
 const deliveryViewRoles = ["operator", "admin"];
 const deliveryExportRoles = ["operator", "admin"];
+const failureAlertRoles = ["operator", "admin"];
 const deliveryExportMaxRows = 1000;
 const deliveryStatuses = ["queued", "delivering", "succeeded", "failed", "dead_letter"];
+const failureAlertDeliveryStatuses = ["failed", "dead_letter", "any"];
+const failureAlertTargetTypes = ["dashboard", "email", "webhook"];
 const deliveryExportColumns = [
   "delivery_id",
   "event_id",
@@ -135,6 +138,45 @@ function parseDeliveryViewFilters(filters = {}) {
 
 function parseDeliveryExportSearch(query = {}) {
   return parseDeliverySearch(query, { maxLimit: deliveryExportMaxRows, includeCursor: false });
+}
+
+function parseFailureAlertRoute(body = {}) {
+  const name = String(body.name ?? "").trim();
+  const failureClass = parseOptionalQueryValue(body.failure_class);
+  const deliveryStatus = String(body.delivery_status ?? "dead_letter").trim();
+  const targetType = String(body.target_type ?? "dashboard").trim();
+  const target = String(body.target ?? "local-dashboard").trim();
+
+  if (name.length < 3) {
+    return { error: "alert route name must be at least 3 characters" };
+  }
+
+  if (failureClass && !receiverFailureClasses.includes(failureClass)) {
+    return { error: "failure_class must match a receiver failure class or be empty" };
+  }
+
+  if (!failureAlertDeliveryStatuses.includes(deliveryStatus)) {
+    return { error: "delivery_status must be failed, dead_letter, or any" };
+  }
+
+  if (!failureAlertTargetTypes.includes(targetType)) {
+    return { error: "target_type must be dashboard, email, or webhook" };
+  }
+
+  if (target.length < 3) {
+    return { error: "target must be at least 3 characters" };
+  }
+
+  return {
+    route: {
+      name,
+      failureClass,
+      deliveryStatus,
+      targetType,
+      target,
+      enabled: body.enabled === undefined ? true : Boolean(body.enabled)
+    }
+  };
 }
 
 function csvCell(value) {
@@ -300,6 +342,17 @@ export function createHookRelayApp({
       filters: ["status", "failure_class", "endpoint_id", "event_id", "q", "limit"],
       cursor_rule: "Exports are bounded snapshots from the newest matching delivery attempts and do not accept pagination cursors."
     },
+    receiver_failure_alert_routing: {
+      route_endpoint: "/api/alert-routes",
+      alert_endpoint: "/api/failure-alerts",
+      required_roles: failureAlertRoles,
+      owner_rule: "Alert routes and emitted alerts are scoped to the active API key owner_id.",
+      trigger_statuses: ["failed", "dead_letter"],
+      route_statuses: failureAlertDeliveryStatuses,
+      target_types: failureAlertTargetTypes,
+      delivery_match: "A failed/dead-letter delivery matches enabled routes by owner_id, delivery_status, and optional failure_class.",
+      dispatch_mode: "local_alert_record_before_external_integrations"
+    },
     replay_rule: "Manual replay creates a new queued delivery attempt for the same event payload.",
     replay_authorization: {
       mode: "owner_scoped_operator_api_key",
@@ -417,6 +470,84 @@ export function createHookRelayApp({
   });
 
   app.get("/api/events", async () => store.listEvents());
+
+  app.get("/api/alert-routes", async (request, reply) => {
+    const operator = await authenticateProducer({
+      request,
+      reply,
+      store,
+      requiredRoles: failureAlertRoles,
+      action: "Alert route"
+    });
+    if (!operator) {
+      return reply;
+    }
+
+    return store.listAlertRoutes(operator.owner_id);
+  });
+
+  app.post("/api/alert-routes", async (request, reply) => {
+    const operator = await authenticateProducer({
+      request,
+      reply,
+      store,
+      requiredRoles: failureAlertRoles,
+      action: "Alert route"
+    });
+    if (!operator) {
+      return reply;
+    }
+
+    const parsed = parseFailureAlertRoute(request.body ?? {});
+    if (parsed.error) {
+      return reply.status(400).send({ error: parsed.error });
+    }
+
+    const route = await store.createAlertRoute({
+      ownerId: operator.owner_id,
+      ...parsed.route
+    });
+    return reply.status(201).send(route);
+  });
+
+  app.delete("/api/alert-routes/:route_id", async (request, reply) => {
+    const operator = await authenticateProducer({
+      request,
+      reply,
+      store,
+      requiredRoles: failureAlertRoles,
+      action: "Alert route"
+    });
+    if (!operator) {
+      return reply;
+    }
+
+    const deleted = await store.deleteAlertRoute({
+      ownerId: operator.owner_id,
+      routeId: String(request.params?.route_id ?? "").trim()
+    });
+    if (!deleted) {
+      return reply.status(404).send({ error: "alert route was not found" });
+    }
+
+    return deleted;
+  });
+
+  app.get("/api/failure-alerts", async (request, reply) => {
+    const operator = await authenticateProducer({
+      request,
+      reply,
+      store,
+      requiredRoles: failureAlertRoles,
+      action: "Failure alert"
+    });
+    if (!operator) {
+      return reply;
+    }
+
+    const limit = Math.min(Math.max(parsePositiveInteger(request.query?.limit, 50), 1), 100);
+    return store.listFailureAlerts(operator.owner_id, { limit });
+  });
 
   app.get("/api/delivery-views", async (request, reply) => {
     const operator = await authenticateProducer({

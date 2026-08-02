@@ -13,6 +13,8 @@ HookRelay defines the HTTP contract for endpoint setup, event ingestion, deliver
 | Delivery attempt | `/api/deliveries` | In-memory by default, PostgreSQL plus BullMQ when configured | PostgreSQL `delivery_attempts` plus BullMQ jobs |
 | Delivery export | `/api/deliveries/export` | Synchronous bounded CSV response | Background export jobs plus object storage |
 | Delivery saved view | `/api/delivery-views` | In-memory by default, PostgreSQL when configured | PostgreSQL `delivery_saved_views` |
+| Receiver failure alert route | `/api/alert-routes` | In-memory by default, PostgreSQL when configured | Notification policy service |
+| Receiver failure alert | `/api/failure-alerts` | In-memory by default, PostgreSQL when configured | Notification delivery and incident timeline |
 | Failure classification | `failure_class` on delivery attempts | In-memory by default, PostgreSQL when configured | Delivery analytics and alert policy |
 | Observability span | `/api/observability/spans` | In-memory by default, PostgreSQL when configured | OpenTelemetry exporter plus query store |
 | Contract discovery | `/api/delivery-contract` | Static API response | Versioned API contract |
@@ -331,6 +333,52 @@ Contract discovery exposes export as:
 }
 ```
 
+## Receiver Failure Alert Routing
+
+Alert routing is the first local policy boundary for receiver failures. Operators create routes with:
+
+```text
+GET /api/alert-routes
+POST /api/alert-routes
+DELETE /api/alert-routes/:route_id
+GET /api/failure-alerts
+```
+
+Every route and emitted alert requires an active `operator` or `admin` API key and is scoped to the key's `owner_id`. A create request uses:
+
+```json
+{
+  "name": "Dead-letter 5xx receiver alerts",
+  "failure_class": "receiver_http_5xx",
+  "delivery_status": "dead_letter",
+  "target_type": "dashboard",
+  "target": "local-dashboard",
+  "enabled": true
+}
+```
+
+`failure_class` is optional. `delivery_status` can be `failed`, `dead_letter`, or `any`. `target_type` is currently `dashboard`, `email`, or `webhook`, but this slice records local alert events only; it does not send external email/webhook calls yet.
+
+When the worker records a `failed` or `dead_letter` delivery, storage matches enabled routes by endpoint owner, delivery status, and optional failure class. Matching routes create alert records visible through `GET /api/failure-alerts`. This keeps alerting attached to the durable delivery lifecycle while deferring external notification delivery, retrying alerts, escalation schedules, and team preferences.
+
+Contract discovery exposes alert routing as:
+
+```json
+{
+  "receiver_failure_alert_routing": {
+    "route_endpoint": "/api/alert-routes",
+    "alert_endpoint": "/api/failure-alerts",
+    "required_roles": ["operator", "admin"],
+    "owner_rule": "Alert routes and emitted alerts are scoped to the active API key owner_id.",
+    "trigger_statuses": ["failed", "dead_letter"],
+    "route_statuses": ["failed", "dead_letter", "any"],
+    "target_types": ["dashboard", "email", "webhook"],
+    "delivery_match": "A failed/dead-letter delivery matches enabled routes by owner_id, delivery_status, and optional failure_class.",
+    "dispatch_mode": "local_alert_record_before_external_integrations"
+  }
+}
+```
+
 ## Replay Rule
 
 Manual replay creates a new queued delivery attempt for an existing event. The event payload and idempotency key remain unchanged; the replay attempt receives a new delivery id, timestamp, and signature.
@@ -402,4 +450,4 @@ The current traced operations are event ingestion, delivery enqueue, manual repl
 
 PostgreSQL enforces one accepted event for each `(endpoint_id, idempotency_key)` pair. Delivery attempts remain append-friendly records, so retries and manual replays keep their own delivery ids, timestamps, signatures, and statuses.
 
-When `DATABASE_URL` is set, saved delivery views are persisted in `delivery_saved_views` and observability spans can be persisted in `delivery_observability_spans`. Without PostgreSQL, the API keeps saved views and a bounded span log in process for local checks.
+When `DATABASE_URL` is set, alert routes are persisted in `receiver_failure_alert_routes`, alert records are persisted in `receiver_failure_alerts`, saved delivery views are persisted in `delivery_saved_views`, and observability spans can be persisted in `delivery_observability_spans`. Without PostgreSQL, the API keeps alert routes, alert records, saved views, and a bounded span log in process for local checks.

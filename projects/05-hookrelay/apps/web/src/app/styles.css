@@ -195,6 +195,23 @@ label {
   gap: 10px;
 }
 
+.alert-route-row {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr)) auto;
+  align-items: end;
+  gap: 10px;
+}
+
+.alert-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.alert-grid button {
+  margin-top: 8px;
+}
+
 .delivery-list,
 .endpoint-list,
 .span-list,
@@ -339,7 +356,9 @@ label {
   .app-shell,
   .form-grid,
   .filter-row,
-  .saved-view-row {
+  .saved-view-row,
+  .alert-route-row,
+  .alert-grid {
     grid-template-columns: 1fr;
   }
 

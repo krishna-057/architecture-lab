@@ -6,10 +6,11 @@ Tasks should stay small enough for one focused session.
 
 ### Ready
 
-- [ ] Add HookRelay receiver failure alert routing.
+- [ ] Add HookRelay alert acknowledgement workflow.
 
 ### Completed
 
+- [x] Add HookRelay receiver failure alert routing.
 - [x] Add HookRelay delivery export workflow.
 - [x] Add HookRelay saved delivery views.
 - [x] Add HookRelay delivery pagination cursors.

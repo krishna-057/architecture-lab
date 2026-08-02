@@ -45,13 +45,15 @@ export async function processDelivery({ store, queue, deliveryId, observability 
       const endpoint = await store.getEndpoint(delivery.endpoint_id);
       if (!event || !endpoint) {
         const failureClass = classifyReceiverFailure();
-        await store.updateDelivery(delivery.delivery_id, {
+        const failedDelivery = await store.updateDelivery(delivery.delivery_id, {
           status: "dead_letter",
           failure_class: failureClass,
           error: "Delivery cannot run because its event or endpoint is missing."
         });
+        const alerts = await store.routeFailureAlert(failedDelivery);
         processSpan.attributes.final_status = "dead_letter";
         processSpan.attributes.failure_class = failureClass;
+        processSpan.attributes.alert_count = alerts.length;
         processSpan.attributes.error = "missing_event_or_endpoint";
         return;
       }
@@ -108,15 +110,17 @@ export async function processDelivery({ store, queue, deliveryId, observability 
         const failureClass = classifyReceiverFailure({ responseStatus, error });
         const shouldDeadLetter = delivery.attempt_number >= retryDelaysSeconds.length;
         const finalStatus = shouldDeadLetter ? "dead_letter" : "failed";
-        await store.updateDelivery(delivery.delivery_id, {
+        const failedDelivery = await store.updateDelivery(delivery.delivery_id, {
           status: finalStatus,
           response_status: responseStatus,
           failure_class: failureClass,
           error: errorMessage(error)
         });
+        const alerts = await store.routeFailureAlert(failedDelivery);
         processSpan.attributes.final_status = finalStatus;
         processSpan.attributes.response_status = responseStatus;
         processSpan.attributes.failure_class = failureClass;
+        processSpan.attributes.alert_count = alerts.length;
         processSpan.attributes.error = errorMessage(error);
 
         if (!shouldDeadLetter) {

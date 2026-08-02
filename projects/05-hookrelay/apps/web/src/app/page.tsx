@@ -136,6 +136,17 @@ type DeliveryContract = {
     filters: string[];
     cursor_rule: string;
   };
+  receiver_failure_alert_routing: {
+    route_endpoint: string;
+    alert_endpoint: string;
+    required_roles: string[];
+    owner_rule: string;
+    trigger_statuses: string[];
+    route_statuses: string[];
+    target_types: string[];
+    delivery_match: string;
+    dispatch_mode: string;
+  };
   replay_rule: string;
   replay_authorization: {
     mode: string;
@@ -204,6 +215,34 @@ type DeliverySavedView = {
   updated_at: string;
 };
 
+type FailureAlertRoute = {
+  route_id: string;
+  owner_id: string;
+  name: string;
+  failure_class: string | null;
+  delivery_status: "failed" | "dead_letter" | "any";
+  target_type: "dashboard" | "email" | "webhook";
+  target: string;
+  enabled: boolean;
+  created_at: string;
+  updated_at: string;
+};
+
+type FailureAlert = {
+  alert_id: string;
+  route_id: string;
+  owner_id: string;
+  delivery_id: string;
+  endpoint_id: string;
+  event_id: string;
+  failure_class: string | null;
+  delivery_status: string;
+  target_type: string;
+  target: string;
+  message: string;
+  created_at: string;
+};
+
 type ProducerApiKey = {
   key_id: string;
   owner_id: string;
@@ -260,6 +299,8 @@ export default function HookRelayHome() {
   const [deliveries, setDeliveries] = useState<DeliveryAttempt[]>([]);
   const [deliveryPageInfo, setDeliveryPageInfo] = useState<DeliverySearchPageInfo | null>(null);
   const [savedDeliveryViews, setSavedDeliveryViews] = useState<DeliverySavedView[]>([]);
+  const [alertRoutes, setAlertRoutes] = useState<FailureAlertRoute[]>([]);
+  const [failureAlerts, setFailureAlerts] = useState<FailureAlert[]>([]);
   const [producerKeys, setProducerKeys] = useState<ProducerApiKey[]>([]);
   const [producerApiKey, setProducerApiKey] = useState(defaultProducerApiKey);
   const [newKeyOwnerId, setNewKeyOwnerId] = useState("owner_demo");
@@ -282,6 +323,11 @@ export default function HookRelayHome() {
   const [deliverySearchText, setDeliverySearchText] = useState("");
   const [deliveryViewName, setDeliveryViewName] = useState("Failed receiver issues");
   const [selectedDeliveryViewId, setSelectedDeliveryViewId] = useState("");
+  const [alertRouteName, setAlertRouteName] = useState("Dead-letter receiver alerts");
+  const [alertFailureClass, setAlertFailureClass] = useState("all");
+  const [alertDeliveryStatus, setAlertDeliveryStatus] = useState<FailureAlertRoute["delivery_status"]>("dead_letter");
+  const [alertTargetType, setAlertTargetType] = useState<FailureAlertRoute["target_type"]>("dashboard");
+  const [alertTarget, setAlertTarget] = useState("local-dashboard");
 
   const selectedEndpoint = endpoints.find((endpoint) => endpoint.endpoint_id === selectedEndpointId) ?? endpoints[0];
   const latestDelivery = deliveries[0];
@@ -373,6 +419,26 @@ export default function HookRelayHome() {
     }
   }
 
+  async function refreshAlertRouting() {
+    try {
+      const [routes, alerts] = await Promise.all([
+        requestJson<FailureAlertRoute[]>("/api/alert-routes", {
+          headers: { Authorization: `Bearer ${producerApiKey}` }
+        }),
+        requestJson<FailureAlert[]>("/api/failure-alerts?limit=20", {
+          headers: { Authorization: `Bearer ${producerApiKey}` }
+        })
+      ]);
+      setAlertRoutes(routes);
+      setFailureAlerts(alerts);
+      return { routes, alerts };
+    } catch {
+      setAlertRoutes([]);
+      setFailureAlerts([]);
+      return { routes: [], alerts: [] };
+    }
+  }
+
   async function refreshAll() {
     const [
       nextContract,
@@ -403,6 +469,7 @@ export default function HookRelayHome() {
     setSpans(nextObservability.spans);
     setSelectedEndpointId((current) => current || nextEndpoints[0]?.endpoint_id || "");
     void refreshSavedDeliveryViews();
+    void refreshAlertRouting();
     setStatusMessage("Scaffold API is reachable.");
   }
 
@@ -518,6 +585,41 @@ export default function HookRelayHome() {
       setStatusMessage("Delivery view deleted.");
     } catch (error) {
       setStatusMessage(error instanceof Error ? error.message : "Deleting the delivery view failed.");
+    }
+  }
+
+  async function createAlertRoute(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    try {
+      const route = await requestJson<FailureAlertRoute>("/api/alert-routes", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${producerApiKey}` },
+        body: JSON.stringify({
+          name: alertRouteName,
+          failure_class: alertFailureClass === "all" ? null : alertFailureClass,
+          delivery_status: alertDeliveryStatus,
+          target_type: alertTargetType,
+          target: alertTarget,
+          enabled: true
+        })
+      });
+      setAlertRoutes((current) => [route, ...current]);
+      setStatusMessage(`Alert route ${route.name} created.`);
+    } catch (error) {
+      setStatusMessage(error instanceof Error ? error.message : "Creating the alert route failed.");
+    }
+  }
+
+  async function deleteAlertRoute(routeId: string) {
+    try {
+      await requestJson<FailureAlertRoute>(`/api/alert-routes/${routeId}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${producerApiKey}` }
+      });
+      setAlertRoutes((current) => current.filter((route) => route.route_id !== routeId));
+      setStatusMessage("Alert route deleted.");
+    } catch (error) {
+      setStatusMessage(error instanceof Error ? error.message : "Deleting the alert route failed.");
     }
   }
 
@@ -931,6 +1033,92 @@ export default function HookRelayHome() {
             ) : null}
           </div>
         </section>
+
+        <section className="table-section" aria-label="Receiver failure alert routing">
+          <div className="section-header">
+            <span>Alert Routing</span>
+            <strong>{failureAlerts.length} recent</strong>
+          </div>
+          <form className="alert-route-row" onSubmit={createAlertRoute}>
+            <label>
+              <span>Route Name</span>
+              <input value={alertRouteName} onChange={(event) => setAlertRouteName(event.target.value)} />
+            </label>
+            <label>
+              <span>Failure Class</span>
+              <select value={alertFailureClass} onChange={(event) => setAlertFailureClass(event.target.value)}>
+                <option value="all">any</option>
+                {failureClassOptions.map((failureClass) => (
+                  <option key={failureClass} value={failureClass}>
+                    {failureClass}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              <span>Status</span>
+              <select
+                value={alertDeliveryStatus}
+                onChange={(event) => setAlertDeliveryStatus(event.target.value as FailureAlertRoute["delivery_status"])}
+              >
+                <option value="dead_letter">dead_letter</option>
+                <option value="failed">failed</option>
+                <option value="any">any</option>
+              </select>
+            </label>
+            <label>
+              <span>Target Type</span>
+              <select value={alertTargetType} onChange={(event) => setAlertTargetType(event.target.value as FailureAlertRoute["target_type"])}>
+                <option value="dashboard">dashboard</option>
+                <option value="email">email</option>
+                <option value="webhook">webhook</option>
+              </select>
+            </label>
+            <label>
+              <span>Target</span>
+              <input value={alertTarget} onChange={(event) => setAlertTarget(event.target.value)} />
+            </label>
+            <button type="submit">Add Route</button>
+          </form>
+          <div className="alert-grid">
+            <section>
+              <div className="section-header">
+                <span>Routes</span>
+                <strong>{alertRoutes.length}</strong>
+              </div>
+              <div className="detail-list">
+                {alertRoutes.length === 0 ? <p className="empty-state">No alert routes configured.</p> : null}
+                {alertRoutes.map((route) => (
+                  <div key={route.route_id}>
+                    <dt>{route.name}</dt>
+                    <dd>
+                      {route.delivery_status} / {route.failure_class ?? "any"} / {route.target_type}:{route.target}
+                    </dd>
+                    <button type="button" onClick={() => void deleteAlertRoute(route.route_id)}>
+                      Delete
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </section>
+            <section>
+              <div className="section-header">
+                <span>Recent Alerts</span>
+                <strong>{failureAlerts.length}</strong>
+              </div>
+              <div className="detail-list">
+                {failureAlerts.length === 0 ? <p className="empty-state">No failure alerts have matched routes.</p> : null}
+                {failureAlerts.map((alert) => (
+                  <div key={alert.alert_id}>
+                    <dt>{alert.delivery_status}</dt>
+                    <dd>{alert.message}</dd>
+                    <dd>{formatTime(alert.created_at)}</dd>
+                  </div>
+                ))}
+              </div>
+            </section>
+          </div>
+        </section>
       </section>
 
       <aside className="side-panel" aria-label="Contract and signature details">
@@ -995,6 +1183,14 @@ export default function HookRelayHome() {
             <div>
               <dt>Delivery Export</dt>
               <dd>{contract ? `${contract.delivery_export.format} / ${contract.delivery_export.max_rows} rows` : "unknown"}</dd>
+            </div>
+            <div>
+              <dt>Alert Routing</dt>
+              <dd>
+                {contract
+                  ? `${contract.receiver_failure_alert_routing.route_statuses.join(", ")} / ${contract.receiver_failure_alert_routing.dispatch_mode}`
+                  : "unknown"}
+              </dd>
             </div>
             <div>
               <dt>Rate Limit</dt>

@@ -9,7 +9,7 @@ The current implementation keeps the local in-memory scaffold as the dependency-
 Added:
 
 - `services/api` Fastify API for endpoint creation, event ingestion, delivery attempt records, signature previews, and replay enqueueing.
-- `apps/web` Next.js dashboard for creating endpoints, submitting events, searching paginated delivery attempts by server-side filters, saving operator delivery views, exporting bounded CSV snapshots, replaying attempts, and viewing the delivery contract.
+- `apps/web` Next.js dashboard for creating endpoints, submitting events, searching paginated delivery attempts by server-side filters, saving operator delivery views, exporting bounded CSV snapshots, routing receiver failure alerts, replaying attempts, and viewing the delivery contract.
 - `db/schema.sql` for durable endpoints, events, idempotency keys, and delivery attempts.
 - `compose.yaml` with PostgreSQL, Redis, API, and worker services. Local data is bind-mounted under `projects/05-hookrelay/.data/`.
 - `services/api/src/worker.js` as the BullMQ worker boundary for outbound HTTP delivery attempts, retry creation, and dead-letter promotion.
@@ -68,6 +68,10 @@ Default URLs:
 | `GET /api/delivery-contract` | Discover retry, signature, replay, and idempotency rules. |
 | `GET /api/receiver-verification-example` | Show a receiver-side HMAC verification example with sample payload and headers. |
 | `GET /api/observability/spans` | List recent event ingestion, enqueue, replay, worker, and outbound HTTP spans. |
+| `GET /api/failure-alerts` | List recent owner-scoped receiver failure alerts emitted by matching alert routes. |
+| `GET /api/alert-routes` | List owner-scoped receiver failure alert routes for the active operator/admin API key. |
+| `POST /api/alert-routes` | Create a local alert route that matches failed/dead-letter deliveries by optional failure class and target. |
+| `DELETE /api/alert-routes/:route_id` | Delete one owner-scoped receiver failure alert route. |
 | `GET /api/producer-api-keys` | List producer API key previews and owners. |
 | `POST /api/producer-api-keys` | Create a local producer/operator/admin API key and return the full secret once. |
 | `POST /api/producer-api-keys/:key_id/rotate` | Mark an active key as rotated and return one replacement secret for the same owner. |
@@ -83,7 +87,7 @@ Default URLs:
 | `DELETE /api/delivery-views/:view_id` | Delete one owner-scoped saved delivery view. |
 | `POST /api/deliveries/:delivery_id/replay` | Require an owner-scoped operator/admin key and replay reason, then create a new queued attempt for an existing event. |
 
-When `DATABASE_URL` is set, producer API key hashes, endpoints, events, delivery attempts, receiver failure classes, saved delivery views, and observability spans are stored in PostgreSQL. When `REDIS_URL` is set, new delivery attempts are also enqueued into BullMQ with the documented delay ladder plus bounded jitter, and endpoint rate limits use Redis fixed-window counters. Without those variables, the API still runs in in-memory mode for fast local checks.
+When `DATABASE_URL` is set, producer API key hashes, endpoints, events, delivery attempts, receiver failure classes, alert routes, alert records, saved delivery views, and observability spans are stored in PostgreSQL. When `REDIS_URL` is set, new delivery attempts are also enqueued into BullMQ with the documented delay ladder plus bounded jitter, and endpoint rate limits use Redis fixed-window counters. Without those variables, the API still runs in in-memory mode for fast local checks.
 
 ## Why This Project Matters
 
@@ -93,5 +97,5 @@ This is a strong backend/system design project because it focuses on real produc
 
 - Full tenant user accounts, team membership, scoped permissions, and approval-backed key lifecycle workflows.
 - Tenant-specific retry overrides and multi-dimensional producer quotas.
-- Shared/team delivery views, scheduled exports, and long-retention delivery analytics.
+- Shared/team delivery views, external alert integrations, scheduled exports, and long-retention delivery analytics.
 - OpenTelemetry exporters, trace sampling, and long-retention latency dashboards.

@@ -54,6 +54,65 @@ function publicDeliveryView(view) {
   };
 }
 
+function publicAlertRoute(route) {
+  return {
+    route_id: route.route_id,
+    owner_id: route.owner_id,
+    name: route.name,
+    failure_class: route.failure_class,
+    delivery_status: route.delivery_status,
+    target_type: route.target_type,
+    target: route.target,
+    enabled: Boolean(route.enabled),
+    created_at: route.created_at,
+    updated_at: route.updated_at
+  };
+}
+
+function publicFailureAlert(alert) {
+  return {
+    alert_id: alert.alert_id,
+    route_id: alert.route_id,
+    owner_id: alert.owner_id,
+    delivery_id: alert.delivery_id,
+    endpoint_id: alert.endpoint_id,
+    event_id: alert.event_id,
+    failure_class: alert.failure_class,
+    delivery_status: alert.delivery_status,
+    target_type: alert.target_type,
+    target: alert.target,
+    message: alert.message,
+    created_at: alert.created_at
+  };
+}
+
+function alertRouteMatches(route, delivery) {
+  if (!route.enabled) {
+    return false;
+  }
+
+  const statusMatches = route.delivery_status === "any" || route.delivery_status === delivery.status;
+  const failureMatches = !route.failure_class || route.failure_class === delivery.failure_class;
+  return statusMatches && failureMatches;
+}
+
+function buildFailureAlert({ route, delivery, endpoint }) {
+  return {
+    alert_id: `alert_${crypto.randomUUID()}`,
+    route_id: route.route_id,
+    owner_id: endpoint.owner_id,
+    delivery_id: delivery.delivery_id,
+    endpoint_id: delivery.endpoint_id,
+    event_id: delivery.event_id,
+    failure_class: delivery.failure_class,
+    delivery_status: delivery.status,
+    target_type: route.target_type,
+    target: route.target,
+    message: `${delivery.status} delivery ${delivery.delivery_id} matched ${delivery.failure_class ?? "unclassified"} for ${endpoint.name}`,
+    created_at: nowIso()
+  };
+}
+
 function normalizeDeliverySearch(search = {}, { maxLimit = 200 } = {}) {
   return {
     status: search.status ?? null,
@@ -159,6 +218,8 @@ export class MemoryStore {
     this.events = new Map();
     this.deliveries = new Map();
     this.deliveryViews = new Map();
+    this.alertRoutes = new Map();
+    this.failureAlerts = new Map();
     this.producerApiKeys = new Map();
     this.idempotencyIndex = new Map();
   }
@@ -333,6 +394,65 @@ export class MemoryStore {
     return publicDeliveryView(view);
   }
 
+  async listAlertRoutes(ownerId) {
+    return sortNewest(Array.from(this.alertRoutes.values()).filter((route) => route.owner_id === ownerId)).map(publicAlertRoute);
+  }
+
+  async createAlertRoute({ ownerId, name, failureClass, deliveryStatus, targetType, target, enabled = true }) {
+    const route = {
+      route_id: `aroute_${crypto.randomUUID()}`,
+      owner_id: ownerId,
+      name,
+      failure_class: failureClass,
+      delivery_status: deliveryStatus,
+      target_type: targetType,
+      target,
+      enabled,
+      created_at: nowIso(),
+      updated_at: nowIso()
+    };
+    this.alertRoutes.set(route.route_id, route);
+    return publicAlertRoute(route);
+  }
+
+  async deleteAlertRoute({ ownerId, routeId }) {
+    const route = this.alertRoutes.get(routeId);
+    if (!route || route.owner_id !== ownerId) {
+      return null;
+    }
+
+    this.alertRoutes.delete(routeId);
+    return publicAlertRoute(route);
+  }
+
+  async listFailureAlerts(ownerId, { limit = 50 } = {}) {
+    return sortNewest(Array.from(this.failureAlerts.values()).filter((alert) => alert.owner_id === ownerId))
+      .slice(0, limit)
+      .map(publicFailureAlert);
+  }
+
+  async routeFailureAlert(delivery) {
+    if (!delivery || !["failed", "dead_letter"].includes(delivery.status)) {
+      return [];
+    }
+
+    const endpoint = this.endpoints.get(delivery.endpoint_id);
+    if (!endpoint) {
+      return [];
+    }
+
+    const alerts = Array.from(this.alertRoutes.values())
+      .filter((route) => route.owner_id === endpoint.owner_id)
+      .filter((route) => alertRouteMatches(route, delivery))
+      .map((route) => buildFailureAlert({ route, delivery, endpoint }));
+
+    for (const alert of alerts) {
+      this.failureAlerts.set(alert.alert_id, alert);
+    }
+
+    return alerts.map(publicFailureAlert);
+  }
+
   async getEvent(eventId) {
     return this.events.get(eventId) ?? null;
   }
@@ -449,6 +569,34 @@ export class PostgresStore {
         updated_at timestamptz not null default now()
       );
 
+      create table if not exists receiver_failure_alert_routes (
+        route_id text primary key,
+        owner_id text not null,
+        name text not null,
+        failure_class text,
+        delivery_status text not null default 'dead_letter',
+        target_type text not null default 'dashboard',
+        target text not null,
+        enabled boolean not null default true,
+        created_at timestamptz not null default now(),
+        updated_at timestamptz not null default now()
+      );
+
+      create table if not exists receiver_failure_alerts (
+        alert_id text primary key,
+        route_id text not null references receiver_failure_alert_routes(route_id) on delete cascade,
+        owner_id text not null,
+        delivery_id text not null,
+        endpoint_id text not null,
+        event_id text not null,
+        failure_class text,
+        delivery_status text not null,
+        target_type text not null,
+        target text not null,
+        message text not null,
+        created_at timestamptz not null default now()
+      );
+
       alter table producer_api_keys
         add column if not exists role text not null default 'producer',
         add column if not exists rotated_from_key_id text references producer_api_keys(key_id),
@@ -495,6 +643,12 @@ export class PostgresStore {
 
       create index if not exists idx_delivery_saved_views_owner_created
         on delivery_saved_views(owner_id, created_at desc);
+
+      create index if not exists idx_failure_alert_routes_owner_created
+        on receiver_failure_alert_routes(owner_id, created_at desc);
+
+      create index if not exists idx_failure_alerts_owner_created
+        on receiver_failure_alerts(owner_id, created_at desc);
     `));
 
     await this.withStartupRetry(() => this.pool.query(
@@ -752,6 +906,108 @@ export class PostgresStore {
       [ownerId, viewId]
     );
     return result.rows[0] ? publicDeliveryView(normalizeRow(result.rows[0])) : null;
+  }
+
+  async listAlertRoutes(ownerId) {
+    const result = await this.pool.query(
+      `select route_id, owner_id, name, failure_class, delivery_status, target_type, target, enabled, created_at, updated_at
+       from receiver_failure_alert_routes
+       where owner_id = $1
+       order by created_at desc`,
+      [ownerId]
+    );
+    return result.rows.map((row) => publicAlertRoute(normalizeRow(row)));
+  }
+
+  async createAlertRoute({ ownerId, name, failureClass, deliveryStatus, targetType, target, enabled = true }) {
+    const result = await this.pool.query(
+      `insert into receiver_failure_alert_routes (
+         route_id, owner_id, name, failure_class, delivery_status, target_type, target, enabled
+       )
+       values ($1, $2, $3, $4, $5, $6, $7, $8)
+       returning route_id, owner_id, name, failure_class, delivery_status, target_type, target, enabled, created_at, updated_at`,
+      [`aroute_${crypto.randomUUID()}`, ownerId, name, failureClass, deliveryStatus, targetType, target, enabled]
+    );
+    return publicAlertRoute(normalizeRow(result.rows[0]));
+  }
+
+  async deleteAlertRoute({ ownerId, routeId }) {
+    const result = await this.pool.query(
+      `delete from receiver_failure_alert_routes
+       where owner_id = $1 and route_id = $2
+       returning route_id, owner_id, name, failure_class, delivery_status, target_type, target, enabled, created_at, updated_at`,
+      [ownerId, routeId]
+    );
+    return result.rows[0] ? publicAlertRoute(normalizeRow(result.rows[0])) : null;
+  }
+
+  async listFailureAlerts(ownerId, { limit = 50 } = {}) {
+    const boundedLimit = Math.min(Math.max(Number(limit), 1), 100);
+    const result = await this.pool.query(
+      `select alert_id, route_id, owner_id, delivery_id, endpoint_id, event_id, failure_class,
+              delivery_status, target_type, target, message, created_at
+       from receiver_failure_alerts
+       where owner_id = $1
+       order by created_at desc
+       limit $2`,
+      [ownerId, boundedLimit]
+    );
+    return result.rows.map((row) => publicFailureAlert(normalizeRow(row)));
+  }
+
+  async routeFailureAlert(delivery) {
+    if (!delivery || !["failed", "dead_letter"].includes(delivery.status)) {
+      return [];
+    }
+
+    const endpoint = await this.getEndpoint(delivery.endpoint_id);
+    if (!endpoint) {
+      return [];
+    }
+
+    const routesResult = await this.pool.query(
+      `select route_id, owner_id, name, failure_class, delivery_status, target_type, target, enabled, created_at, updated_at
+       from receiver_failure_alert_routes
+       where owner_id = $1 and enabled = true
+         and (delivery_status = 'any' or delivery_status = $2)
+         and (failure_class is null or failure_class = $3)
+       order by created_at desc`,
+      [endpoint.owner_id, delivery.status, delivery.failure_class]
+    );
+
+    const alerts = routesResult.rows
+      .map((row) => normalizeRow(row))
+      .filter((route) => alertRouteMatches(route, delivery))
+      .map((route) => buildFailureAlert({ route, delivery, endpoint }));
+
+    const savedAlerts = [];
+    for (const alert of alerts) {
+      const result = await this.pool.query(
+        `insert into receiver_failure_alerts (
+           alert_id, route_id, owner_id, delivery_id, endpoint_id, event_id, failure_class,
+           delivery_status, target_type, target, message
+         )
+         values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+         returning alert_id, route_id, owner_id, delivery_id, endpoint_id, event_id, failure_class,
+                   delivery_status, target_type, target, message, created_at`,
+        [
+          alert.alert_id,
+          alert.route_id,
+          alert.owner_id,
+          alert.delivery_id,
+          alert.endpoint_id,
+          alert.event_id,
+          alert.failure_class,
+          alert.delivery_status,
+          alert.target_type,
+          alert.target,
+          alert.message
+        ]
+      );
+      savedAlerts.push(publicFailureAlert(normalizeRow(result.rows[0])));
+    }
+
+    return savedAlerts;
   }
 
   async getEvent(eventId) {

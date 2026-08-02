@@ -67,6 +67,8 @@ Observability should attach one trace across event ingestion, job enqueue, each 
 - Saved views intentionally do not store cursors because operators expect a preset to start at the newest matching attempts, not a stale page position.
 - Delivery export reuses the same filters, returns a bounded CSV snapshot, and joins attempts back to endpoint ownership before returning rows.
 - Export is synchronous and capped first; background jobs, durable files, scheduled reports, and JSONL belong after delivery retention is real.
+- Receiver failure alert routes match worker-recorded failed/dead-letter attempts by owner, status, and optional `failure_class`.
+- Alert dispatch is deliberately a local alert record first, which proves policy and audit behavior before adding external notification retries and escalation schedules.
 - This is intentionally not a full alerting system yet; it creates the durable field that later dashboards, alerts, and endpoint-specific retry policy can use.
 
 ## Endpoint Rate Limit Talking Points

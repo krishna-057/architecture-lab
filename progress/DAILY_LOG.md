@@ -1,5 +1,35 @@
 # Daily Log
 
+## 2026-08-03
+
+Added HookRelay receiver failure alert routing.
+
+Added:
+- `GET/POST/DELETE /api/alert-routes` for owner-scoped receiver failure alert routes.
+- `GET /api/failure-alerts` for recent owner-scoped local alert records.
+- In-memory and PostgreSQL `receiver_failure_alert_routes` and `receiver_failure_alerts` storage.
+- Worker alert dispatch after failed/dead-letter delivery updates, matching enabled routes by owner, delivery status, and optional `failure_class`.
+- Dashboard controls to create/delete alert routes and inspect recent failure alerts.
+- Delivery contract discovery, README, architecture, delivery contract, decision, interview-note, schema, and validation-marker updates explaining why alert dispatch is local before external integrations.
+
+Validated the work by running:
+- `npm run check -w @hookrelay/api` from `projects/05-hookrelay`
+- `node --check` for `services/api/src/app.js`, `services/api/src/storage.js`, `services/api/src/delivery-runner.js`, and `scripts/check-workspace.mjs`
+- `npm run check` from `projects/05-hookrelay`
+- `npm install` from the fresh K: clone because it did not have `node_modules`; npm refreshed several corrupted cache tarballs and still reported existing high-severity audit findings
+- `npx tsc --noEmit -p apps/web/tsconfig.json` from `projects/05-hookrelay`
+- `npm run build -w @hookrelay/web` from `projects/05-hookrelay`
+- A local Fastify/worker smoke test covering alert-route no-auth rejection, invalid failure-class rejection, route creation/deletion, 503 receiver failure classification, and emitted alert records
+- `docker compose -f projects\05-hookrelay\compose.yaml config`
+- `git diff --check`
+
+Notes:
+- This run used `K:\AutoPilot_Projects\FlashReserve_run_20260803` because both previous local checkouts showed Git/object or unrelated working-tree corruption.
+- External email/webhook notification delivery, alert retries, throttling, and escalation policy are intentionally deferred.
+
+Next recommended task:
+- Add HookRelay alert acknowledgement workflow.
+
 ## 2026-08-02
 
 Added HookRelay delivery export workflow.
