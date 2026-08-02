@@ -63,6 +63,8 @@ Observability should attach one trace across event ingestion, job enqueue, each 
 - The dashboard searches the delivery log through server-side query parameters, including `failure_class=none` for queued/succeeded attempts that do not have a failure.
 - Delivery search deliberately uses exact filters, cursor pagination, and a bounded text query before saved views or a full-text index.
 - Cursor pagination uses `(created_at, delivery_id)` instead of offsets so append-heavy delivery logs do not skip or duplicate attempts when new worker records arrive.
+- Saved delivery views reuse the delivery search filters, require `operator` or `admin`, and are scoped by API-key `owner_id`.
+- Saved views intentionally do not store cursors because operators expect a preset to start at the newest matching attempts, not a stale page position.
 - This is intentionally not a full alerting system yet; it creates the durable field that later dashboards, alerts, and endpoint-specific retry policy can use.
 
 ## Endpoint Rate Limit Talking Points

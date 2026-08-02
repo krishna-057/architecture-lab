@@ -246,3 +246,22 @@ Rejected alternatives:
 
 Follow-up:
 Add saved delivery views, export workflows, cursor-aware observability joins, and long-retention delivery analytics.
+
+## 2026-08-02: Add Saved Delivery Views
+
+Decision:
+Add owner-scoped saved delivery search presets through `GET/POST/DELETE /api/delivery-views`. Require `operator` or `admin` API-key roles, validate saved filters with the existing delivery search parser, persist views in memory or PostgreSQL, and deliberately exclude pagination cursors from stored view state.
+
+Why:
+- Operators often return to the same troubleshooting slices, such as failed deliveries for one endpoint or one receiver failure class.
+- Reusing the delivery search contract keeps saved views as a thin workflow feature instead of a parallel query model.
+- Owner scoping and operator/admin role checks match manual replay authorization and avoid introducing tenant teams before the platform needs them.
+- Cursors represent one page position in a changing append-only log, so saving them would make views stale and surprising.
+
+Rejected alternatives:
+- Save cursor state with the view: it would resume from an old page rather than showing the newest matching failures.
+- Create a separate delivery analytics table now: useful later for trends, but unnecessary for saving operator presets.
+- Make saved views public across owners: team sharing belongs with a real tenant/team model and audit trail.
+
+Follow-up:
+Add shared/team views, favorites, export workflows, and long-retention delivery analytics.

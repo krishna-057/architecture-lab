@@ -39,6 +39,21 @@ function normalizeRow(row) {
   };
 }
 
+function normalizeJson(value) {
+  return typeof value === "string" ? JSON.parse(value) : value;
+}
+
+function publicDeliveryView(view) {
+  return {
+    view_id: view.view_id,
+    owner_id: view.owner_id,
+    name: view.name,
+    filters: normalizeJson(view.filters),
+    created_at: view.created_at,
+    updated_at: view.updated_at
+  };
+}
+
 function normalizeDeliverySearch(search = {}) {
   return {
     status: search.status ?? null,
@@ -133,6 +148,7 @@ export class MemoryStore {
     this.endpoints = new Map();
     this.events = new Map();
     this.deliveries = new Map();
+    this.deliveryViews = new Map();
     this.producerApiKeys = new Map();
     this.idempotencyIndex = new Map();
   }
@@ -280,6 +296,33 @@ export class MemoryStore {
     return sortNewest(Array.from(this.events.values()));
   }
 
+  async listDeliveryViews(ownerId) {
+    return sortNewest(Array.from(this.deliveryViews.values()).filter((view) => view.owner_id === ownerId)).map(publicDeliveryView);
+  }
+
+  async createDeliveryView({ ownerId, name, filters }) {
+    const view = {
+      view_id: `dview_${crypto.randomUUID()}`,
+      owner_id: ownerId,
+      name,
+      filters,
+      created_at: nowIso(),
+      updated_at: nowIso()
+    };
+    this.deliveryViews.set(view.view_id, view);
+    return publicDeliveryView(view);
+  }
+
+  async deleteDeliveryView({ ownerId, viewId }) {
+    const view = this.deliveryViews.get(viewId);
+    if (!view || view.owner_id !== ownerId) {
+      return null;
+    }
+
+    this.deliveryViews.delete(viewId);
+    return publicDeliveryView(view);
+  }
+
   async getEvent(eventId) {
     return this.events.get(eventId) ?? null;
   }
@@ -376,6 +419,15 @@ export class PostgresStore {
         updated_at timestamptz not null default now()
       );
 
+      create table if not exists delivery_saved_views (
+        view_id text primary key,
+        owner_id text not null,
+        name text not null,
+        filters jsonb not null,
+        created_at timestamptz not null default now(),
+        updated_at timestamptz not null default now()
+      );
+
       alter table producer_api_keys
         add column if not exists role text not null default 'producer',
         add column if not exists rotated_from_key_id text references producer_api_keys(key_id),
@@ -419,6 +471,9 @@ export class PostgresStore {
 
       create index if not exists idx_delivery_attempts_failure_cursor
         on delivery_attempts(failure_class, created_at desc, delivery_id desc);
+
+      create index if not exists idx_delivery_saved_views_owner_created
+        on delivery_saved_views(owner_id, created_at desc);
     `));
 
     await this.withStartupRetry(() => this.pool.query(
@@ -645,6 +700,37 @@ export class PostgresStore {
   async listEvents() {
     const result = await this.pool.query("select * from webhook_events order by created_at desc");
     return result.rows.map(normalizeRow);
+  }
+
+  async listDeliveryViews(ownerId) {
+    const result = await this.pool.query(
+      `select view_id, owner_id, name, filters, created_at, updated_at
+       from delivery_saved_views
+       where owner_id = $1
+       order by created_at desc`,
+      [ownerId]
+    );
+    return result.rows.map((row) => publicDeliveryView(normalizeRow(row)));
+  }
+
+  async createDeliveryView({ ownerId, name, filters }) {
+    const result = await this.pool.query(
+      `insert into delivery_saved_views (view_id, owner_id, name, filters)
+       values ($1, $2, $3, $4::jsonb)
+       returning view_id, owner_id, name, filters, created_at, updated_at`,
+      [`dview_${crypto.randomUUID()}`, ownerId, name, JSON.stringify(filters)]
+    );
+    return publicDeliveryView(normalizeRow(result.rows[0]));
+  }
+
+  async deleteDeliveryView({ ownerId, viewId }) {
+    const result = await this.pool.query(
+      `delete from delivery_saved_views
+       where owner_id = $1 and view_id = $2
+       returning view_id, owner_id, name, filters, created_at, updated_at`,
+      [ownerId, viewId]
+    );
+    return result.rows[0] ? publicDeliveryView(normalizeRow(result.rows[0])) : null;
   }
 
   async getEvent(eventId) {

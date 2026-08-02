@@ -30,6 +30,7 @@ function parsePositiveInteger(value, fallback) {
 const validApiKeyRoles = ["producer", "operator", "admin"];
 const producerRoles = ["producer", "admin"];
 const replayRoles = ["operator", "admin"];
+const deliveryViewRoles = ["operator", "admin"];
 const deliveryStatuses = ["queued", "delivering", "succeeded", "failed", "dead_letter"];
 
 function parseApiKeyRole(value) {
@@ -89,6 +90,31 @@ function parseDeliverySearch(query = {}) {
   };
 }
 
+function parseDeliveryViewFilters(filters = {}) {
+  const search = parseDeliverySearch({
+    status: filters.status,
+    failure_class: filters.failure_class,
+    endpoint_id: filters.endpoint_id,
+    event_id: filters.event_id,
+    q: filters.q,
+    limit: filters.limit
+  });
+  if (search.error) {
+    return search;
+  }
+
+  return {
+    filters: {
+      status: search.filters.status,
+      failure_class: search.filters.failureClass,
+      endpoint_id: search.filters.endpointId,
+      event_id: search.filters.eventId,
+      q: search.filters.text,
+      limit: search.filters.limit
+    }
+  };
+}
+
 async function authenticateProducer({ request, reply, store, requiredRoles = producerRoles, action = "Producer" }) {
   const apiKey = extractProducerApiKey(request);
   if (!apiKey) {
@@ -132,7 +158,7 @@ export function createHookRelayApp({
       reply.header("Access-Control-Allow-Origin", origin);
     }
     reply.header("Vary", "Origin");
-    reply.header("Access-Control-Allow-Methods", "GET,POST,OPTIONS");
+    reply.header("Access-Control-Allow-Methods", "GET,POST,DELETE,OPTIONS");
     reply.header("Access-Control-Allow-Headers", "Authorization, Content-Type, X-HookRelay-API-Key");
 
     if (request.method === "OPTIONS") {
@@ -219,6 +245,13 @@ export function createHookRelayApp({
         mode: "opaque_base64url_json",
         fields: ["created_at", "delivery_id"]
       }
+    },
+    delivery_saved_views: {
+      endpoint: "/api/delivery-views",
+      owner_rule: "Saved delivery views are scoped to the active API key owner_id.",
+      required_roles: deliveryViewRoles,
+      stored_filters: ["status", "failure_class", "endpoint_id", "event_id", "q", "limit"],
+      cursor_rule: "Saved views store filters only; cursors are request-specific and are not saved."
     },
     replay_rule: "Manual replay creates a new queued delivery attempt for the same event payload.",
     replay_authorization: {
@@ -337,6 +370,75 @@ export function createHookRelayApp({
   });
 
   app.get("/api/events", async () => store.listEvents());
+
+  app.get("/api/delivery-views", async (request, reply) => {
+    const operator = await authenticateProducer({
+      request,
+      reply,
+      store,
+      requiredRoles: deliveryViewRoles,
+      action: "Delivery view"
+    });
+    if (!operator) {
+      return reply;
+    }
+
+    return store.listDeliveryViews(operator.owner_id);
+  });
+
+  app.post("/api/delivery-views", async (request, reply) => {
+    const operator = await authenticateProducer({
+      request,
+      reply,
+      store,
+      requiredRoles: deliveryViewRoles,
+      action: "Delivery view"
+    });
+    if (!operator) {
+      return reply;
+    }
+
+    const body = request.body ?? {};
+    const name = String(body.name ?? "").trim();
+    if (name.length < 3) {
+      return reply.status(400).send({ error: "delivery view name must be at least 3 characters" });
+    }
+
+    const parsed = parseDeliveryViewFilters(body.filters ?? {});
+    if (parsed.error) {
+      return reply.status(400).send({ error: parsed.error });
+    }
+
+    const view = await store.createDeliveryView({
+      ownerId: operator.owner_id,
+      name,
+      filters: parsed.filters
+    });
+    return reply.status(201).send(view);
+  });
+
+  app.delete("/api/delivery-views/:view_id", async (request, reply) => {
+    const operator = await authenticateProducer({
+      request,
+      reply,
+      store,
+      requiredRoles: deliveryViewRoles,
+      action: "Delivery view"
+    });
+    if (!operator) {
+      return reply;
+    }
+
+    const deleted = await store.deleteDeliveryView({
+      ownerId: operator.owner_id,
+      viewId: String(request.params?.view_id ?? "").trim()
+    });
+    if (!deleted) {
+      return reply.status(404).send({ error: "delivery view was not found" });
+    }
+
+    return deleted;
+  });
 
   app.post("/api/events", async (request, reply) => {
     const body = request.body ?? {};

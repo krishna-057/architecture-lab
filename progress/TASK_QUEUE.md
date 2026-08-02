@@ -6,10 +6,11 @@ Tasks should stay small enough for one focused session.
 
 ### Ready
 
-- [ ] Add HookRelay saved delivery views.
+- [ ] Add HookRelay delivery export workflow.
 
 ### Completed
 
+- [x] Add HookRelay saved delivery views.
 - [x] Add HookRelay delivery pagination cursors.
 - [x] Add HookRelay server-side delivery search.
 - [x] Add HookRelay failure-class dashboard filters.

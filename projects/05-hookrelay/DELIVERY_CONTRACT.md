@@ -11,6 +11,7 @@ HookRelay defines the HTTP contract for endpoint setup, event ingestion, deliver
 | Endpoint rate limit | `POST /api/events` | In-memory by default, Redis when configured | Redis counters plus tenant quota policy |
 | Event | `/api/events` | In-memory by default, PostgreSQL when configured | PostgreSQL `webhook_events` |
 | Delivery attempt | `/api/deliveries` | In-memory by default, PostgreSQL plus BullMQ when configured | PostgreSQL `delivery_attempts` plus BullMQ jobs |
+| Delivery saved view | `/api/delivery-views` | In-memory by default, PostgreSQL when configured | PostgreSQL `delivery_saved_views` |
 | Failure classification | `failure_class` on delivery attempts | In-memory by default, PostgreSQL when configured | Delivery analytics and alert policy |
 | Observability span | `/api/observability/spans` | In-memory by default, PostgreSQL when configured | OpenTelemetry exporter plus query store |
 | Contract discovery | `/api/delivery-contract` | Static API response | Versioned API contract |
@@ -258,6 +259,49 @@ Contract discovery exposes delivery search as:
 }
 ```
 
+## Delivery Saved Views
+
+Saved views let operators keep common delivery search filters without creating a separate analytics model. The API exposes:
+
+```text
+GET /api/delivery-views
+POST /api/delivery-views
+DELETE /api/delivery-views/:view_id
+```
+
+Every saved view requires an active API key with the `operator` or `admin` role. The key's `owner_id` scopes list, create, and delete operations, so one owner cannot read or delete another owner's saved delivery views.
+
+Create requests use:
+
+```json
+{
+  "name": "Failed receiver 5xx",
+  "filters": {
+    "status": "failed",
+    "failure_class": "receiver_http_5xx",
+    "endpoint_id": "endpoint_...",
+    "q": "checkout",
+    "limit": 50
+  }
+}
+```
+
+The server validates filters through the same delivery search parser and stores only `status`, `failure_class`, `endpoint_id`, `event_id`, `q`, and `limit`. Saved views store filters only; pagination cursors are request-specific and are not saved. Applying a saved view starts a fresh newest-first delivery search and can then continue with the returned `next_cursor`.
+
+Contract discovery exposes saved views as:
+
+```json
+{
+  "delivery_saved_views": {
+    "endpoint": "/api/delivery-views",
+    "owner_rule": "Saved delivery views are scoped to the active API key owner_id.",
+    "required_roles": ["operator", "admin"],
+    "stored_filters": ["status", "failure_class", "endpoint_id", "event_id", "q", "limit"],
+    "cursor_rule": "Saved views store filters only; cursors are request-specific and are not saved."
+  }
+}
+```
+
 ## Replay Rule
 
 Manual replay creates a new queued delivery attempt for an existing event. The event payload and idempotency key remain unchanged; the replay attempt receives a new delivery id, timestamp, and signature.
@@ -329,4 +373,4 @@ The current traced operations are event ingestion, delivery enqueue, manual repl
 
 PostgreSQL enforces one accepted event for each `(endpoint_id, idempotency_key)` pair. Delivery attempts remain append-friendly records, so retries and manual replays keep their own delivery ids, timestamps, signatures, and statuses.
 
-When `DATABASE_URL` is set, observability spans can be persisted in `delivery_observability_spans`. Without PostgreSQL, the API keeps a bounded in-process span log controlled by `OBSERVABILITY_SPAN_LOG_LIMIT`.
+When `DATABASE_URL` is set, saved delivery views are persisted in `delivery_saved_views` and observability spans can be persisted in `delivery_observability_spans`. Without PostgreSQL, the API keeps saved views and a bounded span log in process for local checks.

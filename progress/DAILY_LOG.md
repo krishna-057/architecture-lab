@@ -1,5 +1,35 @@
 # Daily Log
 
+## 2026-08-02
+
+Added HookRelay saved delivery views.
+
+Added:
+- `GET/POST/DELETE /api/delivery-views` for owner-scoped saved delivery search presets.
+- Operator/admin API-key authorization for saved view list, create, and delete actions.
+- Validation that saved views store only delivery search filters: `status`, `failure_class`, `endpoint_id`, `event_id`, `q`, and `limit`.
+- In-memory and PostgreSQL `delivery_saved_views` storage with owner/newest-first listing.
+- Dashboard controls to save, apply, and delete delivery search views.
+- Delivery contract discovery, README, architecture, delivery contract, decision, and interview-note updates explaining why cursors are not saved with views.
+
+Validated the work by running:
+- `npm run check -w @hookrelay/api` from `projects/05-hookrelay`
+- `node --check` for `services/api/src/app.js`, `services/api/src/storage.js`, and `scripts/check-workspace.mjs`
+- `npm run check` from `projects/05-hookrelay`
+- `npm run build -w @hookrelay/web` from `projects/05-hookrelay` with `NODE_OPTIONS=--max-old-space-size=4096`; the wrapper timed out, but the Next build completed and produced `.next/BUILD_ID`
+- `npx tsc --noEmit -p apps/web/tsconfig.json` from `projects/05-hookrelay`
+- A local Fastify smoke test covering saved-view list, create, cursor exclusion, invalid filter rejection, delete, and post-delete listing
+- `docker compose -f projects\05-hookrelay\compose.yaml config`
+
+Notes:
+- `WORKFLOW.md` still appears to contain binary/corrupted content in the current checkout, so it could not be meaningfully read as Markdown.
+- `projects/01-flashreserve` is locally corrupted/unreadable and was left untouched and unstaged.
+- `projects/05-hookrelay/services/api/src/receiver-failure.js` had disk corruption and was repaired back to the current HEAD content with no committed diff.
+- The current Git object database also has corrupted loose objects, so `git diff --check` cannot complete in this checkout; the commit/push step uses a fresh K: clone after copying the scoped HookRelay/progress edits.
+
+Next recommended task:
+- Add HookRelay delivery export workflow.
+
 ## 2026-08-01
 
 Added HookRelay delivery pagination cursors.

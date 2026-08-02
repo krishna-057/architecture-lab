@@ -32,9 +32,9 @@ API and worker operations also write provider-neutral observability spans. In me
 
 | Component | Responsibility |
 | --- | --- |
-| Fastify API | API-key bootstrap, endpoint setup, event ingestion, idempotency handling, role-gated replay enqueueing, and contract discovery. |
-| Next.js web app | Developer/operator console for creating endpoints, submitting events, searching paginated delivery attempts, replaying deliveries, and inspecting signatures. |
-| PostgreSQL | Optional durable owner for endpoints, events, idempotency uniqueness, delivery attempt state, replay audit fields, and dead-letter status. |
+| Fastify API | API-key bootstrap, endpoint setup, event ingestion, idempotency handling, role-gated saved delivery views, role-gated replay enqueueing, and contract discovery. |
+| Next.js web app | Developer/operator console for creating endpoints, submitting events, searching paginated delivery attempts, saving/applying delivery views, replaying deliveries, and inspecting signatures. |
+| PostgreSQL | Optional durable owner for endpoints, events, idempotency uniqueness, delivery attempt state, saved delivery views, replay audit fields, and dead-letter status. |
 | BullMQ / Redis | Optional durable queue, jittered delayed retry scheduler, and endpoint rate-limit counter owner. |
 | Worker process | Sends signed outbound HTTP requests, classifies receiver failures, records responses, schedules retries, and marks dead-letter failures. |
 | Observability span log | Captures event ingestion, enqueue, replay, worker processing, and outbound HTTP timing as local JSON spans before adding a vendor exporter. |
@@ -60,6 +60,9 @@ API and worker operations also write provider-neutral observability spans. In me
 | `GET /api/events` | List accepted producer events. |
 | `POST /api/events` | Authenticate the producer key, require owner match, check the endpoint rate limit, accept one event per endpoint/idempotency key, and create the first delivery attempt. |
 | `GET /api/deliveries` | Search paginated delivery attempts by status, failure class, endpoint, event id, text query, cursor, and limit. |
+| `GET /api/delivery-views` | List owner-scoped saved delivery search presets for the active operator/admin key. |
+| `POST /api/delivery-views` | Validate and save delivery search filters, excluding pagination cursors. |
+| `DELETE /api/delivery-views/:view_id` | Delete one owner-scoped saved delivery view. |
 | `POST /api/deliveries/:delivery_id/replay` | Require an owner-scoped operator/admin key plus replay intent, create a new queued attempt for an existing event, and enqueue it when BullMQ is configured. |
 
 ## Idempotency
@@ -138,6 +141,8 @@ The dashboard searches the delivery log through `GET /api/deliveries` query para
 
 Pagination uses an opaque base64url cursor over `(created_at, delivery_id)` and sorts by `created_at desc, delivery_id desc`. That tie-breaker makes the next page stable as new delivery attempts are appended. PostgreSQL durable mode keeps supporting indexes for endpoint and failure-class delivery searches using the same sort pair. The free-text `q` search remains a small `ILIKE` over delivery identifiers and diagnostic fields; full-text search is deferred until long-retention delivery history exists.
 
+Saved delivery views are an operator/admin convenience on top of the same delivery search contract. `GET/POST/DELETE /api/delivery-views` require an active API key with the `operator` or `admin` role, and every view is scoped to that key's `owner_id`. The stored JSON is deliberately limited to validated search filters: `status`, `failure_class`, `endpoint_id`, `event_id`, `q`, and `limit`. Pagination cursors are request-specific and are not saved, so applying a view always starts from the newest matching delivery attempts.
+
 ## Observability
 
 HookRelay records a small span envelope for the operations that explain delivery lifecycle behavior:
@@ -159,5 +164,5 @@ Each span has `trace_id`, `span_id`, optional parent span, delivery/event/endpoi
 - Approval-backed producer key lifecycle audit.
 - Tenant-specific retry overrides and multi-dimensional producer quotas.
 - Receiver SDKs.
-- Receiver-specific failure dashboards, saved delivery views, export workflows, and alert routing.
+- Receiver-specific failure dashboards, shared/team delivery views, export workflows, and alert routing.
 - OpenTelemetry exporters, trace sampling, and long-retention latency dashboards.

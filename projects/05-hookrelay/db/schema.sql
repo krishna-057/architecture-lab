@@ -75,6 +75,15 @@ create table if not exists delivery_observability_spans (
   error text
 );
 
+create table if not exists delivery_saved_views (
+  view_id text primary key,
+  owner_id text not null,
+  name text not null,
+  filters jsonb not null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
 alter table delivery_attempts
   add column if not exists base_delay_seconds integer not null default 0,
   add column if not exists jitter_seconds integer not null default 0,
@@ -130,6 +139,9 @@ create index if not exists idx_delivery_attempts_endpoint_cursor
 
 create index if not exists idx_delivery_attempts_failure_cursor
   on delivery_attempts(failure_class, created_at desc, delivery_id desc);
+
+create index if not exists idx_delivery_saved_views_owner_created
+  on delivery_saved_views(owner_id, created_at desc);
 
 create index if not exists idx_delivery_observability_spans_trace
   on delivery_observability_spans(trace_id, started_at desc);

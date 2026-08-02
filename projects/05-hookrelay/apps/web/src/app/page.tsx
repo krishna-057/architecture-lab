@@ -120,6 +120,13 @@ type DeliveryContract = {
       fields: string[];
     };
   };
+  delivery_saved_views: {
+    endpoint: string;
+    owner_rule: string;
+    required_roles: string[];
+    stored_filters: string[];
+    cursor_rule: string;
+  };
   replay_rule: string;
   replay_authorization: {
     mode: string;
@@ -168,6 +175,24 @@ type DeliverySearchPageInfo = {
 type DeliverySearchResponse = {
   items: DeliveryAttempt[];
   page_info: DeliverySearchPageInfo;
+};
+
+type DeliveryViewFilters = {
+  status: string | null;
+  failure_class: string | null;
+  endpoint_id: string | null;
+  event_id: string | null;
+  q: string | null;
+  limit: number;
+};
+
+type DeliverySavedView = {
+  view_id: string;
+  owner_id: string;
+  name: string;
+  filters: DeliveryViewFilters;
+  created_at: string;
+  updated_at: string;
 };
 
 type ProducerApiKey = {
@@ -225,6 +250,7 @@ export default function HookRelayHome() {
   const [events, setEvents] = useState<DeliveryEvent[]>([]);
   const [deliveries, setDeliveries] = useState<DeliveryAttempt[]>([]);
   const [deliveryPageInfo, setDeliveryPageInfo] = useState<DeliverySearchPageInfo | null>(null);
+  const [savedDeliveryViews, setSavedDeliveryViews] = useState<DeliverySavedView[]>([]);
   const [producerKeys, setProducerKeys] = useState<ProducerApiKey[]>([]);
   const [producerApiKey, setProducerApiKey] = useState(defaultProducerApiKey);
   const [newKeyOwnerId, setNewKeyOwnerId] = useState("owner_demo");
@@ -245,6 +271,8 @@ export default function HookRelayHome() {
   const [failureClassFilter, setFailureClassFilter] = useState("all");
   const [deliveryEndpointFilter, setDeliveryEndpointFilter] = useState("all");
   const [deliverySearchText, setDeliverySearchText] = useState("");
+  const [deliveryViewName, setDeliveryViewName] = useState("Failed receiver issues");
+  const [selectedDeliveryViewId, setSelectedDeliveryViewId] = useState("");
 
   const selectedEndpoint = endpoints.find((endpoint) => endpoint.endpoint_id === selectedEndpointId) ?? endpoints[0];
   const latestDelivery = deliveries[0];
@@ -260,24 +288,39 @@ export default function HookRelayHome() {
     return Array.from(new Set([...contractClasses, ...observedClasses]));
   }, [contract, deliveries]);
 
-  function buildDeliverySearchPath(cursor?: string | null) {
+  function currentDeliveryViewFilters(): DeliveryViewFilters {
+    return {
+      status: deliveryStatusFilter === "all" ? null : deliveryStatusFilter,
+      failure_class: failureClassFilter === "all" ? null : failureClassFilter,
+      endpoint_id: deliveryEndpointFilter === "all" ? null : deliveryEndpointFilter,
+      event_id: null,
+      q: deliverySearchText.trim() || null,
+      limit: contract?.delivery_search.default_limit ?? 100
+    };
+  }
+
+  function deliverySearchPathFromFilters(filters: DeliveryViewFilters, cursor?: string | null) {
     const params = new URLSearchParams();
-    params.set("limit", String(contract?.delivery_search.default_limit ?? 100));
+    params.set("limit", String(filters.limit ?? contract?.delivery_search.default_limit ?? 100));
 
-    if (deliveryStatusFilter !== "all") {
-      params.set("status", deliveryStatusFilter);
+    if (filters.status) {
+      params.set("status", filters.status);
     }
 
-    if (failureClassFilter !== "all") {
-      params.set("failure_class", failureClassFilter);
+    if (filters.failure_class) {
+      params.set("failure_class", filters.failure_class);
     }
 
-    if (deliveryEndpointFilter !== "all") {
-      params.set("endpoint_id", deliveryEndpointFilter);
+    if (filters.endpoint_id) {
+      params.set("endpoint_id", filters.endpoint_id);
     }
 
-    if (deliverySearchText.trim()) {
-      params.set("q", deliverySearchText.trim());
+    if (filters.event_id) {
+      params.set("event_id", filters.event_id);
+    }
+
+    if (filters.q) {
+      params.set("q", filters.q);
     }
 
     if (cursor) {
@@ -287,11 +330,30 @@ export default function HookRelayHome() {
     return `/api/deliveries?${params.toString()}`;
   }
 
+  function buildDeliverySearchPath(cursor?: string | null) {
+    return deliverySearchPathFromFilters(currentDeliveryViewFilters(), cursor);
+  }
+
   async function refreshDeliveries({ cursor = null, append = false }: { cursor?: string | null; append?: boolean } = {}) {
     const response = await requestJson<DeliverySearchResponse>(buildDeliverySearchPath(cursor));
     setDeliveries((current) => (append ? [...current, ...response.items] : response.items));
     setDeliveryPageInfo(response.page_info);
     return response;
+  }
+
+  async function refreshSavedDeliveryViews() {
+    try {
+      const views = await requestJson<DeliverySavedView[]>("/api/delivery-views", {
+        headers: { Authorization: `Bearer ${producerApiKey}` }
+      });
+      setSavedDeliveryViews(views);
+      setSelectedDeliveryViewId((current) => current || views[0]?.view_id || "");
+      return views;
+    } catch {
+      setSavedDeliveryViews([]);
+      setSelectedDeliveryViewId("");
+      return [];
+    }
   }
 
   async function refreshAll() {
@@ -323,6 +385,7 @@ export default function HookRelayHome() {
     setObservabilityMode(nextObservability.mode);
     setSpans(nextObservability.spans);
     setSelectedEndpointId((current) => current || nextEndpoints[0]?.endpoint_id || "");
+    void refreshSavedDeliveryViews();
     setStatusMessage("Scaffold API is reachable.");
   }
 
@@ -346,6 +409,67 @@ export default function HookRelayHome() {
       setStatusMessage(`Loaded ${response.items.length} more delivery attempts.`);
     } catch (error) {
       setStatusMessage(error instanceof Error ? error.message : "Loading the next delivery page failed.");
+    }
+  }
+
+  async function saveDeliveryView(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    try {
+      const view = await requestJson<DeliverySavedView>("/api/delivery-views", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${producerApiKey}` },
+        body: JSON.stringify({
+          name: deliveryViewName,
+          filters: currentDeliveryViewFilters()
+        })
+      });
+      setSavedDeliveryViews((current) => [view, ...current]);
+      setSelectedDeliveryViewId(view.view_id);
+      setStatusMessage(`Saved delivery view ${view.name}.`);
+    } catch (error) {
+      setStatusMessage(error instanceof Error ? error.message : "Saving the delivery view failed.");
+    }
+  }
+
+  async function applyDeliveryView(viewId: string) {
+    const view = savedDeliveryViews.find((candidate) => candidate.view_id === viewId);
+    if (!view) {
+      return;
+    }
+
+    const filters = view.filters;
+    setSelectedDeliveryViewId(view.view_id);
+    setDeliveryStatusFilter(filters.status ?? "all");
+    setFailureClassFilter(filters.failure_class ?? "all");
+    setDeliveryEndpointFilter(filters.endpoint_id ?? "all");
+    setDeliverySearchText(filters.q ?? "");
+    setDeliveryPageInfo(null);
+
+    try {
+      const response = await requestJson<DeliverySearchResponse>(deliverySearchPathFromFilters(filters));
+      setDeliveries(response.items);
+      setDeliveryPageInfo(response.page_info);
+      setStatusMessage(`Applied delivery view ${view.name}.`);
+    } catch (error) {
+      setStatusMessage(error instanceof Error ? error.message : "Applying the delivery view failed.");
+    }
+  }
+
+  async function deleteDeliveryView() {
+    if (!selectedDeliveryViewId) {
+      return;
+    }
+
+    try {
+      await requestJson<DeliverySavedView>(`/api/delivery-views/${selectedDeliveryViewId}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${producerApiKey}` }
+      });
+      setSavedDeliveryViews((current) => current.filter((view) => view.view_id !== selectedDeliveryViewId));
+      setSelectedDeliveryViewId("");
+      setStatusMessage("Delivery view deleted.");
+    } catch (error) {
+      setStatusMessage(error instanceof Error ? error.message : "Deleting the delivery view failed.");
     }
   }
 
@@ -680,6 +804,32 @@ export default function HookRelayHome() {
             </label>
             <button type="submit">Search Deliveries</button>
           </form>
+          <form className="saved-view-row" aria-label="Saved delivery views" onSubmit={saveDeliveryView}>
+            <label>
+              <span>View Name</span>
+              <input value={deliveryViewName} onChange={(event) => setDeliveryViewName(event.target.value)} />
+            </label>
+            <button type="submit">Save View</button>
+            <label>
+              <span>Saved Views</span>
+              <select
+                value={selectedDeliveryViewId}
+                onChange={(event) => {
+                  void applyDeliveryView(event.target.value);
+                }}
+              >
+                <option value="">none</option>
+                {savedDeliveryViews.map((view) => (
+                  <option key={view.view_id} value={view.view_id}>
+                    {view.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <button type="button" disabled={!selectedDeliveryViewId} onClick={() => void deleteDeliveryView()}>
+              Delete View
+            </button>
+          </form>
           <div className="delivery-list">
             {deliveries.length === 0 ? <p className="empty-state">No delivery attempts match the delivery search.</p> : null}
             {deliveries.map((delivery) => (
@@ -784,6 +934,10 @@ export default function HookRelayHome() {
                   ? `${contract.delivery_search.filters.join(", ")} / ${contract.delivery_search.cursor.mode}`
                   : "unknown"}
               </dd>
+            </div>
+            <div>
+              <dt>Saved Views</dt>
+              <dd>{contract?.delivery_saved_views.stored_filters.join(", ") ?? "unknown"}</dd>
             </div>
             <div>
               <dt>Rate Limit</dt>
