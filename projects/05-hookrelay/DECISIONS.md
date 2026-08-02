@@ -265,3 +265,22 @@ Rejected alternatives:
 
 Follow-up:
 Add shared/team views, favorites, export workflows, and long-retention delivery analytics.
+
+## 2026-08-02: Add Bounded Delivery CSV Export
+
+Decision:
+Add `GET /api/deliveries/export` as a synchronous CSV snapshot over the existing delivery search filters. Require an `operator` or `admin` API key, scope exported rows by endpoint `owner_id`, cap exports at 1000 newest matching rows, and exclude pagination cursors from export requests.
+
+Why:
+- Operators need a quick way to hand off delivery evidence without building analytics, reports, or file storage first.
+- Reusing delivery search filters keeps export behavior aligned with the dashboard and saved views.
+- Owner scoping matches replay and saved-view authorization, which keeps the first export path from becoming a cross-tenant read surface.
+- A bounded synchronous CSV is enough for the current local lab and easy to validate without adding background job state.
+
+Rejected alternatives:
+- Background export jobs now: useful once delivery history is large, but premature before retention and file lifecycle rules exist.
+- Export the current paginated cursor page: too tied to transient UI state; exports should be newest matching snapshots.
+- JSONL plus CSV immediately: flexible, but a single CSV format is enough for operator handoff and spreadsheet inspection.
+
+Follow-up:
+Add scheduled exports, durable export files, JSONL format, and long-retention delivery analytics.

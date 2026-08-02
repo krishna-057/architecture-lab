@@ -54,7 +54,7 @@ function publicDeliveryView(view) {
   };
 }
 
-function normalizeDeliverySearch(search = {}) {
+function normalizeDeliverySearch(search = {}, { maxLimit = 200 } = {}) {
   return {
     status: search.status ?? null,
     failureClass: search.failureClass ?? null,
@@ -62,7 +62,8 @@ function normalizeDeliverySearch(search = {}) {
     eventId: search.eventId ?? null,
     text: search.text ? String(search.text).toLowerCase() : null,
     cursor: search.cursor ?? null,
-    limit: Math.min(Math.max(Number(search.limit ?? 100), 1), 200)
+    limit: Math.min(Math.max(Number(search.limit ?? 100), 1), maxLimit),
+    ownerId: search.ownerId ?? null
   };
 }
 
@@ -82,9 +83,8 @@ function deliverySearchText(delivery) {
   ].filter(Boolean).join(" ").toLowerCase();
 }
 
-function applyDeliverySearch(deliveries, search) {
-  const filters = normalizeDeliverySearch(search);
-  const matches = sortNewest(deliveries)
+function filterDeliveryMatches(deliveries, filters) {
+  return sortNewest(deliveries)
     .filter((delivery) => !filters.status || delivery.status === filters.status)
     .filter((delivery) => {
       if (!filters.failureClass) {
@@ -99,8 +99,18 @@ function applyDeliverySearch(deliveries, search) {
     .filter((delivery) => !filters.eventId || delivery.event_id === filters.eventId)
     .filter((delivery) => !filters.text || deliverySearchText(delivery).includes(filters.text))
     .filter((delivery) => isAfterDeliveryCursor(delivery, filters.cursor));
+}
+
+function applyDeliverySearch(deliveries, search) {
+  const filters = normalizeDeliverySearch(search);
+  const matches = filterDeliveryMatches(deliveries, filters);
 
   return buildDeliveryPage(matches, filters);
+}
+
+function applyDeliveryExportSearch(deliveries, search) {
+  const filters = normalizeDeliverySearch({ ...search, cursor: null }, { maxLimit: 1000 });
+  return filterDeliveryMatches(deliveries, filters).slice(0, filters.limit);
 }
 
 function isAfterDeliveryCursor(delivery, cursor) {
@@ -329,6 +339,17 @@ export class MemoryStore {
 
   async listDeliveries(search = {}) {
     return applyDeliverySearch(Array.from(this.deliveries.values()), search);
+  }
+
+  async listDeliveryExport(search = {}) {
+    const deliveries = Array.from(this.deliveries.values()).filter((delivery) => {
+      if (!search.ownerId) {
+        return true;
+      }
+
+      return this.endpoints.get(delivery.endpoint_id)?.owner_id === search.ownerId;
+    });
+    return applyDeliveryExportSearch(deliveries, search);
   }
 
   async getDelivery(deliveryId) {
@@ -799,6 +820,69 @@ export class PostgresStore {
       values
     );
     return buildDeliveryPage(result.rows.map(normalizeRow), filters);
+  }
+
+  async listDeliveryExport(search = {}) {
+    const filters = normalizeDeliverySearch({ ...search, cursor: null }, { maxLimit: 1000 });
+    const where = [];
+    const values = [];
+
+    if (filters.ownerId) {
+      values.push(filters.ownerId);
+      where.push(`e.owner_id = $${values.length}`);
+    }
+
+    if (filters.status) {
+      values.push(filters.status);
+      where.push(`d.status = $${values.length}`);
+    }
+
+    if (filters.failureClass) {
+      if (filters.failureClass === "none") {
+        where.push("d.failure_class is null");
+      } else {
+        values.push(filters.failureClass);
+        where.push(`d.failure_class = $${values.length}`);
+      }
+    }
+
+    if (filters.endpointId) {
+      values.push(filters.endpointId);
+      where.push(`d.endpoint_id = $${values.length}`);
+    }
+
+    if (filters.eventId) {
+      values.push(filters.eventId);
+      where.push(`d.event_id = $${values.length}`);
+    }
+
+    if (filters.text) {
+      values.push(`%${filters.text}%`);
+      where.push(`concat_ws(' ',
+        d.delivery_id,
+        d.event_id,
+        d.endpoint_id,
+        d.target_url,
+        d.status,
+        d.response_status::text,
+        d.failure_class,
+        d.error,
+        d.replay_reason,
+        d.replay_requested_by,
+        d.replayed_from_delivery_id
+      ) ilike $${values.length}`);
+    }
+
+    values.push(filters.limit);
+    const result = await this.pool.query(
+      `select d.* from delivery_attempts d
+       join webhook_endpoints e on e.endpoint_id = d.endpoint_id
+       ${where.length ? `where ${where.join(" and ")}` : ""}
+       order by d.created_at desc, d.delivery_id desc
+       limit $${values.length}`,
+      values
+    );
+    return result.rows.map(normalizeRow);
   }
 
   async getDelivery(deliveryId) {

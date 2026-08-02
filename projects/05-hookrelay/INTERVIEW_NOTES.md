@@ -65,6 +65,8 @@ Observability should attach one trace across event ingestion, job enqueue, each 
 - Cursor pagination uses `(created_at, delivery_id)` instead of offsets so append-heavy delivery logs do not skip or duplicate attempts when new worker records arrive.
 - Saved delivery views reuse the delivery search filters, require `operator` or `admin`, and are scoped by API-key `owner_id`.
 - Saved views intentionally do not store cursors because operators expect a preset to start at the newest matching attempts, not a stale page position.
+- Delivery export reuses the same filters, returns a bounded CSV snapshot, and joins attempts back to endpoint ownership before returning rows.
+- Export is synchronous and capped first; background jobs, durable files, scheduled reports, and JSONL belong after delivery retention is real.
 - This is intentionally not a full alerting system yet; it creates the durable field that later dashboards, alerts, and endpoint-specific retry policy can use.
 
 ## Endpoint Rate Limit Talking Points

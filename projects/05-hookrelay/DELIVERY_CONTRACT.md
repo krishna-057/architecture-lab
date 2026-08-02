@@ -11,6 +11,7 @@ HookRelay defines the HTTP contract for endpoint setup, event ingestion, deliver
 | Endpoint rate limit | `POST /api/events` | In-memory by default, Redis when configured | Redis counters plus tenant quota policy |
 | Event | `/api/events` | In-memory by default, PostgreSQL when configured | PostgreSQL `webhook_events` |
 | Delivery attempt | `/api/deliveries` | In-memory by default, PostgreSQL plus BullMQ when configured | PostgreSQL `delivery_attempts` plus BullMQ jobs |
+| Delivery export | `/api/deliveries/export` | Synchronous bounded CSV response | Background export jobs plus object storage |
 | Delivery saved view | `/api/delivery-views` | In-memory by default, PostgreSQL when configured | PostgreSQL `delivery_saved_views` |
 | Failure classification | `failure_class` on delivery attempts | In-memory by default, PostgreSQL when configured | Delivery analytics and alert policy |
 | Observability span | `/api/observability/spans` | In-memory by default, PostgreSQL when configured | OpenTelemetry exporter plus query store |
@@ -298,6 +299,34 @@ Contract discovery exposes saved views as:
     "required_roles": ["operator", "admin"],
     "stored_filters": ["status", "failure_class", "endpoint_id", "event_id", "q", "limit"],
     "cursor_rule": "Saved views store filters only; cursors are request-specific and are not saved."
+  }
+}
+```
+
+## Delivery Export
+
+Operators can export the newest matching delivery attempts with:
+
+```text
+GET /api/deliveries/export?status=failed&failure_class=receiver_http_5xx&limit=1000
+```
+
+The endpoint accepts the same saved-view/search filters except `cursor`: `status`, `failure_class`, `endpoint_id`, `event_id`, `q`, and `limit`. Exports are bounded snapshots, capped at 1000 rows, ordered by `created_at desc, delivery_id desc`, and returned as `text/csv`.
+
+Every export requires an active API key with the `operator` or `admin` role. The key's `owner_id` is applied through endpoint ownership before rows are returned, so one owner cannot export another owner's delivery attempts. Cursor-based resume, scheduled exports, durable files, and background jobs are intentionally deferred until delivery history retention exists.
+
+Contract discovery exposes export as:
+
+```json
+{
+  "delivery_export": {
+    "endpoint": "GET /api/deliveries/export",
+    "format": "text/csv",
+    "max_rows": 1000,
+    "required_roles": ["operator", "admin"],
+    "owner_rule": "Export API key owner_id must match the exported delivery endpoints owner_id.",
+    "filters": ["status", "failure_class", "endpoint_id", "event_id", "q", "limit"],
+    "cursor_rule": "Exports are bounded snapshots from the newest matching delivery attempts and do not accept pagination cursors."
   }
 }
 ```

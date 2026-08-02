@@ -127,6 +127,15 @@ type DeliveryContract = {
     stored_filters: string[];
     cursor_rule: string;
   };
+  delivery_export: {
+    endpoint: string;
+    format: string;
+    max_rows: number;
+    required_roles: string[];
+    owner_rule: string;
+    filters: string[];
+    cursor_rule: string;
+  };
   replay_rule: string;
   replay_authorization: {
     mode: string;
@@ -299,7 +308,7 @@ export default function HookRelayHome() {
     };
   }
 
-  function deliverySearchPathFromFilters(filters: DeliveryViewFilters, cursor?: string | null) {
+  function deliveryQueryParamsFromFilters(filters: DeliveryViewFilters, cursor?: string | null) {
     const params = new URLSearchParams();
     params.set("limit", String(filters.limit ?? contract?.delivery_search.default_limit ?? 100));
 
@@ -327,7 +336,15 @@ export default function HookRelayHome() {
       params.set("cursor", cursor);
     }
 
-    return `/api/deliveries?${params.toString()}`;
+    return params;
+  }
+
+  function deliverySearchPathFromFilters(filters: DeliveryViewFilters, cursor?: string | null) {
+    return `/api/deliveries?${deliveryQueryParamsFromFilters(filters, cursor).toString()}`;
+  }
+
+  function deliveryExportPathFromFilters(filters: DeliveryViewFilters) {
+    return `/api/deliveries/export?${deliveryQueryParamsFromFilters(filters).toString()}`;
   }
 
   function buildDeliverySearchPath(cursor?: string | null) {
@@ -409,6 +426,37 @@ export default function HookRelayHome() {
       setStatusMessage(`Loaded ${response.items.length} more delivery attempts.`);
     } catch (error) {
       setStatusMessage(error instanceof Error ? error.message : "Loading the next delivery page failed.");
+    }
+  }
+
+  async function downloadDeliveryExport() {
+    const filters = {
+      ...currentDeliveryViewFilters(),
+      limit: contract?.delivery_export.max_rows ?? 1000
+    };
+
+    try {
+      const response = await fetch(`${apiBaseUrl}${deliveryExportPathFromFilters(filters)}`, {
+        headers: { Authorization: `Bearer ${producerApiKey}` }
+      });
+      if (!response.ok) {
+        throw new Error((await response.text()) || `Delivery export failed with ${response.status}`);
+      }
+
+      const blob = await response.blob();
+      const disposition = response.headers.get("Content-Disposition") ?? "";
+      const fileName = disposition.match(/filename="([^"]+)"/)?.[1] ?? "hookrelay-deliveries.csv";
+      const href = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = href;
+      link.download = fileName;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(href);
+      setStatusMessage(`Exported ${response.headers.get("X-HookRelay-Export-Row-Count") ?? "0"} delivery rows.`);
+    } catch (error) {
+      setStatusMessage(error instanceof Error ? error.message : "Delivery export failed.");
     }
   }
 
@@ -802,7 +850,12 @@ export default function HookRelayHome() {
                 }}
               />
             </label>
-            <button type="submit">Search Deliveries</button>
+            <div className="filter-actions">
+              <button type="submit">Search Deliveries</button>
+              <button type="button" onClick={() => void downloadDeliveryExport()}>
+                Export CSV
+              </button>
+            </div>
           </form>
           <form className="saved-view-row" aria-label="Saved delivery views" onSubmit={saveDeliveryView}>
             <label>
@@ -938,6 +991,10 @@ export default function HookRelayHome() {
             <div>
               <dt>Saved Views</dt>
               <dd>{contract?.delivery_saved_views.stored_filters.join(", ") ?? "unknown"}</dd>
+            </div>
+            <div>
+              <dt>Delivery Export</dt>
+              <dd>{contract ? `${contract.delivery_export.format} / ${contract.delivery_export.max_rows} rows` : "unknown"}</dd>
             </div>
             <div>
               <dt>Rate Limit</dt>

@@ -32,8 +32,8 @@ API and worker operations also write provider-neutral observability spans. In me
 
 | Component | Responsibility |
 | --- | --- |
-| Fastify API | API-key bootstrap, endpoint setup, event ingestion, idempotency handling, role-gated saved delivery views, role-gated replay enqueueing, and contract discovery. |
-| Next.js web app | Developer/operator console for creating endpoints, submitting events, searching paginated delivery attempts, saving/applying delivery views, replaying deliveries, and inspecting signatures. |
+| Fastify API | API-key bootstrap, endpoint setup, event ingestion, idempotency handling, role-gated saved delivery views and exports, role-gated replay enqueueing, and contract discovery. |
+| Next.js web app | Developer/operator console for creating endpoints, submitting events, searching paginated delivery attempts, saving/applying delivery views, exporting CSV snapshots, replaying deliveries, and inspecting signatures. |
 | PostgreSQL | Optional durable owner for endpoints, events, idempotency uniqueness, delivery attempt state, saved delivery views, replay audit fields, and dead-letter status. |
 | BullMQ / Redis | Optional durable queue, jittered delayed retry scheduler, and endpoint rate-limit counter owner. |
 | Worker process | Sends signed outbound HTTP requests, classifies receiver failures, records responses, schedules retries, and marks dead-letter failures. |
@@ -60,6 +60,7 @@ API and worker operations also write provider-neutral observability spans. In me
 | `GET /api/events` | List accepted producer events. |
 | `POST /api/events` | Authenticate the producer key, require owner match, check the endpoint rate limit, accept one event per endpoint/idempotency key, and create the first delivery attempt. |
 | `GET /api/deliveries` | Search paginated delivery attempts by status, failure class, endpoint, event id, text query, cursor, and limit. |
+| `GET /api/deliveries/export` | Export a bounded owner-scoped CSV snapshot of newest matching delivery attempts. |
 | `GET /api/delivery-views` | List owner-scoped saved delivery search presets for the active operator/admin key. |
 | `POST /api/delivery-views` | Validate and save delivery search filters, excluding pagination cursors. |
 | `DELETE /api/delivery-views/:view_id` | Delete one owner-scoped saved delivery view. |
@@ -143,6 +144,8 @@ Pagination uses an opaque base64url cursor over `(created_at, delivery_id)` and 
 
 Saved delivery views are an operator/admin convenience on top of the same delivery search contract. `GET/POST/DELETE /api/delivery-views` require an active API key with the `operator` or `admin` role, and every view is scoped to that key's `owner_id`. The stored JSON is deliberately limited to validated search filters: `status`, `failure_class`, `endpoint_id`, `event_id`, `q`, and `limit`. Pagination cursors are request-specific and are not saved, so applying a view always starts from the newest matching delivery attempts.
 
+Delivery export uses the same search filters but returns a synchronous `text/csv` snapshot from `GET /api/deliveries/export`. Exports require an active `operator` or `admin` key and join delivery attempts back to endpoint ownership, so the exported rows are limited to the key's `owner_id`. The first export path is capped at 1000 newest matching rows and ignores cursors; scheduled/background export jobs are deferred until delivery history has real retention and file lifecycle requirements.
+
 ## Observability
 
 HookRelay records a small span envelope for the operations that explain delivery lifecycle behavior:
@@ -164,5 +167,5 @@ Each span has `trace_id`, `span_id`, optional parent span, delivery/event/endpoi
 - Approval-backed producer key lifecycle audit.
 - Tenant-specific retry overrides and multi-dimensional producer quotas.
 - Receiver SDKs.
-- Receiver-specific failure dashboards, shared/team delivery views, export workflows, and alert routing.
+- Receiver-specific failure dashboards, shared/team delivery views, scheduled exports, and alert routing.
 - OpenTelemetry exporters, trace sampling, and long-retention latency dashboards.

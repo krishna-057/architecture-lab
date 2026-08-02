@@ -2,6 +2,36 @@
 
 ## 2026-08-02
 
+Added HookRelay delivery export workflow.
+
+Added:
+- `GET /api/deliveries/export` for bounded CSV snapshots over existing delivery search filters.
+- Operator/admin authorization for exports using the active API-key owner.
+- Owner-scoped export filtering through endpoint ownership in both in-memory and PostgreSQL storage.
+- CSV columns for delivery ids, event/endpoint ids, target URL, status, attempt number, response/failure fields, replay audit fields, and timestamps.
+- Dashboard `Export CSV` action that downloads the current search as a newest-first snapshot.
+- Delivery contract discovery, README, architecture, delivery contract, decision, interview-note, and validation-marker updates explaining why this is synchronous and capped before background export jobs.
+
+Validated the work by running:
+- `npm run check -w @hookrelay/api` from `projects/05-hookrelay`
+- `node --check` for `services/api/src/app.js`, `services/api/src/storage.js`, and `scripts/check-workspace.mjs`
+- `npm run check` from `projects/05-hookrelay`
+- `npm install` from the clean K: clone because it did not have `node_modules`
+- `npx tsc --noEmit -p apps/web/tsconfig.json` from `projects/05-hookrelay`
+- `npm run build -w @hookrelay/web` from `projects/05-hookrelay`
+- A local Fastify smoke test covering export no-auth rejection, invalid filter rejection, CSV content type, row-count header, and owner-scoped row isolation
+- `docker compose -f projects\05-hookrelay\compose.yaml config`
+- `git diff --check`
+
+Notes:
+- The original `K:\AutoPilot_Projects\FlashReserve` checkout still has corrupted Git objects and a corrupted/unreadable `projects/01-flashreserve` directory, so this run continued from the clean K: clone at `K:\AutoPilot_Projects\FlashReserve_commit_20260802`.
+- `npm install` reported existing high-severity audit findings; dependency upgrades were left out of scope for this export workflow.
+
+Next recommended task:
+- Add HookRelay receiver failure alert routing.
+
+## 2026-08-02
+
 Added HookRelay saved delivery views.
 
 Added:

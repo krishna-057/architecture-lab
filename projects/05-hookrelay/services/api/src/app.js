@@ -31,7 +31,25 @@ const validApiKeyRoles = ["producer", "operator", "admin"];
 const producerRoles = ["producer", "admin"];
 const replayRoles = ["operator", "admin"];
 const deliveryViewRoles = ["operator", "admin"];
+const deliveryExportRoles = ["operator", "admin"];
+const deliveryExportMaxRows = 1000;
 const deliveryStatuses = ["queued", "delivering", "succeeded", "failed", "dead_letter"];
+const deliveryExportColumns = [
+  "delivery_id",
+  "event_id",
+  "endpoint_id",
+  "target_url",
+  "status",
+  "attempt_number",
+  "response_status",
+  "failure_class",
+  "error",
+  "replay_reason",
+  "replay_requested_by",
+  "replayed_from_delivery_id",
+  "next_attempt_at",
+  "created_at"
+];
 
 function parseApiKeyRole(value) {
   const role = String(value ?? "producer").trim();
@@ -65,18 +83,18 @@ function parseDeliveryCursor(value) {
   }
 }
 
-function parseDeliverySearch(query = {}) {
+function parseDeliverySearch(query = {}, { maxLimit = 200, includeCursor = true } = {}) {
   const status = parseOptionalQueryValue(query.status);
   if (status && !deliveryStatuses.includes(status)) {
     return { error: "status must be queued, delivering, succeeded, failed, dead_letter, or all" };
   }
 
-  const cursor = parseDeliveryCursor(query.cursor);
+  const cursor = includeCursor ? parseDeliveryCursor(query.cursor) : { cursor: null };
   if (cursor.error) {
     return cursor;
   }
 
-  const limit = Math.min(Math.max(parsePositiveInteger(query.limit, 100), 1), 200);
+  const limit = Math.min(Math.max(parsePositiveInteger(query.limit, 100), 1), maxLimit);
   return {
     filters: {
       status,
@@ -98,7 +116,7 @@ function parseDeliveryViewFilters(filters = {}) {
     event_id: filters.event_id,
     q: filters.q,
     limit: filters.limit
-  });
+  }, { includeCursor: false });
   if (search.error) {
     return search;
   }
@@ -113,6 +131,26 @@ function parseDeliveryViewFilters(filters = {}) {
       limit: search.filters.limit
     }
   };
+}
+
+function parseDeliveryExportSearch(query = {}) {
+  return parseDeliverySearch(query, { maxLimit: deliveryExportMaxRows, includeCursor: false });
+}
+
+function csvCell(value) {
+  if (value === null || value === undefined) {
+    return "";
+  }
+
+  const text = typeof value === "object" ? JSON.stringify(value) : String(value);
+  return /[",\r\n]/.test(text) ? `"${text.replaceAll("\"", "\"\"")}"` : text;
+}
+
+function formatDeliveryExportCsv(deliveries) {
+  const rows = deliveries.map((delivery) => deliveryExportColumns
+    .map((column) => csvCell(delivery[column]))
+    .join(","));
+  return `${deliveryExportColumns.join(",")}\n${rows.join("\n")}${rows.length ? "\n" : ""}`;
 }
 
 async function authenticateProducer({ request, reply, store, requiredRoles = producerRoles, action = "Producer" }) {
@@ -252,6 +290,15 @@ export function createHookRelayApp({
       required_roles: deliveryViewRoles,
       stored_filters: ["status", "failure_class", "endpoint_id", "event_id", "q", "limit"],
       cursor_rule: "Saved views store filters only; cursors are request-specific and are not saved."
+    },
+    delivery_export: {
+      endpoint: "GET /api/deliveries/export",
+      format: "text/csv",
+      max_rows: deliveryExportMaxRows,
+      required_roles: deliveryExportRoles,
+      owner_rule: "Export API key owner_id must match the exported delivery endpoints owner_id.",
+      filters: ["status", "failure_class", "endpoint_id", "event_id", "q", "limit"],
+      cursor_rule: "Exports are bounded snapshots from the newest matching delivery attempts and do not accept pagination cursors."
     },
     replay_rule: "Manual replay creates a new queued delivery attempt for the same event payload.",
     replay_authorization: {
@@ -570,6 +617,35 @@ export function createHookRelayApp({
     }
 
     return store.listDeliveries(search.filters);
+  });
+
+  app.get("/api/deliveries/export", async (request, reply) => {
+    const operator = await authenticateProducer({
+      request,
+      reply,
+      store,
+      requiredRoles: deliveryExportRoles,
+      action: "Delivery export"
+    });
+    if (!operator) {
+      return reply;
+    }
+
+    const search = parseDeliveryExportSearch(request.query);
+    if (search.error) {
+      return reply.status(400).send({ error: search.error });
+    }
+
+    const deliveries = await store.listDeliveryExport({
+      ...search.filters,
+      ownerId: operator.owner_id
+    });
+    const exportedAt = new Date().toISOString().replaceAll(":", "-");
+    reply
+      .header("Content-Type", "text/csv; charset=utf-8")
+      .header("Content-Disposition", `attachment; filename="hookrelay-deliveries-${exportedAt}.csv"`)
+      .header("X-HookRelay-Export-Row-Count", String(deliveries.length));
+    return reply.send(formatDeliveryExportCsv(deliveries));
   });
 
   app.post("/api/deliveries/:delivery_id/replay", async (request, reply) => {

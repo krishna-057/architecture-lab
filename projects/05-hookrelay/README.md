@@ -9,7 +9,7 @@ The current implementation keeps the local in-memory scaffold as the dependency-
 Added:
 
 - `services/api` Fastify API for endpoint creation, event ingestion, delivery attempt records, signature previews, and replay enqueueing.
-- `apps/web` Next.js dashboard for creating endpoints, submitting events, searching paginated delivery attempts by server-side filters, saving operator delivery views, replaying attempts, and viewing the delivery contract.
+- `apps/web` Next.js dashboard for creating endpoints, submitting events, searching paginated delivery attempts by server-side filters, saving operator delivery views, exporting bounded CSV snapshots, replaying attempts, and viewing the delivery contract.
 - `db/schema.sql` for durable endpoints, events, idempotency keys, and delivery attempts.
 - `compose.yaml` with PostgreSQL, Redis, API, and worker services. Local data is bind-mounted under `projects/05-hookrelay/.data/`.
 - `services/api/src/worker.js` as the BullMQ worker boundary for outbound HTTP delivery attempts, retry creation, and dead-letter promotion.
@@ -77,6 +77,7 @@ Default URLs:
 | `GET /api/events` | List accepted producer events. |
 | `POST /api/events` | Authenticate the producer API key, enforce endpoint ownership and rate limit, accept one event per endpoint/idempotency key, and queue a delivery attempt. |
 | `GET /api/deliveries` | Search paginated delivery attempts by status, failure class, endpoint, event id, text query, cursor, and limit while returning signature previews, response status, and replay audit fields. |
+| `GET /api/deliveries/export` | Require an owner-scoped operator/admin key and export a bounded CSV snapshot of the newest matching delivery attempts. |
 | `GET /api/delivery-views` | List owner-scoped saved delivery search views for the active operator/admin API key. |
 | `POST /api/delivery-views` | Save validated delivery search filters, excluding cursors, as an owner-scoped operator/admin view. |
 | `DELETE /api/delivery-views/:view_id` | Delete one owner-scoped saved delivery view. |
@@ -92,5 +93,5 @@ This is a strong backend/system design project because it focuses on real produc
 
 - Full tenant user accounts, team membership, scoped permissions, and approval-backed key lifecycle workflows.
 - Tenant-specific retry overrides and multi-dimensional producer quotas.
-- Shared/team delivery views, export workflows, and long-retention delivery analytics.
+- Shared/team delivery views, scheduled exports, and long-retention delivery analytics.
 - OpenTelemetry exporters, trace sampling, and long-retention latency dashboards.
