@@ -69,6 +69,7 @@ Default URLs:
 | `GET /api/receiver-verification-example` | Show a receiver-side HMAC verification example with sample payload and headers. |
 | `GET /api/observability/spans` | List recent event ingestion, enqueue, replay, worker, and outbound HTTP spans. |
 | `GET /api/failure-alerts` | List recent owner-scoped receiver failure alerts emitted by matching alert routes. |
+| `POST /api/failure-alerts/:alert_id/acknowledge` | Require an owner-scoped operator/admin key and add acknowledgement audit metadata to one unacknowledged failure alert. |
 | `GET /api/alert-routes` | List owner-scoped receiver failure alert routes for the active operator/admin API key. |
 | `POST /api/alert-routes` | Create a local alert route that matches failed/dead-letter deliveries by optional failure class and target. |
 | `DELETE /api/alert-routes/:route_id` | Delete one owner-scoped receiver failure alert route. |

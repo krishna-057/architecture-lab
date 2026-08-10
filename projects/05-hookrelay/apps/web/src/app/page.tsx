@@ -139,6 +139,7 @@ type DeliveryContract = {
   receiver_failure_alert_routing: {
     route_endpoint: string;
     alert_endpoint: string;
+    acknowledgement_endpoint: string;
     required_roles: string[];
     owner_rule: string;
     trigger_statuses: string[];
@@ -146,6 +147,7 @@ type DeliveryContract = {
     target_types: string[];
     delivery_match: string;
     dispatch_mode: string;
+    acknowledgement_rule: string;
   };
   replay_rule: string;
   replay_authorization: {
@@ -240,6 +242,9 @@ type FailureAlert = {
   target_type: string;
   target: string;
   message: string;
+  acknowledged_at: string | null;
+  acknowledged_by: string | null;
+  acknowledgement_note: string | null;
   created_at: string;
 };
 
@@ -328,6 +333,7 @@ export default function HookRelayHome() {
   const [alertDeliveryStatus, setAlertDeliveryStatus] = useState<FailureAlertRoute["delivery_status"]>("dead_letter");
   const [alertTargetType, setAlertTargetType] = useState<FailureAlertRoute["target_type"]>("dashboard");
   const [alertTarget, setAlertTarget] = useState("local-dashboard");
+  const [acknowledgementNote, setAcknowledgementNote] = useState("Reviewed in local dashboard");
 
   const selectedEndpoint = endpoints.find((endpoint) => endpoint.endpoint_id === selectedEndpointId) ?? endpoints[0];
   const latestDelivery = deliveries[0];
@@ -620,6 +626,23 @@ export default function HookRelayHome() {
       setStatusMessage("Alert route deleted.");
     } catch (error) {
       setStatusMessage(error instanceof Error ? error.message : "Deleting the alert route failed.");
+    }
+  }
+
+  async function acknowledgeFailureAlert(alertId: string) {
+    try {
+      const alert = await requestJson<FailureAlert>(`/api/failure-alerts/${alertId}/acknowledge`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${producerApiKey}` },
+        body: JSON.stringify({
+          acknowledged_by: "local-dashboard",
+          note: acknowledgementNote
+        })
+      });
+      setFailureAlerts((current) => current.map((candidate) => (candidate.alert_id === alert.alert_id ? alert : candidate)));
+      setStatusMessage(`Acknowledged alert ${alert.alert_id}.`);
+    } catch (error) {
+      setStatusMessage(error instanceof Error ? error.message : "Acknowledging the failure alert failed.");
     }
   }
 
@@ -1106,12 +1129,29 @@ export default function HookRelayHome() {
                 <span>Recent Alerts</span>
                 <strong>{failureAlerts.length}</strong>
               </div>
+              <label>
+                <span>Acknowledgement Note</span>
+                <input value={acknowledgementNote} onChange={(event) => setAcknowledgementNote(event.target.value)} />
+              </label>
               <div className="detail-list">
                 {failureAlerts.length === 0 ? <p className="empty-state">No failure alerts have matched routes.</p> : null}
                 {failureAlerts.map((alert) => (
                   <div key={alert.alert_id}>
-                    <dt>{alert.delivery_status}</dt>
+                    <dt>{alert.acknowledged_at ? "acknowledged" : alert.delivery_status}</dt>
                     <dd>{alert.message}</dd>
+                    {alert.acknowledged_at ? (
+                      <dd>
+                        {alert.acknowledged_by ?? "operator"} / {formatTime(alert.acknowledged_at)} / {alert.acknowledgement_note}
+                      </dd>
+                    ) : (
+                      <button
+                        type="button"
+                        disabled={acknowledgementNote.trim().length < 6}
+                        onClick={() => void acknowledgeFailureAlert(alert.alert_id)}
+                      >
+                        Acknowledge
+                      </button>
+                    )}
                     <dd>{formatTime(alert.created_at)}</dd>
                   </div>
                 ))}
@@ -1188,7 +1228,7 @@ export default function HookRelayHome() {
               <dt>Alert Routing</dt>
               <dd>
                 {contract
-                  ? `${contract.receiver_failure_alert_routing.route_statuses.join(", ")} / ${contract.receiver_failure_alert_routing.dispatch_mode}`
+                  ? `${contract.receiver_failure_alert_routing.route_statuses.join(", ")} / ${contract.receiver_failure_alert_routing.acknowledgement_endpoint}`
                   : "unknown"}
               </dd>
             </div>

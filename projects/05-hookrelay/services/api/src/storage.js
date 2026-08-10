@@ -35,6 +35,7 @@ function normalizeRow(row) {
     created_at: row.created_at instanceof Date ? row.created_at.toISOString() : row.created_at,
     updated_at: row.updated_at instanceof Date ? row.updated_at.toISOString() : row.updated_at,
     revoked_at: row.revoked_at instanceof Date ? row.revoked_at.toISOString() : row.revoked_at,
+    acknowledged_at: row.acknowledged_at instanceof Date ? row.acknowledged_at.toISOString() : row.acknowledged_at,
     next_attempt_at: row.next_attempt_at instanceof Date ? row.next_attempt_at.toISOString() : row.next_attempt_at
   };
 }
@@ -82,6 +83,9 @@ function publicFailureAlert(alert) {
     target_type: alert.target_type,
     target: alert.target,
     message: alert.message,
+    acknowledged_at: alert.acknowledged_at ?? null,
+    acknowledged_by: alert.acknowledged_by ?? null,
+    acknowledgement_note: alert.acknowledgement_note ?? null,
     created_at: alert.created_at
   };
 }
@@ -109,6 +113,9 @@ function buildFailureAlert({ route, delivery, endpoint }) {
     target_type: route.target_type,
     target: route.target,
     message: `${delivery.status} delivery ${delivery.delivery_id} matched ${delivery.failure_class ?? "unclassified"} for ${endpoint.name}`,
+    acknowledged_at: null,
+    acknowledged_by: null,
+    acknowledgement_note: null,
     created_at: nowIso()
   };
 }
@@ -431,6 +438,23 @@ export class MemoryStore {
       .map(publicFailureAlert);
   }
 
+  async acknowledgeFailureAlert({ ownerId, alertId, acknowledgedBy, note }) {
+    const alert = this.failureAlerts.get(alertId);
+    if (!alert || alert.owner_id !== ownerId) {
+      return null;
+    }
+
+    if (alert.acknowledged_at) {
+      return { error: "already_acknowledged", alert: publicFailureAlert(alert) };
+    }
+
+    alert.acknowledged_at = nowIso();
+    alert.acknowledged_by = acknowledgedBy;
+    alert.acknowledgement_note = note;
+    this.failureAlerts.set(alert.alert_id, alert);
+    return publicFailureAlert(alert);
+  }
+
   async routeFailureAlert(delivery) {
     if (!delivery || !["failed", "dead_letter"].includes(delivery.status)) {
       return [];
@@ -594,6 +618,9 @@ export class PostgresStore {
         target_type text not null,
         target text not null,
         message text not null,
+        acknowledged_at timestamptz,
+        acknowledged_by text,
+        acknowledgement_note text,
         created_at timestamptz not null default now()
       );
 
@@ -601,6 +628,11 @@ export class PostgresStore {
         add column if not exists role text not null default 'producer',
         add column if not exists rotated_from_key_id text references producer_api_keys(key_id),
         add column if not exists revoked_at timestamptz;
+
+      alter table receiver_failure_alerts
+        add column if not exists acknowledged_at timestamptz,
+        add column if not exists acknowledged_by text,
+        add column if not exists acknowledgement_note text;
 
       alter table producer_api_keys
         drop constraint if exists producer_api_keys_role_check;
@@ -945,7 +977,8 @@ export class PostgresStore {
     const boundedLimit = Math.min(Math.max(Number(limit), 1), 100);
     const result = await this.pool.query(
       `select alert_id, route_id, owner_id, delivery_id, endpoint_id, event_id, failure_class,
-              delivery_status, target_type, target, message, created_at
+              delivery_status, target_type, target, message, acknowledged_at, acknowledged_by,
+              acknowledgement_note, created_at
        from receiver_failure_alerts
        where owner_id = $1
        order by created_at desc
@@ -953,6 +986,38 @@ export class PostgresStore {
       [ownerId, boundedLimit]
     );
     return result.rows.map((row) => publicFailureAlert(normalizeRow(row)));
+  }
+
+  async acknowledgeFailureAlert({ ownerId, alertId, acknowledgedBy, note }) {
+    const result = await this.pool.query(
+      `update receiver_failure_alerts
+       set acknowledged_at = now(), acknowledged_by = $3, acknowledgement_note = $4
+       where owner_id = $1 and alert_id = $2 and acknowledged_at is null
+       returning alert_id, route_id, owner_id, delivery_id, endpoint_id, event_id, failure_class,
+                 delivery_status, target_type, target, message, acknowledged_at, acknowledged_by,
+                 acknowledgement_note, created_at`,
+      [ownerId, alertId, acknowledgedBy, note]
+    );
+    if (result.rows[0]) {
+      return publicFailureAlert(normalizeRow(result.rows[0]));
+    }
+
+    const existing = await this.pool.query(
+      `select alert_id, route_id, owner_id, delivery_id, endpoint_id, event_id, failure_class,
+              delivery_status, target_type, target, message, acknowledged_at, acknowledged_by,
+              acknowledgement_note, created_at
+       from receiver_failure_alerts
+       where owner_id = $1 and alert_id = $2`,
+      [ownerId, alertId]
+    );
+    const alert = normalizeRow(existing.rows[0]);
+    if (!alert) {
+      return null;
+    }
+
+    return alert.acknowledged_at
+      ? { error: "already_acknowledged", alert: publicFailureAlert(alert) }
+      : null;
   }
 
   async routeFailureAlert(delivery) {
@@ -989,7 +1054,8 @@ export class PostgresStore {
          )
          values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
          returning alert_id, route_id, owner_id, delivery_id, endpoint_id, event_id, failure_class,
-                   delivery_status, target_type, target, message, created_at`,
+                   delivery_status, target_type, target, message, acknowledged_at, acknowledged_by,
+                   acknowledgement_note, created_at`,
         [
           alert.alert_id,
           alert.route_id,

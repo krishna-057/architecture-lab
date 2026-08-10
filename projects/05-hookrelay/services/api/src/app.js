@@ -179,6 +179,26 @@ function parseFailureAlertRoute(body = {}) {
   };
 }
 
+function parseFailureAlertAcknowledgement(body = {}) {
+  const acknowledgedBy = String(body.acknowledged_by ?? "local-operator").trim();
+  const note = String(body.note ?? body.acknowledgement_note ?? "").trim();
+
+  if (acknowledgedBy.length < 2) {
+    return { error: "acknowledged_by must be at least 2 characters" };
+  }
+
+  if (note.length < 6) {
+    return { error: "acknowledgement note must be at least 6 characters" };
+  }
+
+  return {
+    acknowledgement: {
+      acknowledgedBy,
+      note
+    }
+  };
+}
+
 function csvCell(value) {
   if (value === null || value === undefined) {
     return "";
@@ -345,13 +365,15 @@ export function createHookRelayApp({
     receiver_failure_alert_routing: {
       route_endpoint: "/api/alert-routes",
       alert_endpoint: "/api/failure-alerts",
+      acknowledgement_endpoint: "POST /api/failure-alerts/:alert_id/acknowledge",
       required_roles: failureAlertRoles,
       owner_rule: "Alert routes and emitted alerts are scoped to the active API key owner_id.",
       trigger_statuses: ["failed", "dead_letter"],
       route_statuses: failureAlertDeliveryStatuses,
       target_types: failureAlertTargetTypes,
       delivery_match: "A failed/dead-letter delivery matches enabled routes by owner_id, delivery_status, and optional failure_class.",
-      dispatch_mode: "local_alert_record_before_external_integrations"
+      dispatch_mode: "local_alert_record_before_external_integrations",
+      acknowledgement_rule: "Operators/admins acknowledge owner-scoped alerts once with acknowledged_by and a human-readable note."
     },
     replay_rule: "Manual replay creates a new queued delivery attempt for the same event payload.",
     replay_authorization: {
@@ -547,6 +569,44 @@ export function createHookRelayApp({
 
     const limit = Math.min(Math.max(parsePositiveInteger(request.query?.limit, 50), 1), 100);
     return store.listFailureAlerts(operator.owner_id, { limit });
+  });
+
+  app.post("/api/failure-alerts/:alert_id/acknowledge", async (request, reply) => {
+    const operator = await authenticateProducer({
+      request,
+      reply,
+      store,
+      requiredRoles: failureAlertRoles,
+      action: "Failure alert"
+    });
+    if (!operator) {
+      return reply;
+    }
+
+    const alertId = String(request.params?.alert_id ?? "").trim();
+    if (!alertId) {
+      return reply.status(400).send({ error: "alert_id is required" });
+    }
+
+    const parsed = parseFailureAlertAcknowledgement(request.body ?? {});
+    if (parsed.error) {
+      return reply.status(400).send({ error: parsed.error });
+    }
+
+    const result = await store.acknowledgeFailureAlert({
+      ownerId: operator.owner_id,
+      alertId,
+      ...parsed.acknowledgement
+    });
+    if (!result) {
+      return reply.status(404).send({ error: "failure alert was not found" });
+    }
+
+    if (result.error === "already_acknowledged") {
+      return reply.status(409).send({ error: "failure alert is already acknowledged", alert: result.alert });
+    }
+
+    return result;
   });
 
   app.get("/api/delivery-views", async (request, reply) => {

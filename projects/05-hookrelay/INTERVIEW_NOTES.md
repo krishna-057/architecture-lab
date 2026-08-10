@@ -69,6 +69,8 @@ Observability should attach one trace across event ingestion, job enqueue, each 
 - Export is synchronous and capped first; background jobs, durable files, scheduled reports, and JSONL belong after delivery retention is real.
 - Receiver failure alert routes match worker-recorded failed/dead-letter attempts by owner, status, and optional `failure_class`.
 - Alert dispatch is deliberately a local alert record first, which proves policy and audit behavior before adding external notification retries and escalation schedules.
+- Alert acknowledgement is owner-scoped and operator/admin-only. It writes `acknowledged_at`, `acknowledged_by`, and `acknowledgement_note` once on the alert record.
+- Acknowledgement does not rewrite the delivery attempt or route, which keeps failure evidence immutable while still giving operators a triage audit trail.
 - This is intentionally not a full alerting system yet; it creates the durable field that later dashboards, alerts, and endpoint-specific retry policy can use.
 
 ## Endpoint Rate Limit Talking Points

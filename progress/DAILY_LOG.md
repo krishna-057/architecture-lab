@@ -1,5 +1,34 @@
 # Daily Log
 
+## 2026-08-10
+
+Added HookRelay alert acknowledgement workflow.
+
+Added:
+- `POST /api/failure-alerts/:alert_id/acknowledge` for owner-scoped operator/admin acknowledgement of local receiver failure alerts.
+- In-memory and PostgreSQL acknowledgement metadata on `receiver_failure_alerts`: `acknowledged_at`, `acknowledged_by`, and `acknowledgement_note`.
+- Conflict semantics for already acknowledged alerts so the first acknowledgement audit actor and note remain stable.
+- Dashboard acknowledgement note input, per-alert `Acknowledge` action, and acknowledged status display in recent alerts.
+- Delivery contract discovery, README, architecture, delivery contract, decision, interview-note, schema, and validation-marker updates explaining why acknowledgement is local alert audit metadata and not delivery mutation.
+
+Validated the work by running:
+- `npm run check -w @hookrelay/api` from `projects/05-hookrelay`
+- `node --check` for `services/api/src/app.js`, `services/api/src/storage.js`, `services/api/src/delivery-runner.js`, and `scripts/check-workspace.mjs`
+- `npm run check` from `projects/05-hookrelay`
+- `npm install` from the fresh K: clone because it did not have local TypeScript dependencies; npm reported existing high-severity audit findings
+- `npx tsc --noEmit -p apps/web/tsconfig.json` from `projects/05-hookrelay`
+- `npm run build -w @hookrelay/web` from `projects/05-hookrelay`
+- A local Fastify/worker smoke test covering alert route creation, receiver failure alert emission, no-auth acknowledgement rejection, wrong-owner isolation, successful acknowledgement metadata, and duplicate acknowledgement conflict
+- `docker compose -f projects\05-hookrelay\compose.yaml config`
+- `git diff --check`
+
+Notes:
+- This run used `K:\AutoPilot_Projects\FlashReserve_run_20260810` because earlier local checkouts had Git/object or unrelated working-tree corruption.
+- External notification delivery, alert suppression windows, escalation policies, and team incident ownership remain deferred.
+
+Next recommended task:
+- Add HookRelay alert suppression windows.
+
 ## 2026-08-03
 
 Added HookRelay receiver failure alert routing.

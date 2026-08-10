@@ -303,3 +303,22 @@ Rejected alternatives:
 
 Follow-up:
 Add external notification delivery, per-route throttling, escalation policies, and alert acknowledgement workflows.
+
+## 2026-08-10: Add Alert Acknowledgement Workflow
+
+Decision:
+Add one owner-scoped acknowledgement endpoint for local receiver failure alerts. `POST /api/failure-alerts/:alert_id/acknowledge` requires an active `operator` or `admin` API key, checks the key owner against the alert owner, and writes `acknowledged_at`, `acknowledged_by`, and `acknowledgement_note` once.
+
+Why:
+- Acknowledgement is operator audit metadata on the alert record; it should not mutate the original delivery attempt, failure class, route, or alert message.
+- Reusing the existing operator/admin API-key boundary keeps the workflow tenant-safe without adding user/team identity too early.
+- Returning a conflict for already acknowledged alerts preserves the first acknowledgement actor and note for this slice.
+- Keeping the workflow local gives the dashboard a complete alert triage loop before external notification delivery, escalation, or incident timelines exist.
+
+Rejected alternatives:
+- Make acknowledgement idempotent and overwrite the note: simpler for clients, but it weakens the audit trail.
+- Add assignment, severity, snooze, and incident status now: useful later, but too much workflow state before external notifications exist.
+- Acknowledge by delivery id instead of alert id: convenient for batch triage, but routes can intentionally create multiple alert records for one delivery.
+
+Follow-up:
+Add alert suppression windows, external notification delivery, and team-level incident ownership.

@@ -109,6 +109,9 @@ create table if not exists receiver_failure_alerts (
   target_type text not null,
   target text not null,
   message text not null,
+  acknowledged_at timestamptz,
+  acknowledged_by text,
+  acknowledgement_note text,
   created_at timestamptz not null default now()
 );
 
@@ -129,6 +132,11 @@ alter table producer_api_keys
   add column if not exists role text not null default 'producer',
   add column if not exists rotated_from_key_id text references producer_api_keys(key_id),
   add column if not exists revoked_at timestamptz;
+
+alter table receiver_failure_alerts
+  add column if not exists acknowledged_at timestamptz,
+  add column if not exists acknowledged_by text,
+  add column if not exists acknowledgement_note text;
 
 alter table producer_api_keys
   drop constraint if exists producer_api_keys_role_check;

@@ -52,6 +52,7 @@ API and worker operations also write provider-neutral observability spans. In me
 | `GET /api/receiver-verification-example` | Return sample receiver verification inputs, required headers, and Node.js digest expression. |
 | `GET /api/observability/spans` | Return recent provider-neutral spans with trace ids, span ids, timing, status, and delivery attributes. |
 | `GET /api/failure-alerts` | Return recent owner-scoped receiver failure alerts. |
+| `POST /api/failure-alerts/:alert_id/acknowledge` | Add acknowledgement audit fields to one owner-scoped unacknowledged alert. |
 | `GET /api/alert-routes` | List owner-scoped receiver failure alert routing rules. |
 | `POST /api/alert-routes` | Create an enabled local alert route for failed/dead-letter deliveries. |
 | `DELETE /api/alert-routes/:route_id` | Delete one owner-scoped alert route. |
@@ -150,7 +151,7 @@ Saved delivery views are an operator/admin convenience on top of the same delive
 
 Delivery export uses the same search filters but returns a synchronous `text/csv` snapshot from `GET /api/deliveries/export`. Exports require an active `operator` or `admin` key and join delivery attempts back to endpoint ownership, so the exported rows are limited to the key's `owner_id`. The first export path is capped at 1000 newest matching rows and ignores cursors; scheduled/background export jobs are deferred until delivery history has real retention and file lifecycle requirements.
 
-Receiver failure alert routing stays local for this slice. Operators/admins define owner-scoped routes through `/api/alert-routes`, matching on `failed` or `dead_letter` status plus an optional `failure_class`. When the worker records a failed or dead-letter attempt, it asks storage to create local alert records for matching enabled routes. This proves where alert policy attaches to the delivery lifecycle without introducing external webhook/email delivery, escalation schedules, or tenant team notification preferences too early.
+Receiver failure alert routing stays local for this slice. Operators/admins define owner-scoped routes through `/api/alert-routes`, matching on `failed` or `dead_letter` status plus an optional `failure_class`. When the worker records a failed or dead-letter attempt, it asks storage to create local alert records for matching enabled routes. Operators/admins acknowledge those records through `POST /api/failure-alerts/:alert_id/acknowledge`, which writes `acknowledged_at`, `acknowledged_by`, and `acknowledgement_note` once without mutating the original delivery failure. This proves where alert policy and operator audit attach to the delivery lifecycle without introducing external webhook/email delivery, escalation schedules, or tenant team notification preferences too early.
 
 ## Observability
 

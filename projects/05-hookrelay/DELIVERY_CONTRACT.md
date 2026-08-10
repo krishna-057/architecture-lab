@@ -342,6 +342,7 @@ GET /api/alert-routes
 POST /api/alert-routes
 DELETE /api/alert-routes/:route_id
 GET /api/failure-alerts
+POST /api/failure-alerts/:alert_id/acknowledge
 ```
 
 Every route and emitted alert requires an active `operator` or `admin` API key and is scoped to the key's `owner_id`. A create request uses:
@@ -361,6 +362,25 @@ Every route and emitted alert requires an active `operator` or `admin` API key a
 
 When the worker records a `failed` or `dead_letter` delivery, storage matches enabled routes by endpoint owner, delivery status, and optional failure class. Matching routes create alert records visible through `GET /api/failure-alerts`. This keeps alerting attached to the durable delivery lifecycle while deferring external notification delivery, retrying alerts, escalation schedules, and team preferences.
 
+## Alert Acknowledgement
+
+Operators acknowledge one owner-scoped failure alert with:
+
+```text
+POST /api/failure-alerts/:alert_id/acknowledge
+```
+
+The endpoint requires an active `operator` or `admin` API key whose `owner_id` matches the alert. The request body records the local operator and a human-readable note:
+
+```json
+{
+  "acknowledged_by": "local-dashboard",
+  "note": "Reviewed in local dashboard"
+}
+```
+
+Acknowledgement adds `acknowledged_at`, `acknowledged_by`, and `acknowledgement_note` to the alert record. It does not rewrite the delivery attempt, route, failure class, or original alert message. A second acknowledgement returns `409` with `already_acknowledged` semantics so the first audit actor and note stay immutable for this slice.
+
 Contract discovery exposes alert routing as:
 
 ```json
@@ -368,13 +388,15 @@ Contract discovery exposes alert routing as:
   "receiver_failure_alert_routing": {
     "route_endpoint": "/api/alert-routes",
     "alert_endpoint": "/api/failure-alerts",
+    "acknowledgement_endpoint": "POST /api/failure-alerts/:alert_id/acknowledge",
     "required_roles": ["operator", "admin"],
     "owner_rule": "Alert routes and emitted alerts are scoped to the active API key owner_id.",
     "trigger_statuses": ["failed", "dead_letter"],
     "route_statuses": ["failed", "dead_letter", "any"],
     "target_types": ["dashboard", "email", "webhook"],
     "delivery_match": "A failed/dead-letter delivery matches enabled routes by owner_id, delivery_status, and optional failure_class.",
-    "dispatch_mode": "local_alert_record_before_external_integrations"
+    "dispatch_mode": "local_alert_record_before_external_integrations",
+    "acknowledgement_rule": "Operators/admins acknowledge owner-scoped alerts once with acknowledged_by and a human-readable note."
   }
 }
 ```
