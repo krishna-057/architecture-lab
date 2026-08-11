@@ -145,8 +145,10 @@ type DeliveryContract = {
     trigger_statuses: string[];
     route_statuses: string[];
     target_types: string[];
+    suppression_window_max_seconds: number;
     delivery_match: string;
     dispatch_mode: string;
+    suppression_rule: string;
     acknowledgement_rule: string;
   };
   replay_rule: string;
@@ -226,6 +228,9 @@ type FailureAlertRoute = {
   target_type: "dashboard" | "email" | "webhook";
   target: string;
   enabled: boolean;
+  suppression_window_seconds: number;
+  last_alert_at: string | null;
+  suppressed_until: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -333,6 +338,7 @@ export default function HookRelayHome() {
   const [alertDeliveryStatus, setAlertDeliveryStatus] = useState<FailureAlertRoute["delivery_status"]>("dead_letter");
   const [alertTargetType, setAlertTargetType] = useState<FailureAlertRoute["target_type"]>("dashboard");
   const [alertTarget, setAlertTarget] = useState("local-dashboard");
+  const [alertSuppressionWindowSeconds, setAlertSuppressionWindowSeconds] = useState(300);
   const [acknowledgementNote, setAcknowledgementNote] = useState("Reviewed in local dashboard");
 
   const selectedEndpoint = endpoints.find((endpoint) => endpoint.endpoint_id === selectedEndpointId) ?? endpoints[0];
@@ -606,6 +612,7 @@ export default function HookRelayHome() {
           delivery_status: alertDeliveryStatus,
           target_type: alertTargetType,
           target: alertTarget,
+          suppression_window_seconds: alertSuppressionWindowSeconds,
           enabled: true
         })
       });
@@ -1101,6 +1108,16 @@ export default function HookRelayHome() {
               <span>Target</span>
               <input value={alertTarget} onChange={(event) => setAlertTarget(event.target.value)} />
             </label>
+            <label>
+              <span>Suppress Seconds</span>
+              <input
+                min={0}
+                max={contract?.receiver_failure_alert_routing.suppression_window_max_seconds ?? 86400}
+                type="number"
+                value={alertSuppressionWindowSeconds}
+                onChange={(event) => setAlertSuppressionWindowSeconds(Number(event.target.value))}
+              />
+            </label>
             <button type="submit">Add Route</button>
           </form>
           <div className="alert-grid">
@@ -1116,6 +1133,10 @@ export default function HookRelayHome() {
                     <dt>{route.name}</dt>
                     <dd>
                       {route.delivery_status} / {route.failure_class ?? "any"} / {route.target_type}:{route.target}
+                    </dd>
+                    <dd>
+                      suppress {route.suppression_window_seconds}s
+                      {route.suppressed_until ? ` until ${formatTime(route.suppressed_until)}` : ""}
                     </dd>
                     <button type="button" onClick={() => void deleteAlertRoute(route.route_id)}>
                       Delete
@@ -1228,7 +1249,7 @@ export default function HookRelayHome() {
               <dt>Alert Routing</dt>
               <dd>
                 {contract
-                  ? `${contract.receiver_failure_alert_routing.route_statuses.join(", ")} / ${contract.receiver_failure_alert_routing.acknowledgement_endpoint}`
+                  ? `${contract.receiver_failure_alert_routing.route_statuses.join(", ")} / suppress ${contract.receiver_failure_alert_routing.suppression_window_max_seconds}s max`
                   : "unknown"}
               </dd>
             </div>

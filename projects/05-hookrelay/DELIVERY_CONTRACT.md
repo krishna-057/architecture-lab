@@ -354,13 +354,30 @@ Every route and emitted alert requires an active `operator` or `admin` API key a
   "delivery_status": "dead_letter",
   "target_type": "dashboard",
   "target": "local-dashboard",
+  "suppression_window_seconds": 300,
   "enabled": true
 }
 ```
 
-`failure_class` is optional. `delivery_status` can be `failed`, `dead_letter`, or `any`. `target_type` is currently `dashboard`, `email`, or `webhook`, but this slice records local alert events only; it does not send external email/webhook calls yet.
+`failure_class` is optional. `delivery_status` can be `failed`, `dead_letter`, or `any`. `target_type` is currently `dashboard`, `email`, or `webhook`, but this slice records local alert events only; it does not send external email/webhook calls yet. `suppression_window_seconds` is optional; `0` disables suppression and positive values suppress repeated route matches after the route emits an alert.
 
 When the worker records a `failed` or `dead_letter` delivery, storage matches enabled routes by endpoint owner, delivery status, and optional failure class. Matching routes create alert records visible through `GET /api/failure-alerts`. This keeps alerting attached to the durable delivery lifecycle while deferring external notification delivery, retrying alerts, escalation schedules, and team preferences.
+
+## Alert Suppression Windows
+
+Suppression windows are route-level noise control for repeated receiver failures. When a route emits an alert, storage records `last_alert_at` on the route. If another failed/dead-letter delivery matches the same route before `last_alert_at + suppression_window_seconds`, HookRelay skips creating a duplicate local alert record for that route.
+
+This is deliberately not a calendar schedule, incident snooze, or team escalation state. It is a small throttle at the same point where alert policy already matches delivery failures. PostgreSQL and in-memory modes both expose:
+
+```json
+{
+  "suppression_window_seconds": 300,
+  "last_alert_at": "2026-08-11T00:00:00.000Z",
+  "suppressed_until": "2026-08-11T00:05:00.000Z"
+}
+```
+
+`suppressed_until` is derived for clients from `last_alert_at` and the configured window. Suppressed deliveries still keep their delivery status and `failure_class`; only duplicate local alert records are skipped.
 
 ## Alert Acknowledgement
 
@@ -394,8 +411,10 @@ Contract discovery exposes alert routing as:
     "trigger_statuses": ["failed", "dead_letter"],
     "route_statuses": ["failed", "dead_letter", "any"],
     "target_types": ["dashboard", "email", "webhook"],
+    "suppression_window_max_seconds": 86400,
     "delivery_match": "A failed/dead-letter delivery matches enabled routes by owner_id, delivery_status, and optional failure_class.",
     "dispatch_mode": "local_alert_record_before_external_integrations",
+    "suppression_rule": "A route with suppression_window_seconds > 0 emits one alert, then suppresses repeated matches until last_alert_at plus the window.",
     "acknowledgement_rule": "Operators/admins acknowledge owner-scoped alerts once with acknowledged_by and a human-readable note."
   }
 }

@@ -71,6 +71,8 @@ Observability should attach one trace across event ingestion, job enqueue, each 
 - Alert dispatch is deliberately a local alert record first, which proves policy and audit behavior before adding external notification retries and escalation schedules.
 - Alert acknowledgement is owner-scoped and operator/admin-only. It writes `acknowledged_at`, `acknowledged_by`, and `acknowledgement_note` once on the alert record.
 - Acknowledgement does not rewrite the delivery attempt or route, which keeps failure evidence immutable while still giving operators a triage audit trail.
+- Alert suppression windows live on the route. A route emits one alert, records `last_alert_at`, then suppresses repeated matches until the window expires.
+- Suppression skips duplicate alert records only; delivery attempts still retain their status and `failure_class`, so debugging evidence remains available.
 - This is intentionally not a full alerting system yet; it creates the durable field that later dashboards, alerts, and endpoint-specific retry policy can use.
 
 ## Endpoint Rate Limit Talking Points

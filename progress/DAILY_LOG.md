@@ -1,5 +1,34 @@
 # Daily Log
 
+## 2026-08-11
+
+Added HookRelay alert suppression windows.
+
+Added:
+- `suppression_window_seconds` on receiver failure alert routes, with `0` disabling suppression and a maximum of 86400 seconds.
+- `last_alert_at` route state plus derived `suppressed_until` in alert route responses.
+- In-memory and PostgreSQL route matching that skips repeated route matches while a suppression window is active.
+- Dashboard controls to set suppress seconds when creating an alert route and route display showing active suppression windows.
+- Delivery contract discovery, README, architecture, delivery contract, decision, interview-note, schema, and validation-marker updates explaining why suppression is route-local duplicate alert control.
+
+Validated the work by running:
+- `npm run check -w @hookrelay/api` from `projects/05-hookrelay`
+- `node --check` for `services/api/src/app.js`, `services/api/src/storage.js`, and `scripts/check-workspace.mjs`
+- `npm run check` from `projects/05-hookrelay`
+- `npx tsc --noEmit -p apps/web/tsconfig.json` from `projects/05-hookrelay`
+- `npm run build -w @hookrelay/web` from `projects/05-hookrelay`
+- A local Fastify/worker smoke test covering invalid suppression-window rejection, suppressed route state, unsuppressed route repeats, and suppressed duplicate alert skipping
+- `docker compose -f projects\05-hookrelay\compose.yaml config`
+- `git diff --check`
+
+Notes:
+- This run used `K:\AutoPilot_Projects\FlashReserve_run_20260810`, which was clean and up to date with GitHub at startup.
+- The first web TypeScript/build attempt found a corrupted local `node_modules/@types/react-dom/index.d.ts`; npm refreshed the local dependency under K:, and dependency metadata changes were removed from the commit scope.
+- External notification delivery, per-target retry tracking, and team incident ownership remain deferred.
+
+Next recommended task:
+- Add HookRelay external notification delivery.
+
 ## 2026-08-10
 
 Added HookRelay alert acknowledgement workflow.

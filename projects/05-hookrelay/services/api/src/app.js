@@ -34,6 +34,7 @@ const deliveryViewRoles = ["operator", "admin"];
 const deliveryExportRoles = ["operator", "admin"];
 const failureAlertRoles = ["operator", "admin"];
 const deliveryExportMaxRows = 1000;
+const failureAlertSuppressionMaxSeconds = 86400;
 const deliveryStatuses = ["queued", "delivering", "succeeded", "failed", "dead_letter"];
 const failureAlertDeliveryStatuses = ["failed", "dead_letter", "any"];
 const failureAlertTargetTypes = ["dashboard", "email", "webhook"];
@@ -146,6 +147,7 @@ function parseFailureAlertRoute(body = {}) {
   const deliveryStatus = String(body.delivery_status ?? "dead_letter").trim();
   const targetType = String(body.target_type ?? "dashboard").trim();
   const target = String(body.target ?? "local-dashboard").trim();
+  const suppressionWindowSeconds = Number(body.suppression_window_seconds ?? 0);
 
   if (name.length < 3) {
     return { error: "alert route name must be at least 3 characters" };
@@ -167,6 +169,14 @@ function parseFailureAlertRoute(body = {}) {
     return { error: "target must be at least 3 characters" };
   }
 
+  if (
+    !Number.isInteger(suppressionWindowSeconds) ||
+    suppressionWindowSeconds < 0 ||
+    suppressionWindowSeconds > failureAlertSuppressionMaxSeconds
+  ) {
+    return { error: `suppression_window_seconds must be an integer from 0 to ${failureAlertSuppressionMaxSeconds}` };
+  }
+
   return {
     route: {
       name,
@@ -174,6 +184,7 @@ function parseFailureAlertRoute(body = {}) {
       deliveryStatus,
       targetType,
       target,
+      suppressionWindowSeconds,
       enabled: body.enabled === undefined ? true : Boolean(body.enabled)
     }
   };
@@ -371,8 +382,10 @@ export function createHookRelayApp({
       trigger_statuses: ["failed", "dead_letter"],
       route_statuses: failureAlertDeliveryStatuses,
       target_types: failureAlertTargetTypes,
+      suppression_window_max_seconds: failureAlertSuppressionMaxSeconds,
       delivery_match: "A failed/dead-letter delivery matches enabled routes by owner_id, delivery_status, and optional failure_class.",
       dispatch_mode: "local_alert_record_before_external_integrations",
+      suppression_rule: "A route with suppression_window_seconds > 0 emits one alert, then suppresses repeated matches until last_alert_at plus the window.",
       acknowledgement_rule: "Operators/admins acknowledge owner-scoped alerts once with acknowledged_by and a human-readable note."
     },
     replay_rule: "Manual replay creates a new queued delivery attempt for the same event payload.",

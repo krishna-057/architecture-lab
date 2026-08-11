@@ -71,7 +71,7 @@ Default URLs:
 | `GET /api/failure-alerts` | List recent owner-scoped receiver failure alerts emitted by matching alert routes. |
 | `POST /api/failure-alerts/:alert_id/acknowledge` | Require an owner-scoped operator/admin key and add acknowledgement audit metadata to one unacknowledged failure alert. |
 | `GET /api/alert-routes` | List owner-scoped receiver failure alert routes for the active operator/admin API key. |
-| `POST /api/alert-routes` | Create a local alert route that matches failed/dead-letter deliveries by optional failure class and target. |
+| `POST /api/alert-routes` | Create a local alert route that matches failed/dead-letter deliveries by optional failure class, target, and suppression window. |
 | `DELETE /api/alert-routes/:route_id` | Delete one owner-scoped receiver failure alert route. |
 | `GET /api/producer-api-keys` | List producer API key previews and owners. |
 | `POST /api/producer-api-keys` | Create a local producer/operator/admin API key and return the full secret once. |

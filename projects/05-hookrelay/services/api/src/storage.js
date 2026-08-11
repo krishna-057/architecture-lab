@@ -36,6 +36,7 @@ function normalizeRow(row) {
     updated_at: row.updated_at instanceof Date ? row.updated_at.toISOString() : row.updated_at,
     revoked_at: row.revoked_at instanceof Date ? row.revoked_at.toISOString() : row.revoked_at,
     acknowledged_at: row.acknowledged_at instanceof Date ? row.acknowledged_at.toISOString() : row.acknowledged_at,
+    last_alert_at: row.last_alert_at instanceof Date ? row.last_alert_at.toISOString() : row.last_alert_at,
     next_attempt_at: row.next_attempt_at instanceof Date ? row.next_attempt_at.toISOString() : row.next_attempt_at
   };
 }
@@ -65,6 +66,9 @@ function publicAlertRoute(route) {
     target_type: route.target_type,
     target: route.target,
     enabled: Boolean(route.enabled),
+    suppression_window_seconds: Number(route.suppression_window_seconds ?? 0),
+    last_alert_at: route.last_alert_at ?? null,
+    suppressed_until: alertRouteIsSuppressed(route) ? routeSuppressedUntil(route) : null,
     created_at: route.created_at,
     updated_at: route.updated_at
   };
@@ -98,6 +102,25 @@ function alertRouteMatches(route, delivery) {
   const statusMatches = route.delivery_status === "any" || route.delivery_status === delivery.status;
   const failureMatches = !route.failure_class || route.failure_class === delivery.failure_class;
   return statusMatches && failureMatches;
+}
+
+function routeSuppressedUntil(route) {
+  const suppressionWindowSeconds = Number(route.suppression_window_seconds ?? 0);
+  if (!route.last_alert_at || suppressionWindowSeconds <= 0) {
+    return null;
+  }
+
+  const lastAlertAt = new Date(route.last_alert_at).getTime();
+  if (!Number.isFinite(lastAlertAt)) {
+    return null;
+  }
+
+  return new Date(lastAlertAt + suppressionWindowSeconds * 1000).toISOString();
+}
+
+function alertRouteIsSuppressed(route, now = Date.now()) {
+  const suppressedUntil = routeSuppressedUntil(route);
+  return Boolean(suppressedUntil && new Date(suppressedUntil).getTime() > now);
 }
 
 function buildFailureAlert({ route, delivery, endpoint }) {
@@ -405,7 +428,7 @@ export class MemoryStore {
     return sortNewest(Array.from(this.alertRoutes.values()).filter((route) => route.owner_id === ownerId)).map(publicAlertRoute);
   }
 
-  async createAlertRoute({ ownerId, name, failureClass, deliveryStatus, targetType, target, enabled = true }) {
+  async createAlertRoute({ ownerId, name, failureClass, deliveryStatus, targetType, target, suppressionWindowSeconds = 0, enabled = true }) {
     const route = {
       route_id: `aroute_${crypto.randomUUID()}`,
       owner_id: ownerId,
@@ -414,6 +437,8 @@ export class MemoryStore {
       delivery_status: deliveryStatus,
       target_type: targetType,
       target,
+      suppression_window_seconds: suppressionWindowSeconds,
+      last_alert_at: null,
       enabled,
       created_at: nowIso(),
       updated_at: nowIso()
@@ -468,10 +493,17 @@ export class MemoryStore {
     const alerts = Array.from(this.alertRoutes.values())
       .filter((route) => route.owner_id === endpoint.owner_id)
       .filter((route) => alertRouteMatches(route, delivery))
+      .filter((route) => !alertRouteIsSuppressed(route))
       .map((route) => buildFailureAlert({ route, delivery, endpoint }));
 
     for (const alert of alerts) {
       this.failureAlerts.set(alert.alert_id, alert);
+      const route = this.alertRoutes.get(alert.route_id);
+      if (route) {
+        route.last_alert_at = alert.created_at;
+        route.updated_at = alert.created_at;
+        this.alertRoutes.set(route.route_id, route);
+      }
     }
 
     return alerts.map(publicFailureAlert);
@@ -602,6 +634,8 @@ export class PostgresStore {
         target_type text not null default 'dashboard',
         target text not null,
         enabled boolean not null default true,
+        suppression_window_seconds integer not null default 0,
+        last_alert_at timestamptz,
         created_at timestamptz not null default now(),
         updated_at timestamptz not null default now()
       );
@@ -633,6 +667,10 @@ export class PostgresStore {
         add column if not exists acknowledged_at timestamptz,
         add column if not exists acknowledged_by text,
         add column if not exists acknowledgement_note text;
+
+      alter table receiver_failure_alert_routes
+        add column if not exists suppression_window_seconds integer not null default 0,
+        add column if not exists last_alert_at timestamptz;
 
       alter table producer_api_keys
         drop constraint if exists producer_api_keys_role_check;
@@ -942,7 +980,8 @@ export class PostgresStore {
 
   async listAlertRoutes(ownerId) {
     const result = await this.pool.query(
-      `select route_id, owner_id, name, failure_class, delivery_status, target_type, target, enabled, created_at, updated_at
+      `select route_id, owner_id, name, failure_class, delivery_status, target_type, target, enabled,
+              suppression_window_seconds, last_alert_at, created_at, updated_at
        from receiver_failure_alert_routes
        where owner_id = $1
        order by created_at desc`,
@@ -951,14 +990,15 @@ export class PostgresStore {
     return result.rows.map((row) => publicAlertRoute(normalizeRow(row)));
   }
 
-  async createAlertRoute({ ownerId, name, failureClass, deliveryStatus, targetType, target, enabled = true }) {
+  async createAlertRoute({ ownerId, name, failureClass, deliveryStatus, targetType, target, suppressionWindowSeconds = 0, enabled = true }) {
     const result = await this.pool.query(
       `insert into receiver_failure_alert_routes (
-         route_id, owner_id, name, failure_class, delivery_status, target_type, target, enabled
+         route_id, owner_id, name, failure_class, delivery_status, target_type, target, enabled, suppression_window_seconds
        )
-       values ($1, $2, $3, $4, $5, $6, $7, $8)
-       returning route_id, owner_id, name, failure_class, delivery_status, target_type, target, enabled, created_at, updated_at`,
-      [`aroute_${crypto.randomUUID()}`, ownerId, name, failureClass, deliveryStatus, targetType, target, enabled]
+       values ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+       returning route_id, owner_id, name, failure_class, delivery_status, target_type, target, enabled,
+                 suppression_window_seconds, last_alert_at, created_at, updated_at`,
+      [`aroute_${crypto.randomUUID()}`, ownerId, name, failureClass, deliveryStatus, targetType, target, enabled, suppressionWindowSeconds]
     );
     return publicAlertRoute(normalizeRow(result.rows[0]));
   }
@@ -967,7 +1007,8 @@ export class PostgresStore {
     const result = await this.pool.query(
       `delete from receiver_failure_alert_routes
        where owner_id = $1 and route_id = $2
-       returning route_id, owner_id, name, failure_class, delivery_status, target_type, target, enabled, created_at, updated_at`,
+       returning route_id, owner_id, name, failure_class, delivery_status, target_type, target, enabled,
+                 suppression_window_seconds, last_alert_at, created_at, updated_at`,
       [ownerId, routeId]
     );
     return result.rows[0] ? publicAlertRoute(normalizeRow(result.rows[0])) : null;
@@ -1031,7 +1072,8 @@ export class PostgresStore {
     }
 
     const routesResult = await this.pool.query(
-      `select route_id, owner_id, name, failure_class, delivery_status, target_type, target, enabled, created_at, updated_at
+      `select route_id, owner_id, name, failure_class, delivery_status, target_type, target, enabled,
+              suppression_window_seconds, last_alert_at, created_at, updated_at
        from receiver_failure_alert_routes
        where owner_id = $1 and enabled = true
          and (delivery_status = 'any' or delivery_status = $2)
@@ -1043,6 +1085,7 @@ export class PostgresStore {
     const alerts = routesResult.rows
       .map((row) => normalizeRow(row))
       .filter((route) => alertRouteMatches(route, delivery))
+      .filter((route) => !alertRouteIsSuppressed(route))
       .map((route) => buildFailureAlert({ route, delivery, endpoint }));
 
     const savedAlerts = [];
@@ -1071,6 +1114,12 @@ export class PostgresStore {
         ]
       );
       savedAlerts.push(publicFailureAlert(normalizeRow(result.rows[0])));
+      await this.pool.query(
+        `update receiver_failure_alert_routes
+         set last_alert_at = $2, updated_at = $2
+         where route_id = $1`,
+        [alert.route_id, alert.created_at]
+      );
     }
 
     return savedAlerts;

@@ -93,6 +93,8 @@ create table if not exists receiver_failure_alert_routes (
   target_type text not null default 'dashboard' check (target_type in ('dashboard', 'email', 'webhook')),
   target text not null,
   enabled boolean not null default true,
+  suppression_window_seconds integer not null default 0 check (suppression_window_seconds >= 0),
+  last_alert_at timestamptz,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
@@ -137,6 +139,10 @@ alter table receiver_failure_alerts
   add column if not exists acknowledged_at timestamptz,
   add column if not exists acknowledged_by text,
   add column if not exists acknowledgement_note text;
+
+alter table receiver_failure_alert_routes
+  add column if not exists suppression_window_seconds integer not null default 0,
+  add column if not exists last_alert_at timestamptz;
 
 alter table producer_api_keys
   drop constraint if exists producer_api_keys_role_check;

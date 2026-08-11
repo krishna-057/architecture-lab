@@ -322,3 +322,22 @@ Rejected alternatives:
 
 Follow-up:
 Add alert suppression windows, external notification delivery, and team-level incident ownership.
+
+## 2026-08-11: Add Alert Suppression Windows
+
+Decision:
+Add route-level suppression windows for local receiver failure alerts. Alert routes accept `suppression_window_seconds`; after a route emits an alert, HookRelay records `last_alert_at` and suppresses repeated matches for that route until `last_alert_at` plus the configured window.
+
+Why:
+- Receiver outages can generate many identical failed/dead-letter deliveries, so operators need a simple noise control before external notifications exist.
+- The alert route is the right boundary because it already owns status, failure-class, owner, and target matching.
+- Keeping suppression as route-local state avoids introducing incidents, assignments, calendars, or team escalation policy too early.
+- Suppressed deliveries still keep their delivery status and failure class, so delivery evidence is not lost; only duplicate local alert records are skipped.
+
+Rejected alternatives:
+- Suppress by endpoint globally: easier to reason about, but it would hide different route policies such as dead-letter-only versus selected failure classes.
+- Add incident snooze and assignment now: useful later, but it requires user/team identity and incident lifecycle state.
+- Add external-notification throttling only: that will be needed later, but local alert records already need noise control for the dashboard.
+
+Follow-up:
+Add external notification delivery, per-target retry tracking, and team-level incident ownership.

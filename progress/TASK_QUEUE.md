@@ -6,10 +6,11 @@ Tasks should stay small enough for one focused session.
 
 ### Ready
 
-- [ ] Add HookRelay alert suppression windows.
+- [ ] Add HookRelay external notification delivery.
 
 ### Completed
 
+- [x] Add HookRelay alert suppression windows.
 - [x] Add HookRelay alert acknowledgement workflow.
 - [x] Add HookRelay receiver failure alert routing.
 - [x] Add HookRelay delivery export workflow.
