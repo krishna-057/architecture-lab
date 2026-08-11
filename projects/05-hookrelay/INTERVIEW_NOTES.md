@@ -73,6 +73,8 @@ Observability should attach one trace across event ingestion, job enqueue, each 
 - Acknowledgement does not rewrite the delivery attempt or route, which keeps failure evidence immutable while still giving operators a triage audit trail.
 - Alert suppression windows live on the route. A route emits one alert, records `last_alert_at`, then suppresses repeated matches until the window expires.
 - Suppression skips duplicate alert records only; delivery attempts still retain their status and `failure_class`, so debugging evidence remains available.
+- Webhook alert notifications are best-effort after local alert creation. The alert record stores `notification_status`, response status, error, and attempted timestamp.
+- Notification delivery is intentionally separate from receiver delivery retry state; a failed operator notification should not rewrite the receiver attempt status.
 - This is intentionally not a full alerting system yet; it creates the durable field that later dashboards, alerts, and endpoint-specific retry policy can use.
 
 ## Endpoint Rate Limit Talking Points

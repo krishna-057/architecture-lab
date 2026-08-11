@@ -359,9 +359,9 @@ Every route and emitted alert requires an active `operator` or `admin` API key a
 }
 ```
 
-`failure_class` is optional. `delivery_status` can be `failed`, `dead_letter`, or `any`. `target_type` is currently `dashboard`, `email`, or `webhook`, but this slice records local alert events only; it does not send external email/webhook calls yet. `suppression_window_seconds` is optional; `0` disables suppression and positive values suppress repeated route matches after the route emits an alert.
+`failure_class` is optional. `delivery_status` can be `failed`, `dead_letter`, or `any`. `target_type` is currently `dashboard`, `email`, or `webhook`. `webhook` targets must use an absolute URL and receive best-effort notification posts when a local alert record is created. `dashboard` and `email` targets are kept as local alert records with `notification_status: "skipped"` until dashboard-only and email credential workflows are added. `suppression_window_seconds` is optional; `0` disables suppression and positive values suppress repeated route matches after the route emits an alert.
 
-When the worker records a `failed` or `dead_letter` delivery, storage matches enabled routes by endpoint owner, delivery status, and optional failure class. Matching routes create alert records visible through `GET /api/failure-alerts`. This keeps alerting attached to the durable delivery lifecycle while deferring external notification delivery, retrying alerts, escalation schedules, and team preferences.
+When the worker records a `failed` or `dead_letter` delivery, storage matches enabled routes by endpoint owner, delivery status, and optional failure class. Matching routes create alert records visible through `GET /api/failure-alerts`. Webhook routes then receive best-effort notification posts and store the notification outcome on the alert record. This keeps alerting attached to the durable delivery lifecycle while deferring notification retry jobs, escalation schedules, email providers, and team preferences.
 
 ## Alert Suppression Windows
 
@@ -378,6 +378,38 @@ This is deliberately not a calendar schedule, incident snooze, or team escalatio
 ```
 
 `suppressed_until` is derived for clients from `last_alert_at` and the configured window. Suppressed deliveries still keep their delivery status and `failure_class`; only duplicate local alert records are skipped.
+
+## External Notification Delivery
+
+Webhook alert notification delivery is best-effort and synchronous with worker processing after the local alert record is created. A `webhook` alert route posts this payload to the route target:
+
+```json
+{
+  "alert_id": "alert_...",
+  "route_id": "aroute_...",
+  "owner_id": "owner_demo",
+  "delivery_id": "delivery_...",
+  "endpoint_id": "endpoint_...",
+  "event_id": "event_...",
+  "failure_class": "receiver_http_5xx",
+  "delivery_status": "failed",
+  "message": "failed delivery delivery_... matched receiver_http_5xx for Billing listener",
+  "created_at": "2026-08-11T00:00:00.000Z"
+}
+```
+
+The request includes `Content-Type: application/json`, `X-HookRelay-Alert-Id`, and `X-HookRelay-Delivery-Id`. HookRelay records the outcome on the alert record:
+
+```json
+{
+  "notification_status": "delivered",
+  "notification_response_status": 202,
+  "notification_error": null,
+  "notification_attempted_at": "2026-08-11T00:00:01.000Z"
+}
+```
+
+`notification_status` can be `pending`, `delivered`, `failed`, or `skipped`. Failed notification posts do not change the delivery attempt status and do not block retry scheduling; they are visible on `GET /api/failure-alerts` for operator follow-up. Notification retries, signed notification payloads, email providers, and dead-lettered notification jobs are intentionally deferred.
 
 ## Alert Acknowledgement
 

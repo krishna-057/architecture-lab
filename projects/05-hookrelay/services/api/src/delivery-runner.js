@@ -1,4 +1,5 @@
 import { deliveryHttpTimeoutMs, retryDelaysSeconds } from "./config.js";
+import { dispatchAlertNotification } from "./alert-notifier.js";
 import { createTraceId, NoopObservability } from "./observability.js";
 import { classifyReceiverFailure } from "./receiver-failure.js";
 
@@ -14,6 +15,61 @@ function eventPayload(event) {
 
 function errorMessage(error) {
   return error instanceof Error ? error.message : String(error);
+}
+
+async function dispatchFailureAlerts({ alerts, store, observability, traceId, parentSpanId }) {
+  let delivered = 0;
+  let failed = 0;
+  let skipped = 0;
+
+  for (const alert of alerts) {
+    let result;
+    try {
+      result = await observability.traceSpan(
+        {
+          name: "hookrelay.alert.notification",
+          traceId,
+          parentSpanId,
+          deliveryId: alert.delivery_id,
+          eventId: alert.event_id,
+          endpointId: alert.endpoint_id,
+          attributes: {
+            alert_id: alert.alert_id,
+            route_id: alert.route_id,
+            target_type: alert.target_type,
+            target: alert.target
+          }
+        },
+        async (span) => {
+          const notification = await dispatchAlertNotification(alert);
+          span.attributes.notification_status = notification.status;
+          span.attributes.notification_response_status = notification.responseStatus;
+          if (notification.error) {
+            span.attributes.error = notification.error;
+          }
+          await store.updateFailureAlertNotification({
+            alertId: alert.alert_id,
+            status: notification.status,
+            responseStatus: notification.responseStatus,
+            error: notification.error
+          });
+          return notification;
+        }
+      );
+    } catch (error) {
+      result = { status: "failed", responseStatus: null, error: errorMessage(error) };
+    }
+
+    if (result.status === "delivered") {
+      delivered += 1;
+    } else if (result.status === "failed") {
+      failed += 1;
+    } else {
+      skipped += 1;
+    }
+  }
+
+  return { delivered, failed, skipped };
 }
 
 export async function processDelivery({ store, queue, deliveryId, observability = new NoopObservability() }) {
@@ -51,9 +107,19 @@ export async function processDelivery({ store, queue, deliveryId, observability 
           error: "Delivery cannot run because its event or endpoint is missing."
         });
         const alerts = await store.routeFailureAlert(failedDelivery);
+        const notificationCounts = await dispatchFailureAlerts({
+          alerts,
+          store,
+          observability,
+          traceId,
+          parentSpanId: processSpan.span_id
+        });
         processSpan.attributes.final_status = "dead_letter";
         processSpan.attributes.failure_class = failureClass;
         processSpan.attributes.alert_count = alerts.length;
+        processSpan.attributes.alert_notifications_delivered = notificationCounts.delivered;
+        processSpan.attributes.alert_notifications_failed = notificationCounts.failed;
+        processSpan.attributes.alert_notifications_skipped = notificationCounts.skipped;
         processSpan.attributes.error = "missing_event_or_endpoint";
         return;
       }
@@ -117,10 +183,20 @@ export async function processDelivery({ store, queue, deliveryId, observability 
           error: errorMessage(error)
         });
         const alerts = await store.routeFailureAlert(failedDelivery);
+        const notificationCounts = await dispatchFailureAlerts({
+          alerts,
+          store,
+          observability,
+          traceId,
+          parentSpanId: processSpan.span_id
+        });
         processSpan.attributes.final_status = finalStatus;
         processSpan.attributes.response_status = responseStatus;
         processSpan.attributes.failure_class = failureClass;
         processSpan.attributes.alert_count = alerts.length;
+        processSpan.attributes.alert_notifications_delivered = notificationCounts.delivered;
+        processSpan.attributes.alert_notifications_failed = notificationCounts.failed;
+        processSpan.attributes.alert_notifications_skipped = notificationCounts.skipped;
         processSpan.attributes.error = errorMessage(error);
 
         if (!shouldDeadLetter) {

@@ -247,6 +247,10 @@ type FailureAlert = {
   target_type: string;
   target: string;
   message: string;
+  notification_status: "pending" | "delivered" | "failed" | "skipped";
+  notification_response_status: number | null;
+  notification_error: string | null;
+  notification_attempted_at: string | null;
   acknowledged_at: string | null;
   acknowledged_by: string | null;
   acknowledgement_note: string | null;
@@ -1160,6 +1164,12 @@ export default function HookRelayHome() {
                   <div key={alert.alert_id}>
                     <dt>{alert.acknowledged_at ? "acknowledged" : alert.delivery_status}</dt>
                     <dd>{alert.message}</dd>
+                    <dd>
+                      notification {alert.notification_status}
+                      {alert.notification_response_status ? ` / ${alert.notification_response_status}` : ""}
+                      {alert.notification_attempted_at ? ` / ${formatTime(alert.notification_attempted_at)}` : ""}
+                    </dd>
+                    {alert.notification_error ? <dd>{alert.notification_error}</dd> : null}
                     {alert.acknowledged_at ? (
                       <dd>
                         {alert.acknowledged_by ?? "operator"} / {formatTime(alert.acknowledged_at)} / {alert.acknowledgement_note}

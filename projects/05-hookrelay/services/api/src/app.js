@@ -169,6 +169,10 @@ function parseFailureAlertRoute(body = {}) {
     return { error: "target must be at least 3 characters" };
   }
 
+  if (targetType === "webhook" && !validateAbsoluteUrl(target)) {
+    return { error: "webhook alert target must be an absolute URL" };
+  }
+
   if (
     !Number.isInteger(suppressionWindowSeconds) ||
     suppressionWindowSeconds < 0 ||
@@ -320,7 +324,8 @@ export function createHookRelayApp({
         "hookrelay.delivery.enqueue",
         "hookrelay.delivery.replay",
         "hookrelay.delivery.process",
-        "hookrelay.delivery.http_request"
+        "hookrelay.delivery.http_request",
+        "hookrelay.alert.notification"
       ]
     },
     idempotency_key: "endpoint_id + producer supplied idempotency_key",
@@ -385,6 +390,7 @@ export function createHookRelayApp({
       suppression_window_max_seconds: failureAlertSuppressionMaxSeconds,
       delivery_match: "A failed/dead-letter delivery matches enabled routes by owner_id, delivery_status, and optional failure_class.",
       dispatch_mode: "local_alert_record_before_external_integrations",
+      notification_rule: "Webhook alert routes post a compact alert payload best-effort after the local alert record is created; dashboard and email targets remain local skipped notification records.",
       suppression_rule: "A route with suppression_window_seconds > 0 emits one alert, then suppresses repeated matches until last_alert_at plus the window.",
       acknowledgement_rule: "Operators/admins acknowledge owner-scoped alerts once with acknowledged_by and a human-readable note."
     },

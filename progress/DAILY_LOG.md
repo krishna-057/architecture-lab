@@ -2,6 +2,35 @@
 
 ## 2026-08-11
 
+Added HookRelay external notification delivery.
+
+Added:
+- `services/api/src/alert-notifier.js` for compact best-effort webhook alert notification posts after local alert records are created.
+- Alert notification outcome fields in memory and PostgreSQL storage: `notification_status`, `notification_response_status`, `notification_error`, and `notification_attempted_at`.
+- Worker notification dispatch spans under `hookrelay.alert.notification`, plus process-level delivered/failed/skipped notification counters.
+- Validation that `target_type: "webhook"` alert routes require absolute URL targets, while dashboard/email routes remain local skipped notification records.
+- Dashboard recent-alert display for notification status, response status, attempted time, and notification error.
+- Delivery contract discovery, README, architecture, delivery contract, decision, interview-note, schema, and validation-marker updates documenting the local-alert-first notification boundary.
+
+Validated the work by running:
+- `npm run check` from `projects/05-hookrelay`
+- `npm run check -w @hookrelay/api` from `projects/05-hookrelay`
+- `npx tsc --noEmit -p apps/web/tsconfig.json` from `projects/05-hookrelay`
+- `npm run build -w @hookrelay/web` from `projects/05-hookrelay`
+- A local Fastify/worker smoke test covering invalid webhook route rejection, delivered webhook notification, failed webhook notification, skipped dashboard notification, alert headers, and alert payload delivery id
+- `docker compose -f projects\05-hookrelay\compose.yaml config`
+- `git diff --check`
+
+Notes:
+- This run used `K:\AutoPilot_Projects\FlashReserve_run_20260810`, which was clean and up to date with GitHub at startup.
+- The local K: clone had several corrupted `node_modules` packages during validation; npm refreshed only local dependency files under K:, and no dependency metadata change is in scope.
+- `npm install` continued to report existing high-severity audit findings; dependency upgrades remain out of scope for this feature.
+
+Next recommended task:
+- Add HookRelay notification retry tracking.
+
+## 2026-08-11
+
 Added HookRelay alert suppression windows.
 
 Added:

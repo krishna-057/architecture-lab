@@ -341,3 +341,22 @@ Rejected alternatives:
 
 Follow-up:
 Add external notification delivery, per-target retry tracking, and team-level incident ownership.
+
+## 2026-08-11: Add Best-Effort Webhook Alert Notifications
+
+Decision:
+Add the first external notification path for receiver failure alerts by dispatching `target_type: "webhook"` routes from the worker after local alert records are created. Store `notification_status`, `notification_response_status`, `notification_error`, and `notification_attempted_at` on each alert record.
+
+Why:
+- Webhook notification delivery fits HookRelay's existing domain and can be validated locally without email providers, OAuth, or paid integrations.
+- Creating the local alert record first preserves the audit trail even if the external notification target fails.
+- Best-effort synchronous dispatch keeps the slice small and makes notification outcome visible without introducing a second queue or retry scheduler for notifications.
+- Persisting notification status gives operators enough evidence to distinguish "alert matched" from "external notification delivered".
+
+Rejected alternatives:
+- Add email delivery now: useful later, but it requires credential handling, provider-specific errors, and deliverability concerns.
+- Add a dedicated notification queue now: more production-ready, but premature before the payload, target model, and failure states are proven.
+- Treat notification failure as delivery failure: incorrect boundary; the receiver delivery and the operator notification are separate side effects.
+
+Follow-up:
+Add notification retry jobs, signed alert notifications, email provider configuration, and per-target delivery history.

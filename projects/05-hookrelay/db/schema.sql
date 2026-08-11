@@ -111,6 +111,10 @@ create table if not exists receiver_failure_alerts (
   target_type text not null,
   target text not null,
   message text not null,
+  notification_status text not null default 'pending' check (notification_status in ('pending', 'delivered', 'failed', 'skipped')),
+  notification_response_status integer,
+  notification_error text,
+  notification_attempted_at timestamptz,
   acknowledged_at timestamptz,
   acknowledged_by text,
   acknowledgement_note text,
@@ -136,9 +140,20 @@ alter table producer_api_keys
   add column if not exists revoked_at timestamptz;
 
 alter table receiver_failure_alerts
+  add column if not exists notification_status text not null default 'pending',
+  add column if not exists notification_response_status integer,
+  add column if not exists notification_error text,
+  add column if not exists notification_attempted_at timestamptz,
   add column if not exists acknowledged_at timestamptz,
   add column if not exists acknowledged_by text,
   add column if not exists acknowledgement_note text;
+
+alter table receiver_failure_alerts
+  drop constraint if exists receiver_failure_alerts_notification_status_check;
+
+alter table receiver_failure_alerts
+  add constraint receiver_failure_alerts_notification_status_check
+  check (notification_status in ('pending', 'delivered', 'failed', 'skipped'));
 
 alter table receiver_failure_alert_routes
   add column if not exists suppression_window_seconds integer not null default 0,
