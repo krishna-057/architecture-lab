@@ -151,7 +151,9 @@ type DeliveryContract = {
       algorithm: string;
       signed_payload: string;
       secret_source: string;
+      fallback_secret_source: string;
       secret_preview: string;
+      route_secret_rule: string;
       headers: string[];
     };
     suppression_window_max_seconds: number;
@@ -237,6 +239,7 @@ type FailureAlertRoute = {
   delivery_status: "failed" | "dead_letter" | "any";
   target_type: "dashboard" | "email" | "webhook";
   target: string;
+  notification_signing_secret_preview: string | null;
   enabled: boolean;
   suppression_window_seconds: number;
   last_alert_at: string | null;
@@ -260,6 +263,7 @@ type FailureAlert = {
   notification_status: "pending" | "delivered" | "failed" | "skipped";
   notification_response_status: number | null;
   notification_error: string | null;
+  notification_signing_secret_preview: string | null;
   notification_attempted_at: string | null;
   notification_attempt_count: number;
   notification_next_retry_at: string | null;
@@ -355,6 +359,7 @@ export default function HookRelayHome() {
   const [alertDeliveryStatus, setAlertDeliveryStatus] = useState<FailureAlertRoute["delivery_status"]>("dead_letter");
   const [alertTargetType, setAlertTargetType] = useState<FailureAlertRoute["target_type"]>("dashboard");
   const [alertTarget, setAlertTarget] = useState("local-dashboard");
+  const [alertNotificationSigningSecret, setAlertNotificationSigningSecret] = useState("");
   const [alertSuppressionWindowSeconds, setAlertSuppressionWindowSeconds] = useState(300);
   const [acknowledgementNote, setAcknowledgementNote] = useState("Reviewed in local dashboard");
 
@@ -629,6 +634,7 @@ export default function HookRelayHome() {
           delivery_status: alertDeliveryStatus,
           target_type: alertTargetType,
           target: alertTarget,
+          notification_signing_secret: alertNotificationSigningSecret.trim() || null,
           suppression_window_seconds: alertSuppressionWindowSeconds,
           enabled: true
         })
@@ -1139,6 +1145,14 @@ export default function HookRelayHome() {
               <input value={alertTarget} onChange={(event) => setAlertTarget(event.target.value)} />
             </label>
             <label>
+              <span>Signing Secret</span>
+              <input
+                value={alertNotificationSigningSecret}
+                placeholder="whsec_..."
+                onChange={(event) => setAlertNotificationSigningSecret(event.target.value)}
+              />
+            </label>
+            <label>
               <span>Suppress Seconds</span>
               <input
                 min={0}
@@ -1168,6 +1182,7 @@ export default function HookRelayHome() {
                       suppress {route.suppression_window_seconds}s
                       {route.suppressed_until ? ` until ${formatTime(route.suppressed_until)}` : ""}
                     </dd>
+                    <dd>signing {route.notification_signing_secret_preview ?? "not set"}</dd>
                     <button type="button" onClick={() => void deleteAlertRoute(route.route_id)}>
                       Delete
                     </button>
@@ -1200,6 +1215,7 @@ export default function HookRelayHome() {
                       {alert.notification_next_retry_at ? ` / next ${formatTime(alert.notification_next_retry_at)}` : ""}
                       {alert.notification_retry_exhausted ? " / exhausted" : ""}
                     </dd>
+                    <dd>signing {alert.notification_signing_secret_preview ?? "fallback"}</dd>
                     {alert.notification_error ? <dd>{alert.notification_error}</dd> : null}
                     {alert.target_type === "webhook" && alert.notification_status !== "delivered" ? (
                       <button type="button" onClick={() => void retryFailureAlertNotification(alert.alert_id)}>

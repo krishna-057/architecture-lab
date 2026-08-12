@@ -92,6 +92,7 @@ create table if not exists receiver_failure_alert_routes (
   delivery_status text not null default 'dead_letter' check (delivery_status in ('failed', 'dead_letter', 'any')),
   target_type text not null default 'dashboard' check (target_type in ('dashboard', 'email', 'webhook')),
   target text not null,
+  notification_signing_secret text not null,
   enabled boolean not null default true,
   suppression_window_seconds integer not null default 0 check (suppression_window_seconds >= 0),
   last_alert_at timestamptz,
@@ -110,6 +111,7 @@ create table if not exists receiver_failure_alerts (
   delivery_status text not null,
   target_type text not null,
   target text not null,
+  notification_signing_secret text,
   message text not null,
   notification_status text not null default 'pending' check (notification_status in ('pending', 'delivered', 'failed', 'skipped')),
   notification_response_status integer,
@@ -146,6 +148,7 @@ alter table receiver_failure_alerts
   add column if not exists notification_status text not null default 'pending',
   add column if not exists notification_response_status integer,
   add column if not exists notification_error text,
+  add column if not exists notification_signing_secret text,
   add column if not exists notification_attempted_at timestamptz,
   add column if not exists notification_attempt_count integer not null default 0,
   add column if not exists notification_next_retry_at timestamptz,
@@ -169,6 +172,7 @@ alter table receiver_failure_alerts
   check (notification_attempt_count >= 0);
 
 alter table receiver_failure_alert_routes
+  add column if not exists notification_signing_secret text,
   add column if not exists suppression_window_seconds integer not null default 0,
   add column if not exists last_alert_at timestamptz;
 

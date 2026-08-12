@@ -90,7 +90,7 @@ Default URLs:
 | `DELETE /api/delivery-views/:view_id` | Delete one owner-scoped saved delivery view. |
 | `POST /api/deliveries/:delivery_id/replay` | Require an owner-scoped operator/admin key and replay reason, then create a new queued attempt for an existing event. |
 
-When `DATABASE_URL` is set, producer API key hashes, endpoints, events, delivery attempts, receiver failure classes, alert routes, alert records, alert notification outcomes, saved delivery views, and observability spans are stored in PostgreSQL. When `REDIS_URL` is set, new delivery attempts are also enqueued into BullMQ with the documented delay ladder plus bounded jitter, and endpoint rate limits use Redis fixed-window counters. Webhook alert notifications are signed with `HOOKRELAY_ALERT_NOTIFICATION_SIGNING_SECRET`. Without those variables, the API still runs in in-memory mode for fast local checks.
+When `DATABASE_URL` is set, producer API key hashes, endpoints, events, delivery attempts, receiver failure classes, alert routes, alert records, alert notification outcomes, saved delivery views, and observability spans are stored in PostgreSQL. When `REDIS_URL` is set, new delivery attempts are also enqueued into BullMQ with the documented delay ladder plus bounded jitter, and endpoint rate limits use Redis fixed-window counters. Webhook alert notifications are signed with a per-route alert notification secret, falling back to `HOOKRELAY_ALERT_NOTIFICATION_SIGNING_SECRET` only for older local records without a stored route secret. Without those variables, the API still runs in in-memory mode for fast local checks.
 
 ## Why This Project Matters
 

@@ -59,6 +59,14 @@ function publicDeliveryView(view) {
   };
 }
 
+function generateAlertNotificationSigningSecret() {
+  return `whsec_${crypto.randomBytes(18).toString("hex")}`;
+}
+
+function secretPreview(secret) {
+  return secret ? `${String(secret).slice(0, 7)}...` : null;
+}
+
 function publicAlertRoute(route) {
   return {
     route_id: route.route_id,
@@ -68,6 +76,7 @@ function publicAlertRoute(route) {
     delivery_status: route.delivery_status,
     target_type: route.target_type,
     target: route.target,
+    notification_signing_secret_preview: secretPreview(route.notification_signing_secret),
     enabled: Boolean(route.enabled),
     suppression_window_seconds: Number(route.suppression_window_seconds ?? 0),
     last_alert_at: route.last_alert_at ?? null,
@@ -93,6 +102,7 @@ function publicFailureAlert(alert) {
     notification_status: alert.notification_status ?? "pending",
     notification_response_status: alert.notification_response_status ?? null,
     notification_error: alert.notification_error ?? null,
+    notification_signing_secret_preview: secretPreview(alert.notification_signing_secret),
     notification_attempted_at: alert.notification_attempted_at ?? null,
     notification_attempt_count: Number(alert.notification_attempt_count ?? 0),
     notification_next_retry_at: alert.notification_next_retry_at ?? null,
@@ -145,6 +155,7 @@ function buildFailureAlert({ route, delivery, endpoint }) {
     delivery_status: delivery.status,
     target_type: route.target_type,
     target: route.target,
+    notification_signing_secret: route.notification_signing_secret,
     message: `${delivery.status} delivery ${delivery.delivery_id} matched ${delivery.failure_class ?? "unclassified"} for ${endpoint.name}`,
     notification_status: route.target_type === "webhook" ? "pending" : "skipped",
     notification_response_status: null,
@@ -458,7 +469,17 @@ export class MemoryStore {
     return sortNewest(Array.from(this.alertRoutes.values()).filter((route) => route.owner_id === ownerId)).map(publicAlertRoute);
   }
 
-  async createAlertRoute({ ownerId, name, failureClass, deliveryStatus, targetType, target, suppressionWindowSeconds = 0, enabled = true }) {
+  async createAlertRoute({
+    ownerId,
+    name,
+    failureClass,
+    deliveryStatus,
+    targetType,
+    target,
+    notificationSigningSecret,
+    suppressionWindowSeconds = 0,
+    enabled = true
+  }) {
     const route = {
       route_id: `aroute_${crypto.randomUUID()}`,
       owner_id: ownerId,
@@ -467,6 +488,7 @@ export class MemoryStore {
       delivery_status: deliveryStatus,
       target_type: targetType,
       target,
+      notification_signing_secret: notificationSigningSecret || generateAlertNotificationSigningSecret(),
       suppression_window_seconds: suppressionWindowSeconds,
       last_alert_at: null,
       enabled,
@@ -496,6 +518,11 @@ export class MemoryStore {
   async getFailureAlert({ ownerId, alertId }) {
     const alert = this.failureAlerts.get(alertId);
     return alert && alert.owner_id === ownerId ? publicFailureAlert(alert) : null;
+  }
+
+  async getFailureAlertForNotification({ ownerId, alertId }) {
+    const alert = this.failureAlerts.get(alertId);
+    return alert && alert.owner_id === ownerId ? alert : null;
   }
 
   async acknowledgeFailureAlert({ ownerId, alertId, acknowledgedBy, note }) {
@@ -559,7 +586,7 @@ export class MemoryStore {
       }
     }
 
-    return alerts.map(publicFailureAlert);
+    return alerts;
   }
 
   async getEvent(eventId) {
@@ -686,6 +713,7 @@ export class PostgresStore {
         delivery_status text not null default 'dead_letter',
         target_type text not null default 'dashboard',
         target text not null,
+        notification_signing_secret text not null,
         enabled boolean not null default true,
         suppression_window_seconds integer not null default 0,
         last_alert_at timestamptz,
@@ -704,6 +732,7 @@ export class PostgresStore {
         delivery_status text not null,
         target_type text not null,
         target text not null,
+        notification_signing_secret text,
         message text not null,
         notification_status text not null default 'pending',
         notification_response_status integer,
@@ -727,6 +756,7 @@ export class PostgresStore {
         add column if not exists notification_status text not null default 'pending',
         add column if not exists notification_response_status integer,
         add column if not exists notification_error text,
+        add column if not exists notification_signing_secret text,
         add column if not exists notification_attempted_at timestamptz,
         add column if not exists notification_attempt_count integer not null default 0,
         add column if not exists notification_next_retry_at timestamptz,
@@ -736,6 +766,7 @@ export class PostgresStore {
         add column if not exists acknowledgement_note text;
 
       alter table receiver_failure_alert_routes
+        add column if not exists notification_signing_secret text,
         add column if not exists suppression_window_seconds integer not null default 0,
         add column if not exists last_alert_at timestamptz;
 
@@ -1062,7 +1093,7 @@ export class PostgresStore {
   async listAlertRoutes(ownerId) {
     const result = await this.pool.query(
       `select route_id, owner_id, name, failure_class, delivery_status, target_type, target, enabled,
-              suppression_window_seconds, last_alert_at, created_at, updated_at
+              notification_signing_secret, suppression_window_seconds, last_alert_at, created_at, updated_at
        from receiver_failure_alert_routes
        where owner_id = $1
        order by created_at desc`,
@@ -1071,15 +1102,26 @@ export class PostgresStore {
     return result.rows.map((row) => publicAlertRoute(normalizeRow(row)));
   }
 
-  async createAlertRoute({ ownerId, name, failureClass, deliveryStatus, targetType, target, suppressionWindowSeconds = 0, enabled = true }) {
+  async createAlertRoute({
+    ownerId,
+    name,
+    failureClass,
+    deliveryStatus,
+    targetType,
+    target,
+    notificationSigningSecret,
+    suppressionWindowSeconds = 0,
+    enabled = true
+  }) {
+    const signingSecret = notificationSigningSecret || generateAlertNotificationSigningSecret();
     const result = await this.pool.query(
       `insert into receiver_failure_alert_routes (
-         route_id, owner_id, name, failure_class, delivery_status, target_type, target, enabled, suppression_window_seconds
+         route_id, owner_id, name, failure_class, delivery_status, target_type, target, notification_signing_secret, enabled, suppression_window_seconds
        )
-       values ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
        returning route_id, owner_id, name, failure_class, delivery_status, target_type, target, enabled,
-                 suppression_window_seconds, last_alert_at, created_at, updated_at`,
-      [`aroute_${crypto.randomUUID()}`, ownerId, name, failureClass, deliveryStatus, targetType, target, enabled, suppressionWindowSeconds]
+                 notification_signing_secret, suppression_window_seconds, last_alert_at, created_at, updated_at`,
+      [`aroute_${crypto.randomUUID()}`, ownerId, name, failureClass, deliveryStatus, targetType, target, signingSecret, enabled, suppressionWindowSeconds]
     );
     return publicAlertRoute(normalizeRow(result.rows[0]));
   }
@@ -1089,7 +1131,7 @@ export class PostgresStore {
       `delete from receiver_failure_alert_routes
        where owner_id = $1 and route_id = $2
        returning route_id, owner_id, name, failure_class, delivery_status, target_type, target, enabled,
-                 suppression_window_seconds, last_alert_at, created_at, updated_at`,
+                 notification_signing_secret, suppression_window_seconds, last_alert_at, created_at, updated_at`,
       [ownerId, routeId]
     );
     return result.rows[0] ? publicAlertRoute(normalizeRow(result.rows[0])) : null;
@@ -1100,7 +1142,7 @@ export class PostgresStore {
     const result = await this.pool.query(
       `select alert_id, route_id, owner_id, delivery_id, endpoint_id, event_id, failure_class,
               delivery_status, target_type, target, message, notification_status, notification_response_status,
-              notification_error, notification_attempted_at, notification_attempt_count, notification_next_retry_at,
+              notification_error, notification_signing_secret, notification_attempted_at, notification_attempt_count, notification_next_retry_at,
               notification_retry_exhausted, acknowledged_at, acknowledged_by, acknowledgement_note, created_at
        from receiver_failure_alerts
        where owner_id = $1
@@ -1115,13 +1157,26 @@ export class PostgresStore {
     const result = await this.pool.query(
       `select alert_id, route_id, owner_id, delivery_id, endpoint_id, event_id, failure_class,
               delivery_status, target_type, target, message, notification_status, notification_response_status,
-              notification_error, notification_attempted_at, notification_attempt_count, notification_next_retry_at,
+              notification_error, notification_signing_secret, notification_attempted_at, notification_attempt_count, notification_next_retry_at,
               notification_retry_exhausted, acknowledged_at, acknowledged_by, acknowledgement_note, created_at
        from receiver_failure_alerts
        where owner_id = $1 and alert_id = $2`,
       [ownerId, alertId]
     );
     return result.rows[0] ? publicFailureAlert(normalizeRow(result.rows[0])) : null;
+  }
+
+  async getFailureAlertForNotification({ ownerId, alertId }) {
+    const result = await this.pool.query(
+      `select alert_id, route_id, owner_id, delivery_id, endpoint_id, event_id, failure_class,
+              delivery_status, target_type, target, message, notification_status, notification_response_status,
+              notification_error, notification_signing_secret, notification_attempted_at, notification_attempt_count, notification_next_retry_at,
+              notification_retry_exhausted, acknowledged_at, acknowledged_by, acknowledgement_note, created_at
+       from receiver_failure_alerts
+       where owner_id = $1 and alert_id = $2`,
+      [ownerId, alertId]
+    );
+    return normalizeRow(result.rows[0]);
   }
 
   async acknowledgeFailureAlert({ ownerId, alertId, acknowledgedBy, note }) {
@@ -1131,7 +1186,7 @@ export class PostgresStore {
        where owner_id = $1 and alert_id = $2 and acknowledged_at is null
        returning alert_id, route_id, owner_id, delivery_id, endpoint_id, event_id, failure_class,
                  delivery_status, target_type, target, message, notification_status, notification_response_status,
-                 notification_error, notification_attempted_at, notification_attempt_count, notification_next_retry_at,
+                 notification_error, notification_signing_secret, notification_attempted_at, notification_attempt_count, notification_next_retry_at,
                  notification_retry_exhausted, acknowledged_at, acknowledged_by, acknowledgement_note, created_at`,
       [ownerId, alertId, acknowledgedBy, note]
     );
@@ -1142,7 +1197,7 @@ export class PostgresStore {
     const existing = await this.pool.query(
       `select alert_id, route_id, owner_id, delivery_id, endpoint_id, event_id, failure_class,
               delivery_status, target_type, target, message, notification_status, notification_response_status,
-              notification_error, notification_attempted_at, notification_attempt_count, notification_next_retry_at,
+              notification_error, notification_signing_secret, notification_attempted_at, notification_attempt_count, notification_next_retry_at,
               notification_retry_exhausted, acknowledged_at, acknowledged_by, acknowledgement_note, created_at
        from receiver_failure_alerts
        where owner_id = $1 and alert_id = $2`,
@@ -1182,7 +1237,7 @@ export class PostgresStore {
        where alert_id = $1
        returning alert_id, route_id, owner_id, delivery_id, endpoint_id, event_id, failure_class,
                  delivery_status, target_type, target, message, notification_status, notification_response_status,
-                 notification_error, notification_attempted_at, notification_attempt_count, notification_next_retry_at,
+                 notification_error, notification_signing_secret, notification_attempted_at, notification_attempt_count, notification_next_retry_at,
                  notification_retry_exhausted, acknowledged_at, acknowledged_by,
                  acknowledgement_note, created_at`,
       [alertId, status, responseStatus, error, retryUpdate.attemptCount, retryUpdate.nextRetryAt, retryUpdate.retryExhausted]
@@ -1202,7 +1257,7 @@ export class PostgresStore {
 
     const routesResult = await this.pool.query(
       `select route_id, owner_id, name, failure_class, delivery_status, target_type, target, enabled,
-              suppression_window_seconds, last_alert_at, created_at, updated_at
+              notification_signing_secret, suppression_window_seconds, last_alert_at, created_at, updated_at
        from receiver_failure_alert_routes
        where owner_id = $1 and enabled = true
          and (delivery_status = 'any' or delivery_status = $2)
@@ -1223,12 +1278,12 @@ export class PostgresStore {
         `insert into receiver_failure_alerts (
            alert_id, route_id, owner_id, delivery_id, endpoint_id, event_id, failure_class,
            delivery_status, target_type, target, message, notification_status, notification_response_status,
-           notification_error
+           notification_error, notification_signing_secret
          )
-         values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+         values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
          returning alert_id, route_id, owner_id, delivery_id, endpoint_id, event_id, failure_class,
                    delivery_status, target_type, target, message, notification_status, notification_response_status,
-                   notification_error, notification_attempted_at, notification_attempt_count, notification_next_retry_at,
+                   notification_error, notification_signing_secret, notification_attempted_at, notification_attempt_count, notification_next_retry_at,
                    notification_retry_exhausted, acknowledged_at, acknowledged_by, acknowledgement_note, created_at`,
         [
           alert.alert_id,
@@ -1244,10 +1299,11 @@ export class PostgresStore {
           alert.message,
           alert.notification_status,
           alert.notification_response_status,
-          alert.notification_error
+          alert.notification_error,
+          alert.notification_signing_secret
         ]
       );
-      savedAlerts.push(publicFailureAlert(normalizeRow(result.rows[0])));
+      savedAlerts.push(normalizeRow(result.rows[0]));
       await this.pool.query(
         `update receiver_failure_alert_routes
          set last_alert_at = $2, updated_at = $2

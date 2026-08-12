@@ -398,3 +398,22 @@ Rejected alternatives:
 
 Follow-up:
 Add per-route alert signing secrets, timestamp tolerance examples for alert receivers, secret rotation, and automatic notification retry workers.
+
+## 2026-08-12: Add Per-Route Alert Signing Secrets
+
+Decision:
+Store an alert notification signing secret on each receiver failure alert route. Route creation accepts an optional `notification_signing_secret`; when omitted, HookRelay generates one. Emitted alert records snapshot the route secret and public route/alert responses expose only `notification_signing_secret_preview`.
+
+Why:
+- Alert notification targets can be separate services, so each destination should verify requests with its own secret instead of sharing one global alert secret.
+- Snapshotting the route secret onto the alert record keeps manual notification retry verifiable even if the route is later edited or deleted.
+- Returning a preview gives operators enough confirmation without leaking the full signing secret through list/detail APIs.
+- Keeping `HOOKRELAY_ALERT_NOTIFICATION_SIGNING_SECRET` as a fallback preserves older local alert records that predate route-specific secrets.
+
+Rejected alternatives:
+- Only use one environment secret forever: simpler, but it couples every alert target to the same credential.
+- Join route secrets at retry time only: avoids duplicating the secret, but manual retry would change behavior after route edits or deletion.
+- Add rotation/versioning now: useful later, but premature before alert destination management exists.
+
+Follow-up:
+Add timestamp tolerance examples for alert receivers, explicit alert secret rotation, automatic notification retry workers, and per-target notification history.

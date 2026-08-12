@@ -6,10 +6,11 @@ Tasks should stay small enough for one focused session.
 
 ### Ready
 
-- [ ] Add HookRelay per-route alert signing secrets.
+- [ ] Add HookRelay alert receiver timestamp tolerance example.
 
 ### Completed
 
+- [x] Add HookRelay per-route alert signing secrets.
 - [x] Add HookRelay signed alert notifications.
 - [x] Add HookRelay notification retry tracking.
 - [x] Add HookRelay external notification delivery.

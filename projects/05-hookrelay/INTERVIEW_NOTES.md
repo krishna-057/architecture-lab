@@ -79,6 +79,8 @@ Observability should attach one trace across event ingestion, job enqueue, each 
 - Automatic notification retry jobs are deferred until there is enough signal to justify a second queue and per-target delivery history.
 - Alert notifications are signed with `HookRelay-Alert-Timestamp` and `HookRelay-Alert-Signature` over `timestamp.rawBody`, using a separate alert notification secret instead of receiver endpoint secrets.
 - Separate alert signing keeps notification targets from depending on receiver credentials and mirrors the delivery signature model without coupling the two side effects.
+- Alert notification secrets now live per route. Operators may supply one, or HookRelay generates one and returns only a preview.
+- Emitted alerts snapshot the route signing secret so manual notification retry keeps the same verification contract even if the route changes later.
 - This is intentionally not a full alerting system yet; it creates the durable field that later dashboards, alerts, and endpoint-specific retry policy can use.
 
 ## Endpoint Rate Limit Talking Points

@@ -2,6 +2,36 @@
 
 ## 2026-08-12
 
+Added HookRelay per-route alert signing secrets.
+
+Added:
+- `notification_signing_secret` on receiver failure alert routes, with generated route secrets when operators leave the field blank.
+- Alert-record signing secret snapshots so worker dispatch and manual notification retry keep the same HMAC verification contract.
+- Public `notification_signing_secret_preview` fields for alert routes and failure alerts, without exposing full secrets in list/detail responses.
+- Dashboard route creation support for optional alert signing secrets plus route/alert preview display.
+- PostgreSQL schema and startup migrations for route secrets and alert secret snapshots.
+- Delivery contract discovery, README, architecture, delivery contract, decision, interview-note, and task-queue updates documenting route-owned alert notification secrets and the env fallback for older records.
+
+Validated the work by running:
+- `npm run check` from `projects/05-hookrelay`
+- `npm run check -w @hookrelay/api` from `projects/05-hookrelay`
+- `npm run build -w @hookrelay/web` from `projects/05-hookrelay`
+- `npx tsc --noEmit -p apps/web/tsconfig.json` from `projects/05-hookrelay` after the Next build generated `.next/types`
+- A local Fastify/worker smoke test covering route secret preview redaction, per-route HMAC signing for initial alert notification dispatch, env-secret mismatch rejection, failed notification retry tracking, and successful manual retry signed with the same route secret snapshot
+- `docker compose -f projects\05-hookrelay\compose.yaml config`
+- `git diff --check`
+
+Notes:
+- This run used `K:\AutoPilot_Projects\FlashReserve_run_20260810`, which was clean and up to date with GitHub at startup.
+- `HOOKRELAY_ALERT_NOTIFICATION_SIGNING_SECRET` remains only as a compatibility fallback for existing local alert records without a stored route secret.
+- The first standalone TypeScript check ran in parallel with the Next build and failed because `.next/types` did not exist yet; it passed when rerun after the build.
+- `git diff --check` reported only line-ending normalization warnings for touched text files.
+
+Next recommended task:
+- Add HookRelay alert receiver timestamp tolerance example.
+
+## 2026-08-12
+
 Added HookRelay signed alert notifications.
 
 Added:

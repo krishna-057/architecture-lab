@@ -150,6 +150,7 @@ function parseFailureAlertRoute(body = {}) {
   const deliveryStatus = String(body.delivery_status ?? "dead_letter").trim();
   const targetType = String(body.target_type ?? "dashboard").trim();
   const target = String(body.target ?? "local-dashboard").trim();
+  const notificationSigningSecret = String(body.notification_signing_secret ?? "").trim();
   const suppressionWindowSeconds = Number(body.suppression_window_seconds ?? 0);
 
   if (name.length < 3) {
@@ -176,6 +177,10 @@ function parseFailureAlertRoute(body = {}) {
     return { error: "webhook alert target must be an absolute URL" };
   }
 
+  if (notificationSigningSecret && notificationSigningSecret.length < 16) {
+    return { error: "notification_signing_secret must be at least 16 characters when provided" };
+  }
+
   if (
     !Number.isInteger(suppressionWindowSeconds) ||
     suppressionWindowSeconds < 0 ||
@@ -191,6 +196,7 @@ function parseFailureAlertRoute(body = {}) {
       deliveryStatus,
       targetType,
       target,
+      notificationSigningSecret: notificationSigningSecret || null,
       suppressionWindowSeconds,
       enabled: body.enabled === undefined ? true : Boolean(body.enabled)
     }
@@ -395,8 +401,10 @@ export function createHookRelayApp({
       notification_signing: {
         algorithm: "hmac_sha256",
         signed_payload: "HookRelay-Alert-Timestamp.raw JSON alert notification body",
-        secret_source: "HOOKRELAY_ALERT_NOTIFICATION_SIGNING_SECRET",
+        secret_source: "receiver_failure_alert_routes.notification_signing_secret",
+        fallback_secret_source: "HOOKRELAY_ALERT_NOTIFICATION_SIGNING_SECRET",
         secret_preview: `${alertNotificationSigningSecret.slice(0, 7)}...`,
+        route_secret_rule: "Alert routes store a generated or operator-supplied notification_signing_secret; emitted alerts snapshot it for manual retry.",
         headers: ["HookRelay-Alert-Timestamp", "HookRelay-Alert-Signature"]
       },
       suppression_window_max_seconds: failureAlertSuppressionMaxSeconds,
@@ -671,8 +679,13 @@ export function createHookRelayApp({
       return reply.status(409).send({ error: "failure alert notification is already delivered", alert });
     }
 
+    const notificationAlert = await store.getFailureAlertForNotification({ ownerId: operator.owner_id, alertId });
+    if (!notificationAlert) {
+      return reply.status(404).send({ error: "failure alert was not found" });
+    }
+
     const { alert: updatedAlert } = await dispatchAndRecordAlertNotification({
-      alert,
+      alert: notificationAlert,
       store,
       observability,
       traceId: createTraceId()

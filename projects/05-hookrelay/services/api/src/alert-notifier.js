@@ -38,7 +38,7 @@ export function buildAlertNotificationRequest(alert) {
       "Content-Type": "application/json",
       "X-HookRelay-Alert-Id": alert.alert_id,
       "X-HookRelay-Delivery-Id": alert.delivery_id,
-      ...signAlertNotification({ body })
+      ...signAlertNotification({ body, secret: alert.notification_signing_secret ?? alertNotificationSigningSecret })
     }
   };
 }

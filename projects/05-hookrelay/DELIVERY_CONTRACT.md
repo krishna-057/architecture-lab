@@ -355,14 +355,15 @@ Every route and emitted alert requires an active `operator` or `admin` API key a
   "delivery_status": "dead_letter",
   "target_type": "dashboard",
   "target": "local-dashboard",
+  "notification_signing_secret": "whsec_alert_destination_secret",
   "suppression_window_seconds": 300,
   "enabled": true
 }
 ```
 
-`failure_class` is optional. `delivery_status` can be `failed`, `dead_letter`, or `any`. `target_type` is currently `dashboard`, `email`, or `webhook`. `webhook` targets must use an absolute URL and receive best-effort notification posts when a local alert record is created. `dashboard` and `email` targets are kept as local alert records with `notification_status: "skipped"` until dashboard-only and email credential workflows are added. `suppression_window_seconds` is optional; `0` disables suppression and positive values suppress repeated route matches after the route emits an alert.
+`failure_class` is optional. `delivery_status` can be `failed`, `dead_letter`, or `any`. `target_type` is currently `dashboard`, `email`, or `webhook`. `webhook` targets must use an absolute URL and receive best-effort notification posts when a local alert record is created. `dashboard` and `email` targets are kept as local alert records with `notification_status: "skipped"` until dashboard-only and email credential workflows are added. `notification_signing_secret` is optional; if it is omitted, HookRelay generates a route-specific secret and returns only `notification_signing_secret_preview`. `suppression_window_seconds` is optional; `0` disables suppression and positive values suppress repeated route matches after the route emits an alert.
 
-When the worker records a `failed` or `dead_letter` delivery, storage matches enabled routes by endpoint owner, delivery status, and optional failure class. Matching routes create alert records visible through `GET /api/failure-alerts`. Webhook routes then receive best-effort notification posts and store the notification outcome on the alert record. Failed webhook notification posts increment retry tracking fields and receive a suggested `notification_next_retry_at`. This keeps alerting attached to the durable delivery lifecycle while deferring automatic notification retry jobs, escalation schedules, email providers, and team preferences.
+When the worker records a `failed` or `dead_letter` delivery, storage matches enabled routes by endpoint owner, delivery status, and optional failure class. Matching routes create alert records visible through `GET /api/failure-alerts`. The alert record snapshots the route's notification signing secret, exposes only a preview, and uses that same secret for worker dispatch and manual notification retry. Webhook routes then receive best-effort notification posts and store the notification outcome on the alert record. Failed webhook notification posts increment retry tracking fields and receive a suggested `notification_next_retry_at`. This keeps alerting attached to the durable delivery lifecycle while deferring automatic notification retry jobs, escalation schedules, email providers, and team preferences.
 
 ## Alert Suppression Windows
 
@@ -405,7 +406,7 @@ The request includes `Content-Type: application/json`, `X-HookRelay-Alert-Id`, `
 <HookRelay-Alert-Timestamp>.<raw JSON alert notification body>
 ```
 
-`HookRelay-Alert-Signature` uses the same `v1=<hex digest>` shape as receiver delivery signatures, but it is signed with `HOOKRELAY_ALERT_NOTIFICATION_SIGNING_SECRET` rather than an endpoint signing secret. That keeps alert notification receivers able to verify integrity and freshness without exposing receiver endpoint secrets to alert targets.
+`HookRelay-Alert-Signature` uses the same `v1=<hex digest>` shape as receiver delivery signatures, but it is signed with the route's alert notification secret rather than an endpoint signing secret. Older local alert records without a stored route secret fall back to `HOOKRELAY_ALERT_NOTIFICATION_SIGNING_SECRET`. That keeps alert notification receivers able to verify integrity and freshness without exposing receiver endpoint secrets to alert targets.
 
 HookRelay records the outcome on the alert record:
 
@@ -433,7 +434,7 @@ Operators can retry a failed or pending webhook notification manually with:
 POST /api/failure-alerts/:alert_id/retry-notification
 ```
 
-The retry endpoint requires an active owner-scoped `operator` or `admin` key, reuses the original alert record, posts the same alert payload, and returns the updated notification outcome fields. Delivered notifications return `409` rather than sending a duplicate, and non-webhook targets return `409` because they do not have an external notification target. Failed notification posts do not change the receiver delivery attempt status and do not block receiver retry scheduling; they are visible on `GET /api/failure-alerts` for operator follow-up. Automatic notification retry jobs, signed notification payloads, email providers, and dead-lettered notification jobs are intentionally deferred.
+The retry endpoint requires an active owner-scoped `operator` or `admin` key, reuses the original alert record and signing secret snapshot, posts the same alert payload, and returns the updated notification outcome fields. Delivered notifications return `409` rather than sending a duplicate, and non-webhook targets return `409` because they do not have an external notification target. Failed notification posts do not change the receiver delivery attempt status and do not block receiver retry scheduling; they are visible on `GET /api/failure-alerts` for operator follow-up. Automatic notification retry jobs, email providers, secret rotation, and dead-lettered notification jobs are intentionally deferred.
 
 ## Alert Acknowledgement
 
@@ -472,7 +473,9 @@ Contract discovery exposes alert routing as:
     "notification_signing": {
       "algorithm": "hmac_sha256",
       "signed_payload": "HookRelay-Alert-Timestamp.raw JSON alert notification body",
-      "secret_source": "HOOKRELAY_ALERT_NOTIFICATION_SIGNING_SECRET",
+      "secret_source": "receiver_failure_alert_routes.notification_signing_secret",
+      "fallback_secret_source": "HOOKRELAY_ALERT_NOTIFICATION_SIGNING_SECRET",
+      "route_secret_rule": "Alert routes store a generated or operator-supplied notification_signing_secret; emitted alerts snapshot it for manual retry.",
       "headers": ["HookRelay-Alert-Timestamp", "HookRelay-Alert-Signature"]
     },
     "suppression_window_max_seconds": 86400,
