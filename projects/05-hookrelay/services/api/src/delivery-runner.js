@@ -1,5 +1,5 @@
 import { deliveryHttpTimeoutMs, retryDelaysSeconds } from "./config.js";
-import { dispatchAlertNotification } from "./alert-notifier.js";
+import { dispatchAndRecordAlertNotification } from "./alert-notifier.js";
 import { createTraceId, NoopObservability } from "./observability.js";
 import { classifyReceiverFailure } from "./receiver-failure.js";
 
@@ -23,42 +23,13 @@ async function dispatchFailureAlerts({ alerts, store, observability, traceId, pa
   let skipped = 0;
 
   for (const alert of alerts) {
-    let result;
-    try {
-      result = await observability.traceSpan(
-        {
-          name: "hookrelay.alert.notification",
-          traceId,
-          parentSpanId,
-          deliveryId: alert.delivery_id,
-          eventId: alert.event_id,
-          endpointId: alert.endpoint_id,
-          attributes: {
-            alert_id: alert.alert_id,
-            route_id: alert.route_id,
-            target_type: alert.target_type,
-            target: alert.target
-          }
-        },
-        async (span) => {
-          const notification = await dispatchAlertNotification(alert);
-          span.attributes.notification_status = notification.status;
-          span.attributes.notification_response_status = notification.responseStatus;
-          if (notification.error) {
-            span.attributes.error = notification.error;
-          }
-          await store.updateFailureAlertNotification({
-            alertId: alert.alert_id,
-            status: notification.status,
-            responseStatus: notification.responseStatus,
-            error: notification.error
-          });
-          return notification;
-        }
-      );
-    } catch (error) {
-      result = { status: "failed", responseStatus: null, error: errorMessage(error) };
-    }
+    const { notification: result } = await dispatchAndRecordAlertNotification({
+      alert,
+      store,
+      observability,
+      traceId,
+      parentSpanId
+    });
 
     if (result.status === "delivered") {
       delivered += 1;

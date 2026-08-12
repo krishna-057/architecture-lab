@@ -1,5 +1,7 @@
 import Fastify from "fastify";
+import { dispatchAndRecordAlertNotification } from "./alert-notifier.js";
 import {
+  alertNotificationRetryDelaysSeconds,
   allowedOrigins,
   endpointRateLimitPerMinute,
   endpointRateLimitWindowSeconds,
@@ -382,15 +384,18 @@ export function createHookRelayApp({
       route_endpoint: "/api/alert-routes",
       alert_endpoint: "/api/failure-alerts",
       acknowledgement_endpoint: "POST /api/failure-alerts/:alert_id/acknowledge",
+      notification_retry_endpoint: "POST /api/failure-alerts/:alert_id/retry-notification",
       required_roles: failureAlertRoles,
       owner_rule: "Alert routes and emitted alerts are scoped to the active API key owner_id.",
       trigger_statuses: ["failed", "dead_letter"],
       route_statuses: failureAlertDeliveryStatuses,
       target_types: failureAlertTargetTypes,
+      notification_retry_delays_seconds: alertNotificationRetryDelaysSeconds,
       suppression_window_max_seconds: failureAlertSuppressionMaxSeconds,
       delivery_match: "A failed/dead-letter delivery matches enabled routes by owner_id, delivery_status, and optional failure_class.",
       dispatch_mode: "local_alert_record_before_external_integrations",
       notification_rule: "Webhook alert routes post a compact alert payload best-effort after the local alert record is created; dashboard and email targets remain local skipped notification records.",
+      notification_retry_rule: "Webhook notification attempts increment notification_attempt_count and set notification_next_retry_at after failures; manual retry reuses the same alert record.",
       suppression_rule: "A route with suppression_window_seconds > 0 emits one alert, then suppresses repeated matches until last_alert_at plus the window.",
       acknowledgement_rule: "Operators/admins acknowledge owner-scoped alerts once with acknowledged_by and a human-readable note."
     },
@@ -626,6 +631,45 @@ export function createHookRelayApp({
     }
 
     return result;
+  });
+
+  app.post("/api/failure-alerts/:alert_id/retry-notification", async (request, reply) => {
+    const operator = await authenticateProducer({
+      request,
+      reply,
+      store,
+      requiredRoles: failureAlertRoles,
+      action: "Failure alert notification retry"
+    });
+    if (!operator) {
+      return reply;
+    }
+
+    const alertId = String(request.params?.alert_id ?? "").trim();
+    if (!alertId) {
+      return reply.status(400).send({ error: "alert_id is required" });
+    }
+
+    const alert = await store.getFailureAlert({ ownerId: operator.owner_id, alertId });
+    if (!alert) {
+      return reply.status(404).send({ error: "failure alert was not found" });
+    }
+
+    if (alert.target_type !== "webhook") {
+      return reply.status(409).send({ error: "failure alert notification target is not retryable", alert });
+    }
+
+    if (alert.notification_status === "delivered") {
+      return reply.status(409).send({ error: "failure alert notification is already delivered", alert });
+    }
+
+    const { alert: updatedAlert } = await dispatchAndRecordAlertNotification({
+      alert,
+      store,
+      observability,
+      traceId: createTraceId()
+    });
+    return updatedAlert ?? reply.status(500).send({ error: "failure alert notification retry could not be recorded" });
   });
 
   app.get("/api/delivery-views", async (request, reply) => {

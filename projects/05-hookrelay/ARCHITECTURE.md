@@ -53,6 +53,7 @@ API and worker operations also write provider-neutral observability spans. In me
 | `GET /api/observability/spans` | Return recent provider-neutral spans with trace ids, span ids, timing, status, and delivery attributes. |
 | `GET /api/failure-alerts` | Return recent owner-scoped receiver failure alerts. |
 | `POST /api/failure-alerts/:alert_id/acknowledge` | Add acknowledgement audit fields to one owner-scoped unacknowledged alert. |
+| `POST /api/failure-alerts/:alert_id/retry-notification` | Retry a pending/failed owner-scoped webhook alert notification and update notification retry tracking. |
 | `GET /api/alert-routes` | List owner-scoped receiver failure alert routing rules. |
 | `POST /api/alert-routes` | Create an enabled local alert route for failed/dead-letter deliveries, optionally with a suppression window. |
 | `DELETE /api/alert-routes/:route_id` | Delete one owner-scoped alert route. |
@@ -151,7 +152,7 @@ Saved delivery views are an operator/admin convenience on top of the same delive
 
 Delivery export uses the same search filters but returns a synchronous `text/csv` snapshot from `GET /api/deliveries/export`. Exports require an active `operator` or `admin` key and join delivery attempts back to endpoint ownership, so the exported rows are limited to the key's `owner_id`. The first export path is capped at 1000 newest matching rows and ignores cursors; scheduled/background export jobs are deferred until delivery history has real retention and file lifecycle requirements.
 
-Receiver failure alert routing stays local for this slice. Operators/admins define owner-scoped routes through `/api/alert-routes`, matching on `failed` or `dead_letter` status plus an optional `failure_class`. A route can set `suppression_window_seconds`; after it emits an alert, repeated matches are skipped until `last_alert_at` plus that window. When the worker records a failed or dead-letter attempt outside any active suppression window, it asks storage to create local alert records for matching enabled routes. Webhook alert targets are then dispatched best-effort from the worker, and the alert record stores `notification_status`, response status, error, and attempted timestamp. Operators/admins acknowledge those records through `POST /api/failure-alerts/:alert_id/acknowledge`, which writes `acknowledged_at`, `acknowledged_by`, and `acknowledgement_note` once without mutating the original delivery failure. This proves where alert policy, external notification delivery, and operator audit attach to the delivery lifecycle without introducing email credentials, notification retry jobs, escalation schedules, or tenant team preferences too early.
+Receiver failure alert routing stays local for this slice. Operators/admins define owner-scoped routes through `/api/alert-routes`, matching on `failed` or `dead_letter` status plus an optional `failure_class`. A route can set `suppression_window_seconds`; after it emits an alert, repeated matches are skipped until `last_alert_at` plus that window. When the worker records a failed or dead-letter attempt outside any active suppression window, it asks storage to create local alert records for matching enabled routes. Webhook alert targets are then dispatched best-effort from the worker, and the alert record stores `notification_status`, response status, error, attempted timestamp, attempt count, next retry timestamp, and retry exhaustion state. Operators/admins can retry pending/failed webhook notifications through `POST /api/failure-alerts/:alert_id/retry-notification` without creating another alert record, and they acknowledge records through `POST /api/failure-alerts/:alert_id/acknowledge`. This proves where alert policy, external notification delivery, retry evidence, and operator audit attach to the delivery lifecycle without introducing automatic notification jobs, email credentials, escalation schedules, or tenant team preferences too early.
 
 ## Observability
 
@@ -174,5 +175,5 @@ Each span has `trace_id`, `span_id`, optional parent span, delivery/event/endpoi
 - Approval-backed producer key lifecycle audit.
 - Tenant-specific retry overrides and multi-dimensional producer quotas.
 - Receiver SDKs.
-- Receiver-specific failure dashboards, shared/team delivery views, external alert integrations, scheduled exports, and escalation policies.
+- Receiver-specific failure dashboards, shared/team delivery views, automatic notification workers, email alert integrations, scheduled exports, and escalation policies.
 - OpenTelemetry exporters, trace sampling, and long-retention latency dashboards.

@@ -71,6 +71,7 @@ Default URLs:
 | `GET /api/observability/spans` | List recent event ingestion, enqueue, replay, worker, and outbound HTTP spans. |
 | `GET /api/failure-alerts` | List recent owner-scoped receiver failure alerts emitted by matching alert routes. |
 | `POST /api/failure-alerts/:alert_id/acknowledge` | Require an owner-scoped operator/admin key and add acknowledgement audit metadata to one unacknowledged failure alert. |
+| `POST /api/failure-alerts/:alert_id/retry-notification` | Require an owner-scoped operator/admin key and retry a pending/failed webhook alert notification while updating retry tracking fields. |
 | `GET /api/alert-routes` | List owner-scoped receiver failure alert routes for the active operator/admin API key. |
 | `POST /api/alert-routes` | Create a local alert route that matches failed/dead-letter deliveries by optional failure class, target, suppression window, and webhook notification target. |
 | `DELETE /api/alert-routes/:route_id` | Delete one owner-scoped receiver failure alert route. |
@@ -99,5 +100,5 @@ This is a strong backend/system design project because it focuses on real produc
 
 - Full tenant user accounts, team membership, scoped permissions, and approval-backed key lifecycle workflows.
 - Tenant-specific retry overrides and multi-dimensional producer quotas.
-- Shared/team delivery views, external alert integrations, scheduled exports, and long-retention delivery analytics.
+- Shared/team delivery views, automatic notification retry workers, email alert integrations, scheduled exports, and long-retention delivery analytics.
 - OpenTelemetry exporters, trace sampling, and long-retention latency dashboards.

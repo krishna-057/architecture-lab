@@ -1,5 +1,34 @@
 # Daily Log
 
+## 2026-08-12
+
+Added HookRelay notification retry tracking.
+
+Added:
+- Alert notification retry fields in memory and PostgreSQL storage: `notification_attempt_count`, `notification_next_retry_at`, and `notification_retry_exhausted`.
+- A local notification retry ladder of `60`, `300`, and `900` seconds for failed webhook alert notification attempts.
+- `POST /api/failure-alerts/:alert_id/retry-notification` for owner-scoped operator/admin manual retries of pending or failed webhook alert notifications.
+- Shared alert notification dispatch-and-record workflow used by both worker alert delivery and manual retry.
+- Dashboard display for notification attempts, next retry time, retry exhaustion, and a `Retry Notification` action for pending/failed webhook alerts.
+- Delivery contract discovery, README, architecture, delivery contract, decision, interview-note, schema, and validation-marker updates explaining why retry tracking is alert-local before automatic notification jobs.
+
+Validated the work by running:
+- `npm run check` from `projects/05-hookrelay`
+- `npm run check -w @hookrelay/api` from `projects/05-hookrelay`
+- `npx tsc --noEmit -p apps/web/tsconfig.json` from `projects/05-hookrelay`
+- `npm run build -w @hookrelay/web` from `projects/05-hookrelay`
+- A local Fastify/worker smoke test covering initial failed notification attempt tracking, skipped dashboard retry rejection, successful manual webhook notification retry, delivered retry conflict, alert headers, and alert payload delivery id
+- `docker compose -f projects\05-hookrelay\compose.yaml config`
+- `git diff --check`
+
+Notes:
+- This run used `K:\AutoPilot_Projects\FlashReserve_run_20260810`, which was clean and up to date with GitHub at startup.
+- The local K: clone still had corrupted `node_modules` files under Fastify/AJV during the smoke test; npm refreshed local dependency files under K:, package metadata was restored out of the commit scope, and no project-heavy files were intentionally created on C:.
+- `npm install` reported existing high-severity audit findings; dependency upgrades remain out of scope for this feature.
+
+Next recommended task:
+- Add HookRelay signed alert notifications.
+
 ## 2026-08-11
 
 Added HookRelay external notification delivery.

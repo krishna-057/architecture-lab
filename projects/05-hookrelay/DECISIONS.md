@@ -360,3 +360,22 @@ Rejected alternatives:
 
 Follow-up:
 Add notification retry jobs, signed alert notifications, email provider configuration, and per-target delivery history.
+
+## 2026-08-12: Add Notification Retry Tracking
+
+Decision:
+Track webhook alert notification retry state on the alert record and add `POST /api/failure-alerts/:alert_id/retry-notification` for owner-scoped operator/admin manual retries. The record now stores attempt count, next retry timestamp, and retry exhaustion state alongside the existing notification status, response status, error, and attempted timestamp.
+
+Why:
+- Failed operator notifications need their own retry evidence, but they should still remain separate from receiver delivery attempts.
+- Manual retry is the smallest useful workflow before adding a second queue, background notification workers, or incident escalation policy.
+- Keeping retry state on the alert record preserves the local-alert-first audit trail and avoids creating duplicate alert records for the same route match.
+- A short fixed notification retry ladder is easy to explain and gives operators a clear next-action timestamp without pretending automatic jobs exist yet.
+
+Rejected alternatives:
+- Add automatic notification retry jobs now: likely production direction, but it adds queue ownership and dead-letter semantics before manual retry behavior is proven.
+- Create a separate notification delivery history table now: useful later for per-target analytics, but too broad for a single alert notification slice.
+- Reuse receiver delivery retry state: incorrect boundary because receiver webhook delivery and operator alert notification are separate side effects.
+
+Follow-up:
+Add automatic notification retry workers, signed alert notification payloads, per-target notification history, and email provider configuration.

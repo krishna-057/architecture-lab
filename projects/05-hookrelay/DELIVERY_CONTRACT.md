@@ -343,6 +343,7 @@ POST /api/alert-routes
 DELETE /api/alert-routes/:route_id
 GET /api/failure-alerts
 POST /api/failure-alerts/:alert_id/acknowledge
+POST /api/failure-alerts/:alert_id/retry-notification
 ```
 
 Every route and emitted alert requires an active `operator` or `admin` API key and is scoped to the key's `owner_id`. A create request uses:
@@ -361,7 +362,7 @@ Every route and emitted alert requires an active `operator` or `admin` API key a
 
 `failure_class` is optional. `delivery_status` can be `failed`, `dead_letter`, or `any`. `target_type` is currently `dashboard`, `email`, or `webhook`. `webhook` targets must use an absolute URL and receive best-effort notification posts when a local alert record is created. `dashboard` and `email` targets are kept as local alert records with `notification_status: "skipped"` until dashboard-only and email credential workflows are added. `suppression_window_seconds` is optional; `0` disables suppression and positive values suppress repeated route matches after the route emits an alert.
 
-When the worker records a `failed` or `dead_letter` delivery, storage matches enabled routes by endpoint owner, delivery status, and optional failure class. Matching routes create alert records visible through `GET /api/failure-alerts`. Webhook routes then receive best-effort notification posts and store the notification outcome on the alert record. This keeps alerting attached to the durable delivery lifecycle while deferring notification retry jobs, escalation schedules, email providers, and team preferences.
+When the worker records a `failed` or `dead_letter` delivery, storage matches enabled routes by endpoint owner, delivery status, and optional failure class. Matching routes create alert records visible through `GET /api/failure-alerts`. Webhook routes then receive best-effort notification posts and store the notification outcome on the alert record. Failed webhook notification posts increment retry tracking fields and receive a suggested `notification_next_retry_at`. This keeps alerting attached to the durable delivery lifecycle while deferring automatic notification retry jobs, escalation schedules, email providers, and team preferences.
 
 ## Alert Suppression Windows
 
@@ -405,11 +406,26 @@ The request includes `Content-Type: application/json`, `X-HookRelay-Alert-Id`, a
   "notification_status": "delivered",
   "notification_response_status": 202,
   "notification_error": null,
-  "notification_attempted_at": "2026-08-11T00:00:01.000Z"
+  "notification_attempted_at": "2026-08-11T00:00:01.000Z",
+  "notification_attempt_count": 1,
+  "notification_next_retry_at": null,
+  "notification_retry_exhausted": false
 }
 ```
 
-`notification_status` can be `pending`, `delivered`, `failed`, or `skipped`. Failed notification posts do not change the delivery attempt status and do not block retry scheduling; they are visible on `GET /api/failure-alerts` for operator follow-up. Notification retries, signed notification payloads, email providers, and dead-lettered notification jobs are intentionally deferred.
+`notification_status` can be `pending`, `delivered`, `failed`, or `skipped`. Webhook notification attempts increment `notification_attempt_count`. Failed attempts set `notification_next_retry_at` using the current local retry ladder:
+
+```text
+60 seconds, 5 minutes, 15 minutes
+```
+
+Operators can retry a failed or pending webhook notification manually with:
+
+```text
+POST /api/failure-alerts/:alert_id/retry-notification
+```
+
+The retry endpoint requires an active owner-scoped `operator` or `admin` key, reuses the original alert record, posts the same alert payload, and returns the updated notification outcome fields. Delivered notifications return `409` rather than sending a duplicate, and non-webhook targets return `409` because they do not have an external notification target. Failed notification posts do not change the receiver delivery attempt status and do not block receiver retry scheduling; they are visible on `GET /api/failure-alerts` for operator follow-up. Automatic notification retry jobs, signed notification payloads, email providers, and dead-lettered notification jobs are intentionally deferred.
 
 ## Alert Acknowledgement
 
@@ -438,14 +454,18 @@ Contract discovery exposes alert routing as:
     "route_endpoint": "/api/alert-routes",
     "alert_endpoint": "/api/failure-alerts",
     "acknowledgement_endpoint": "POST /api/failure-alerts/:alert_id/acknowledge",
+    "notification_retry_endpoint": "POST /api/failure-alerts/:alert_id/retry-notification",
     "required_roles": ["operator", "admin"],
     "owner_rule": "Alert routes and emitted alerts are scoped to the active API key owner_id.",
     "trigger_statuses": ["failed", "dead_letter"],
     "route_statuses": ["failed", "dead_letter", "any"],
     "target_types": ["dashboard", "email", "webhook"],
+    "notification_retry_delays_seconds": [60, 300, 900],
     "suppression_window_max_seconds": 86400,
     "delivery_match": "A failed/dead-letter delivery matches enabled routes by owner_id, delivery_status, and optional failure_class.",
     "dispatch_mode": "local_alert_record_before_external_integrations",
+    "notification_rule": "Webhook alert routes post a compact alert payload best-effort after the local alert record is created; dashboard and email targets remain local skipped notification records.",
+    "notification_retry_rule": "Webhook notification attempts increment notification_attempt_count and set notification_next_retry_at after failures; manual retry reuses the same alert record.",
     "suppression_rule": "A route with suppression_window_seconds > 0 emits one alert, then suppresses repeated matches until last_alert_at plus the window.",
     "acknowledgement_rule": "Operators/admins acknowledge owner-scoped alerts once with acknowledged_by and a human-readable note."
   }

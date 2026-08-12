@@ -140,14 +140,17 @@ type DeliveryContract = {
     route_endpoint: string;
     alert_endpoint: string;
     acknowledgement_endpoint: string;
+    notification_retry_endpoint: string;
     required_roles: string[];
     owner_rule: string;
     trigger_statuses: string[];
     route_statuses: string[];
     target_types: string[];
+    notification_retry_delays_seconds: number[];
     suppression_window_max_seconds: number;
     delivery_match: string;
     dispatch_mode: string;
+    notification_retry_rule: string;
     suppression_rule: string;
     acknowledgement_rule: string;
   };
@@ -251,6 +254,9 @@ type FailureAlert = {
   notification_response_status: number | null;
   notification_error: string | null;
   notification_attempted_at: string | null;
+  notification_attempt_count: number;
+  notification_next_retry_at: string | null;
+  notification_retry_exhausted: boolean;
   acknowledged_at: string | null;
   acknowledged_by: string | null;
   acknowledgement_note: string | null;
@@ -654,6 +660,19 @@ export default function HookRelayHome() {
       setStatusMessage(`Acknowledged alert ${alert.alert_id}.`);
     } catch (error) {
       setStatusMessage(error instanceof Error ? error.message : "Acknowledging the failure alert failed.");
+    }
+  }
+
+  async function retryFailureAlertNotification(alertId: string) {
+    try {
+      const alert = await requestJson<FailureAlert>(`/api/failure-alerts/${alertId}/retry-notification`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${producerApiKey}` }
+      });
+      setFailureAlerts((current) => current.map((candidate) => (candidate.alert_id === alert.alert_id ? alert : candidate)));
+      setStatusMessage(`Retried alert notification ${alert.alert_id}.`);
+    } catch (error) {
+      setStatusMessage(error instanceof Error ? error.message : "Retrying the alert notification failed.");
     }
   }
 
@@ -1169,7 +1188,17 @@ export default function HookRelayHome() {
                       {alert.notification_response_status ? ` / ${alert.notification_response_status}` : ""}
                       {alert.notification_attempted_at ? ` / ${formatTime(alert.notification_attempted_at)}` : ""}
                     </dd>
+                    <dd>
+                      attempts {alert.notification_attempt_count}
+                      {alert.notification_next_retry_at ? ` / next ${formatTime(alert.notification_next_retry_at)}` : ""}
+                      {alert.notification_retry_exhausted ? " / exhausted" : ""}
+                    </dd>
                     {alert.notification_error ? <dd>{alert.notification_error}</dd> : null}
+                    {alert.target_type === "webhook" && alert.notification_status !== "delivered" ? (
+                      <button type="button" onClick={() => void retryFailureAlertNotification(alert.alert_id)}>
+                        Retry Notification
+                      </button>
+                    ) : null}
                     {alert.acknowledged_at ? (
                       <dd>
                         {alert.acknowledged_by ?? "operator"} / {formatTime(alert.acknowledged_at)} / {alert.acknowledgement_note}

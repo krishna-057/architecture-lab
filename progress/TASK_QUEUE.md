@@ -6,10 +6,11 @@ Tasks should stay small enough for one focused session.
 
 ### Ready
 
-- [ ] Add HookRelay notification retry tracking.
+- [ ] Add HookRelay signed alert notifications.
 
 ### Completed
 
+- [x] Add HookRelay notification retry tracking.
 - [x] Add HookRelay external notification delivery.
 - [x] Add HookRelay alert suppression windows.
 - [x] Add HookRelay alert acknowledgement workflow.

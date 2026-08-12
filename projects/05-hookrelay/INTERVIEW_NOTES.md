@@ -75,6 +75,8 @@ Observability should attach one trace across event ingestion, job enqueue, each 
 - Suppression skips duplicate alert records only; delivery attempts still retain their status and `failure_class`, so debugging evidence remains available.
 - Webhook alert notifications are best-effort after local alert creation. The alert record stores `notification_status`, response status, error, and attempted timestamp.
 - Notification delivery is intentionally separate from receiver delivery retry state; a failed operator notification should not rewrite the receiver attempt status.
+- Notification retry tracking stays on the alert record with attempt count, next retry timestamp, and exhaustion state. Manual retry reuses the same alert id so the operator timeline stays compact.
+- Automatic notification retry jobs are deferred until there is enough signal to justify a second queue and per-target delivery history.
 - This is intentionally not a full alerting system yet; it creates the durable field that later dashboards, alerts, and endpoint-specific retry policy can use.
 
 ## Endpoint Rate Limit Talking Points

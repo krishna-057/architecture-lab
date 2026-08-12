@@ -115,6 +115,9 @@ create table if not exists receiver_failure_alerts (
   notification_response_status integer,
   notification_error text,
   notification_attempted_at timestamptz,
+  notification_attempt_count integer not null default 0 check (notification_attempt_count >= 0),
+  notification_next_retry_at timestamptz,
+  notification_retry_exhausted boolean not null default false,
   acknowledged_at timestamptz,
   acknowledged_by text,
   acknowledgement_note text,
@@ -144,6 +147,9 @@ alter table receiver_failure_alerts
   add column if not exists notification_response_status integer,
   add column if not exists notification_error text,
   add column if not exists notification_attempted_at timestamptz,
+  add column if not exists notification_attempt_count integer not null default 0,
+  add column if not exists notification_next_retry_at timestamptz,
+  add column if not exists notification_retry_exhausted boolean not null default false,
   add column if not exists acknowledged_at timestamptz,
   add column if not exists acknowledged_by text,
   add column if not exists acknowledgement_note text;
@@ -154,6 +160,13 @@ alter table receiver_failure_alerts
 alter table receiver_failure_alerts
   add constraint receiver_failure_alerts_notification_status_check
   check (notification_status in ('pending', 'delivered', 'failed', 'skipped'));
+
+alter table receiver_failure_alerts
+  drop constraint if exists receiver_failure_alerts_notification_attempt_count_check;
+
+alter table receiver_failure_alerts
+  add constraint receiver_failure_alerts_notification_attempt_count_check
+  check (notification_attempt_count >= 0);
 
 alter table receiver_failure_alert_routes
   add column if not exists suppression_window_seconds integer not null default 0,
