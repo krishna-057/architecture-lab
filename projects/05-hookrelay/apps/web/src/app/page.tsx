@@ -147,6 +147,13 @@ type DeliveryContract = {
     route_statuses: string[];
     target_types: string[];
     notification_retry_delays_seconds: number[];
+    notification_signing: {
+      algorithm: string;
+      signed_payload: string;
+      secret_source: string;
+      secret_preview: string;
+      headers: string[];
+    };
     suppression_window_max_seconds: number;
     delivery_match: string;
     dispatch_mode: string;

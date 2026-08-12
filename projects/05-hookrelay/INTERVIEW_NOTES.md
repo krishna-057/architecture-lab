@@ -77,6 +77,8 @@ Observability should attach one trace across event ingestion, job enqueue, each 
 - Notification delivery is intentionally separate from receiver delivery retry state; a failed operator notification should not rewrite the receiver attempt status.
 - Notification retry tracking stays on the alert record with attempt count, next retry timestamp, and exhaustion state. Manual retry reuses the same alert id so the operator timeline stays compact.
 - Automatic notification retry jobs are deferred until there is enough signal to justify a second queue and per-target delivery history.
+- Alert notifications are signed with `HookRelay-Alert-Timestamp` and `HookRelay-Alert-Signature` over `timestamp.rawBody`, using a separate alert notification secret instead of receiver endpoint secrets.
+- Separate alert signing keeps notification targets from depending on receiver credentials and mirrors the delivery signature model without coupling the two side effects.
 - This is intentionally not a full alerting system yet; it creates the durable field that later dashboards, alerts, and endpoint-specific retry policy can use.
 
 ## Endpoint Rate Limit Talking Points

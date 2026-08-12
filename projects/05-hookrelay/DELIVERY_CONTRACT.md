@@ -399,7 +399,15 @@ Webhook alert notification delivery is best-effort and synchronous with worker p
 }
 ```
 
-The request includes `Content-Type: application/json`, `X-HookRelay-Alert-Id`, and `X-HookRelay-Delivery-Id`. HookRelay records the outcome on the alert record:
+The request includes `Content-Type: application/json`, `X-HookRelay-Alert-Id`, `X-HookRelay-Delivery-Id`, `HookRelay-Alert-Timestamp`, and `HookRelay-Alert-Signature`. The alert signature uses HMAC-SHA256 over:
+
+```text
+<HookRelay-Alert-Timestamp>.<raw JSON alert notification body>
+```
+
+`HookRelay-Alert-Signature` uses the same `v1=<hex digest>` shape as receiver delivery signatures, but it is signed with `HOOKRELAY_ALERT_NOTIFICATION_SIGNING_SECRET` rather than an endpoint signing secret. That keeps alert notification receivers able to verify integrity and freshness without exposing receiver endpoint secrets to alert targets.
+
+HookRelay records the outcome on the alert record:
 
 ```json
 {
@@ -461,6 +469,12 @@ Contract discovery exposes alert routing as:
     "route_statuses": ["failed", "dead_letter", "any"],
     "target_types": ["dashboard", "email", "webhook"],
     "notification_retry_delays_seconds": [60, 300, 900],
+    "notification_signing": {
+      "algorithm": "hmac_sha256",
+      "signed_payload": "HookRelay-Alert-Timestamp.raw JSON alert notification body",
+      "secret_source": "HOOKRELAY_ALERT_NOTIFICATION_SIGNING_SECRET",
+      "headers": ["HookRelay-Alert-Timestamp", "HookRelay-Alert-Signature"]
+    },
     "suppression_window_max_seconds": 86400,
     "delivery_match": "A failed/dead-letter delivery matches enabled routes by owner_id, delivery_status, and optional failure_class.",
     "dispatch_mode": "local_alert_record_before_external_integrations",

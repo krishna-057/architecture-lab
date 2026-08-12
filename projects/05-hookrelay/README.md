@@ -19,7 +19,7 @@ Added:
 - `services/api/src/rate-limiter.js` for endpoint-scoped fixed-window event ingestion limits, backed by Redis when `REDIS_URL` is configured.
 - `services/api/src/producer-auth.js` for API-key hashing, previews, roles, lifecycle statuses, and bearer/header extraction.
 - `services/api/src/receiver-failure.js` for classifying receiver HTTP, timeout, network, and internal delivery failures.
-- `services/api/src/alert-notifier.js` for best-effort webhook notification delivery from local alert records.
+- `services/api/src/alert-notifier.js` for signed, best-effort webhook notification delivery from local alert records.
 - `scripts/check-workspace.mjs` for dependency-light validation of the scaffold markers.
 
 Run locally:
@@ -90,7 +90,7 @@ Default URLs:
 | `DELETE /api/delivery-views/:view_id` | Delete one owner-scoped saved delivery view. |
 | `POST /api/deliveries/:delivery_id/replay` | Require an owner-scoped operator/admin key and replay reason, then create a new queued attempt for an existing event. |
 
-When `DATABASE_URL` is set, producer API key hashes, endpoints, events, delivery attempts, receiver failure classes, alert routes, alert records, alert notification outcomes, saved delivery views, and observability spans are stored in PostgreSQL. When `REDIS_URL` is set, new delivery attempts are also enqueued into BullMQ with the documented delay ladder plus bounded jitter, and endpoint rate limits use Redis fixed-window counters. Without those variables, the API still runs in in-memory mode for fast local checks.
+When `DATABASE_URL` is set, producer API key hashes, endpoints, events, delivery attempts, receiver failure classes, alert routes, alert records, alert notification outcomes, saved delivery views, and observability spans are stored in PostgreSQL. When `REDIS_URL` is set, new delivery attempts are also enqueued into BullMQ with the documented delay ladder plus bounded jitter, and endpoint rate limits use Redis fixed-window counters. Webhook alert notifications are signed with `HOOKRELAY_ALERT_NOTIFICATION_SIGNING_SECRET`. Without those variables, the API still runs in in-memory mode for fast local checks.
 
 ## Why This Project Matters
 

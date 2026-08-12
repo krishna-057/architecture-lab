@@ -379,3 +379,22 @@ Rejected alternatives:
 
 Follow-up:
 Add automatic notification retry workers, signed alert notification payloads, per-target notification history, and email provider configuration.
+
+## 2026-08-12: Add Signed Alert Notifications
+
+Decision:
+Sign webhook alert notification requests with `HookRelay-Alert-Timestamp` and `HookRelay-Alert-Signature`. The signature is HMAC-SHA256 over `<timestamp>.<raw JSON alert notification body>` using `HOOKRELAY_ALERT_NOTIFICATION_SIGNING_SECRET`.
+
+Why:
+- Alert notification targets need a way to verify that the alert came from HookRelay and that the JSON body was not changed in transit.
+- Reusing the receiver delivery signature shape keeps the mental model consistent while keeping alert notification secrets separate from endpoint signing secrets.
+- Signing the exact raw JSON body avoids ambiguity from parsed object ordering or whitespace.
+- A single local signing secret is enough for this slice before tenant-managed alert destination secrets or rotation workflows exist.
+
+Rejected alternatives:
+- Reuse endpoint signing secrets: incorrect boundary because alert targets may be different systems from receiver endpoints.
+- Add per-route notification secrets now: useful later, but it requires secret lifecycle UI and storage before alert targets are more mature.
+- Sign only alert ids: simpler, but it would not protect the notification payload body.
+
+Follow-up:
+Add per-route alert signing secrets, timestamp tolerance examples for alert receivers, secret rotation, and automatic notification retry workers.

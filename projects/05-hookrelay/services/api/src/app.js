@@ -2,6 +2,7 @@ import Fastify from "fastify";
 import { dispatchAndRecordAlertNotification } from "./alert-notifier.js";
 import {
   alertNotificationRetryDelaysSeconds,
+  alertNotificationSigningSecret,
   allowedOrigins,
   endpointRateLimitPerMinute,
   endpointRateLimitWindowSeconds,
@@ -391,6 +392,13 @@ export function createHookRelayApp({
       route_statuses: failureAlertDeliveryStatuses,
       target_types: failureAlertTargetTypes,
       notification_retry_delays_seconds: alertNotificationRetryDelaysSeconds,
+      notification_signing: {
+        algorithm: "hmac_sha256",
+        signed_payload: "HookRelay-Alert-Timestamp.raw JSON alert notification body",
+        secret_source: "HOOKRELAY_ALERT_NOTIFICATION_SIGNING_SECRET",
+        secret_preview: `${alertNotificationSigningSecret.slice(0, 7)}...`,
+        headers: ["HookRelay-Alert-Timestamp", "HookRelay-Alert-Signature"]
+      },
       suppression_window_max_seconds: failureAlertSuppressionMaxSeconds,
       delivery_match: "A failed/dead-letter delivery matches enabled routes by owner_id, delivery_status, and optional failure_class.",
       dispatch_mode: "local_alert_record_before_external_integrations",

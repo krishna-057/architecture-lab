@@ -1,4 +1,5 @@
-import { deliveryHttpTimeoutMs } from "./config.js";
+import crypto from "node:crypto";
+import { alertNotificationSigningSecret, deliveryHttpTimeoutMs } from "./config.js";
 
 function errorMessage(error) {
   return error instanceof Error ? error.message : String(error);
@@ -16,6 +17,29 @@ export function buildAlertNotificationPayload(alert) {
     delivery_status: alert.delivery_status,
     message: alert.message,
     created_at: alert.created_at
+  };
+}
+
+export function signAlertNotification({ body, timestamp = Math.floor(Date.now() / 1000), secret = alertNotificationSigningSecret }) {
+  const signedPayload = `${timestamp}.${body}`;
+  const digest = crypto.createHmac("sha256", secret).update(signedPayload).digest("hex");
+
+  return {
+    "HookRelay-Alert-Timestamp": String(timestamp),
+    "HookRelay-Alert-Signature": `v1=${digest}`
+  };
+}
+
+export function buildAlertNotificationRequest(alert) {
+  const body = JSON.stringify(buildAlertNotificationPayload(alert));
+  return {
+    body,
+    headers: {
+      "Content-Type": "application/json",
+      "X-HookRelay-Alert-Id": alert.alert_id,
+      "X-HookRelay-Delivery-Id": alert.delivery_id,
+      ...signAlertNotification({ body })
+    }
   };
 }
 
@@ -76,14 +100,11 @@ export async function dispatchAlertNotification(alert, { fetchImpl = fetch, time
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
   try {
+    const request = buildAlertNotificationRequest(alert);
     const response = await fetchImpl(alert.target, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-HookRelay-Alert-Id": alert.alert_id,
-        "X-HookRelay-Delivery-Id": alert.delivery_id
-      },
-      body: JSON.stringify(buildAlertNotificationPayload(alert)),
+      headers: request.headers,
+      body: request.body,
       signal: controller.signal
     });
 

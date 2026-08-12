@@ -2,6 +2,33 @@
 
 ## 2026-08-12
 
+Added HookRelay signed alert notifications.
+
+Added:
+- HMAC-SHA256 signing for webhook alert notification requests with `HookRelay-Alert-Timestamp` and `HookRelay-Alert-Signature`.
+- `signAlertNotification` and `buildAlertNotificationRequest` helpers so worker delivery and manual notification retry use the same signed request shape.
+- `HOOKRELAY_ALERT_NOTIFICATION_SIGNING_SECRET` local configuration, deliberately separate from receiver endpoint signing secrets.
+- Delivery contract discovery and documentation for alert notification signature headers, signed payload, algorithm, and secret source.
+- README, architecture, delivery contract, decision, interview-note, env example, and validation-marker updates explaining why alert signing is separate from receiver delivery signing.
+
+Validated the work by running:
+- `npm run check` from `projects/05-hookrelay`
+- `npm run check -w @hookrelay/api` from `projects/05-hookrelay`
+- `npx tsc --noEmit -p apps/web/tsconfig.json` from `projects/05-hookrelay`
+- `npm run build -w @hookrelay/web` from `projects/05-hookrelay`
+- A local Fastify/worker smoke test covering contract discovery of alert signing headers, signed webhook alert notification delivery, signature verification over the raw alert notification body, and delivered alert status
+- `docker compose -f projects\05-hookrelay\compose.yaml config`
+- `git diff --check`
+
+Notes:
+- This run used `K:\AutoPilot_Projects\FlashReserve_run_20260810`, which was clean and up to date with GitHub at startup.
+- Alert notification signing currently uses one local environment secret. Per-route/per-destination alert secrets and rotation are intentionally deferred.
+
+Next recommended task:
+- Add HookRelay per-route alert signing secrets.
+
+## 2026-08-12
+
 Added HookRelay notification retry tracking.
 
 Added:
