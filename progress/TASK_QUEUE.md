@@ -2,11 +2,17 @@
 
 Tasks should stay small enough for one focused session.
 
-## Active Project: HookRelay
+## Active Project: CollabFlow
 
 ### Ready
 
-No ready tasks remain for the current HookRelay portfolio slice.
+- [ ] Add CollabFlow durable update log compaction notes.
+
+### Completed
+
+- [x] Add CollabFlow optional PostgreSQL snapshot storage.
+
+## Completed Project: HookRelay
 
 ### Completed
 

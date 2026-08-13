@@ -8,6 +8,7 @@ The current slice is a local-first workspace shell with a small realtime sync pa
 - a Yjs document for title, notes, and task-list state
 - browser IndexedDB snapshots for offline persistence
 - a FastAPI API at `services/api` for workspace metadata, sync contract discovery, websocket fanout, and durable snapshot export
+- optional PostgreSQL snapshot storage when `DATABASE_URL` is configured, with JSON-file fallback for dependency-light local checks
 - `SYNC_CONTRACT.md` plus API discovery for the websocket room, Yjs update, and presence contract
 
 ## Architecture Focus
@@ -43,6 +44,15 @@ Local generated state is intentionally small and ignored:
 
 - browser IndexedDB stores the live local projection
 - `.data/snapshots.json` stores exported API snapshots when `SNAPSHOT_STORE_PATH` is not overridden
+- `.data/postgres` stores PostgreSQL data when `docker compose up postgres` is used
+
+Run the optional durable snapshot store:
+
+```powershell
+docker compose up postgres
+$env:DATABASE_URL="postgresql://collabflow:collabflow@localhost:5544/collabflow"
+npm run dev:api
+```
 
 ## First Slice Behavior
 
@@ -54,6 +64,8 @@ Local generated state is intentionally small and ignored:
 6. The browser can export a durable snapshot with `POST /api/workspaces/{workspace_id}/snapshots`.
 
 This is intentionally a development sync shell, not a production collaboration service. The websocket endpoint keeps room membership, update replay, and presence in process memory so the portfolio can demonstrate the collaboration boundary before adding authorization, persistent update logs, or compaction.
+
+When `DATABASE_URL` is set, exported workspace snapshots are stored in PostgreSQL tables initialized from `db/schema.sql`. This makes durable checkpoints restart-safe without changing the live collaboration rule: Yjs and IndexedDB still own active editing, while the API stores explicit checkpoints for recovery/export.
 
 ## Sync Contract
 

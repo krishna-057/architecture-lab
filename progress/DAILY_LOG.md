@@ -2,6 +2,36 @@
 
 ## 2026-08-13
 
+Added CollabFlow optional PostgreSQL snapshot storage.
+
+Added:
+- Optional `DATABASE_URL` path in the FastAPI API that initializes `collabflow_workspaces` and `collabflow_snapshots`.
+- PostgreSQL persistence for created workspaces, `sync_ready` status updates, and exported snapshots, while preserving the `.data/snapshots.json` fallback.
+- `db/schema.sql` and `compose.yaml` for a K:-scoped local PostgreSQL snapshot store.
+- `psycopg[binary]` dependency and `.env.example` configuration for durable snapshot mode.
+- README, architecture, sync contract, decision, interview-note, and validation-marker updates clarifying that PostgreSQL stores exported checkpoints, not live CRDT update history.
+- Task queue update moving the active project back to CollabFlow and marking this slice complete.
+
+Validated the work by running:
+- `npm run check` from `projects/04-collabflow`
+- `python -m compileall services\api\app` from `projects/04-collabflow`
+- `npx tsc --noEmit -p apps/web/tsconfig.json` from `projects/04-collabflow`
+- `npm run build -w @collabflow/web` from `projects/04-collabflow`
+- A direct FastAPI module smoke test covering file fallback workspace creation, snapshot creation, snapshot listing, and `.data/snapshots.json` persistence
+- `docker compose -f compose.yaml config` from `projects/04-collabflow`
+
+Notes:
+- This run continued from `K:\AutoPilot_Projects\FlashReserve_run_20260810`, which was clean and up to date with GitHub at startup.
+- Local workspace dependencies were restored with `npm install` under `projects/04-collabflow`; npm reported 4 high severity advisories, but dependency upgrades were outside this slice.
+- The standalone TypeScript check initially required `.next/types`; `npm run build -w @collabflow/web` generated them and the rerun passed.
+- Docker Desktop's Linux engine was not available, so a live PostgreSQL container smoke test could not run; compose configuration and schema checks passed.
+- Durable Yjs update logs, compaction, authorization, and production websocket scaling remain deferred.
+
+Next recommended task:
+- Add CollabFlow durable update log compaction notes.
+
+## 2026-08-13
+
 Added HookRelay alert receiver timestamp tolerance example.
 
 Added:

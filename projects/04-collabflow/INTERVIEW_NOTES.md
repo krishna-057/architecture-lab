@@ -17,6 +17,8 @@ Presence is intentionally documented in the sync contract but not persisted. Pre
 
 The future sync server should exchange Yjs binary updates and awareness messages. PostgreSQL should store workspace metadata and compacted snapshots, not become the live merge engine for keystroke-level edits.
 
+PostgreSQL now owns exported workspace snapshots when configured. That is deliberately narrower than a durable CRDT update log: snapshots are user-triggered checkpoints, while live updates still flow through Yjs, IndexedDB, and the development websocket room.
+
 ## Sync Contract Talking Points
 
 The websocket contract separates durable and ephemeral data. `yjs_update` messages are durable because they can rebuild document state or feed compaction. `awareness_update` messages are ephemeral because presence only describes current collaborator activity.
@@ -32,3 +34,5 @@ The first sync implementation uses the existing FastAPI service as a development
 The server deliberately does not inspect document fields. It treats `yjs_update` as an opaque CRDT payload, appends it to an in-memory replay list, and broadcasts it to peers. That means conflict semantics still live in Yjs, while the server owns connection management and message routing.
 
 The limitations are explicit. In-memory replay is useful for local demos and multi-tab validation, but it is not durable across API restarts and it does not solve compaction, authorization, backpressure, or horizontal scaling. Those are later architecture topics after the provider lifecycle is proven.
+
+The optional PostgreSQL slice improves restart safety for exported checkpoints without overclaiming production sync. In an interview, that distinction is the point: durable snapshots and durable collaboration history are related, but they are not the same problem.

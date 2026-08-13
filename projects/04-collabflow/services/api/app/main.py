@@ -5,6 +5,13 @@ from pathlib import Path
 from typing import Any, Literal
 from uuid import UUID, uuid4
 
+try:
+    import psycopg
+    from psycopg.rows import dict_row
+except ImportError:  # pragma: no cover - optional durable mode dependency
+    psycopg = None
+    dict_row = None
+
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.encoders import jsonable_encoder
 from fastapi.middleware.cors import CORSMiddleware
@@ -94,6 +101,8 @@ SNAPSHOT_STORE_PATH = Path(snapshot_store_setting)
 if not SNAPSHOT_STORE_PATH.is_absolute():
     SNAPSHOT_STORE_PATH = PROJECT_ROOT / SNAPSHOT_STORE_PATH
 SYNC_WEBSOCKET_URL = os.getenv("SYNC_WEBSOCKET_URL", "ws://localhost:8300/ws/collabflow")
+DATABASE_URL = os.getenv("DATABASE_URL")
+SNAPSHOT_STORAGE_MODE = "postgres" if DATABASE_URL and psycopg is not None else "file"
 
 workspaces: dict[UUID, WorkspaceResponse] = {}
 snapshots: dict[UUID, list[SnapshotResponse]] = {}
@@ -113,7 +122,76 @@ def model_as_json_dict(model: BaseModel) -> dict:
     return jsonable_encoder(model)
 
 
-def load_snapshots() -> None:
+def postgres_connection():
+    if not DATABASE_URL or psycopg is None:
+        return None
+    return psycopg.connect(DATABASE_URL, row_factory=dict_row)
+
+
+def init_postgres_store() -> None:
+    connection = postgres_connection()
+    if connection is None:
+        return
+
+    with connection:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                """
+                create table if not exists collabflow_workspaces (
+                  workspace_id uuid primary key,
+                  name text not null,
+                  status text not null check (status in ('local_ready', 'sync_ready')),
+                  created_at timestamptz not null
+                );
+                """
+            )
+            cursor.execute(
+                """
+                create table if not exists collabflow_snapshots (
+                  snapshot_id uuid primary key,
+                  workspace_id uuid not null references collabflow_workspaces(workspace_id) on delete cascade,
+                  title text not null,
+                  notes text not null default '',
+                  tasks jsonb not null default '[]'::jsonb,
+                  version_vector integer not null check (version_vector >= 0),
+                  created_at timestamptz not null
+                );
+                """
+            )
+            cursor.execute(
+                """
+                create index if not exists idx_collabflow_snapshots_workspace_created
+                  on collabflow_snapshots(workspace_id, created_at);
+                """
+            )
+
+
+def load_postgres_snapshots() -> None:
+    connection = postgres_connection()
+    if connection is None:
+        return
+
+    with connection:
+        with connection.cursor() as cursor:
+            cursor.execute("select workspace_id, name, status, created_at from collabflow_workspaces order by created_at")
+            for row in cursor.fetchall():
+                workspace = WorkspaceResponse(**row)
+                workspaces[workspace.workspace_id] = workspace
+                snapshots.setdefault(workspace.workspace_id, [])
+
+            cursor.execute(
+                """
+                select snapshot_id, workspace_id, title, notes, tasks, version_vector, created_at
+                from collabflow_snapshots
+                order by created_at
+                """
+            )
+            for row in cursor.fetchall():
+                snapshot = SnapshotResponse(**row)
+                snapshots.setdefault(snapshot.workspace_id, []).append(snapshot)
+
+
+def load_file_snapshots() -> None:
     if not SNAPSHOT_STORE_PATH.exists():
         return
 
@@ -132,7 +210,7 @@ def load_snapshots() -> None:
         snapshots.setdefault(snapshot.workspace_id, []).append(snapshot)
 
 
-def persist_snapshots() -> None:
+def persist_file_snapshots() -> None:
     SNAPSHOT_STORE_PATH.parent.mkdir(parents=True, exist_ok=True)
     payload = {
         "workspaces": [
@@ -148,6 +226,69 @@ def persist_snapshots() -> None:
     tmp_path = SNAPSHOT_STORE_PATH.with_suffix(".tmp")
     tmp_path.write_text(json.dumps(payload, indent=2), encoding="utf8")
     tmp_path.replace(SNAPSHOT_STORE_PATH)
+
+
+def load_snapshot_store() -> None:
+    if SNAPSHOT_STORAGE_MODE == "postgres":
+        init_postgres_store()
+        load_postgres_snapshots()
+        return
+
+    load_file_snapshots()
+
+
+def persist_workspace(workspace: WorkspaceResponse) -> None:
+    if SNAPSHOT_STORAGE_MODE == "file":
+        persist_file_snapshots()
+        return
+
+    connection = postgres_connection()
+    if connection is None:
+        return
+
+    with connection:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                """
+                insert into collabflow_workspaces (workspace_id, name, status, created_at)
+                values (%s, %s, %s, %s)
+                on conflict (workspace_id) do update
+                set name = excluded.name,
+                    status = excluded.status
+                """,
+                (workspace.workspace_id, workspace.name, workspace.status, workspace.created_at),
+            )
+
+
+def persist_snapshot(snapshot: SnapshotResponse) -> None:
+    if SNAPSHOT_STORAGE_MODE == "file":
+        persist_file_snapshots()
+        return
+
+    connection = postgres_connection()
+    if connection is None:
+        return
+
+    with connection:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                """
+                insert into collabflow_snapshots (
+                  snapshot_id, workspace_id, title, notes, tasks, version_vector, created_at
+                )
+                values (%s, %s, %s, %s, %s::jsonb, %s, %s)
+                on conflict (snapshot_id) do nothing
+                """,
+                (
+                    snapshot.snapshot_id,
+                    snapshot.workspace_id,
+                    snapshot.title,
+                    snapshot.notes,
+                    json.dumps(snapshot.tasks),
+                    snapshot.version_vector,
+                    snapshot.created_at,
+                ),
+            )
 
 
 def require_workspace(workspace_id: UUID) -> WorkspaceResponse:
@@ -167,7 +308,7 @@ def mark_workspace_sync_ready(workspace_id: UUID) -> None:
     else:
         updated = workspace.copy(update={"status": "sync_ready"})
     workspaces[workspace_id] = updated
-    persist_snapshots()
+    persist_workspace(updated)
 
 
 def sync_contract_for(workspace_id: UUID) -> SyncContractResponse:
@@ -298,14 +439,14 @@ def require_sync_connection(websocket: WebSocket) -> dict[str, Any]:
     return state
 
 
-load_snapshots()
+load_snapshot_store()
 
 
 @app.get("/health")
 def health() -> dict[str, str]:
     return {
         "status": "ok",
-        "storage": "file",
+        "storage": SNAPSHOT_STORAGE_MODE,
         "crdt_runtime": "yjs",
         "sync_transport": "websocket_sync",
     }
@@ -321,7 +462,7 @@ def create_workspace(payload: CreateWorkspaceRequest) -> WorkspaceResponse:
     )
     workspaces[workspace.workspace_id] = workspace
     snapshots[workspace.workspace_id] = []
-    persist_snapshots()
+    persist_workspace(workspace)
     return workspace
 
 
@@ -519,5 +660,5 @@ def create_snapshot(workspace_id: UUID, payload: CreateSnapshotRequest) -> Snaps
         created_at=now_utc(),
     )
     snapshots.setdefault(workspace_id, []).append(snapshot)
-    persist_snapshots()
+    persist_snapshot(snapshot)
     return snapshot

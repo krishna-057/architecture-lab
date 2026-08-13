@@ -23,9 +23,10 @@ Connected browsers
   v
 FastAPI snapshot API
   |
-  | local JSON file for first slice
+  | PostgreSQL when DATABASE_URL is set
+  | JSON file fallback otherwise
   v
-.data/snapshots.json
+collabflow_snapshots / .data/snapshots.json
 ```
 
 The browser owns the active collaborative document. The API does not interpret or merge CRDT fields; it accepts Yjs binary updates through a small websocket room, stores those update payloads in process memory for replay, fans them out to connected peers, and stores exported checkpoints separately.
@@ -38,7 +39,7 @@ The browser owns the active collaborative document. The API does not interpret o
 | `services/api` | Workspace metadata, websocket/presence sync contract endpoint, websocket room fanout, snapshot list/create endpoints. |
 | IndexedDB | Browser-local workspace projection for offline continuity. |
 | FastAPI websocket room | Development sync shell for Yjs update fanout, replay, and ephemeral presence. |
-| `.data/snapshots.json` | Lightweight local durable snapshot store until PostgreSQL is introduced. |
+| PostgreSQL / `.data/snapshots.json` | Optional durable workspace and snapshot store, with JSON fallback for lightweight local checks. |
 
 ## API Boundary
 
@@ -49,6 +50,10 @@ The browser owns the active collaborative document. The API does not interpret o
 | `WS /ws/collabflow` | Join a workspace room, replay in-memory Yjs updates, broadcast new Yjs updates, and fan out ephemeral presence. |
 | `GET /api/workspaces/{workspace_id}/snapshots` | List durable checkpoints exported for a workspace. |
 | `POST /api/workspaces/{workspace_id}/snapshots` | Persist a compact checkpoint of title, notes, tasks, and Yjs state-vector length. |
+
+## Snapshot Storage
+
+The snapshot API chooses storage at startup. If `DATABASE_URL` is set and `psycopg` is installed, FastAPI initializes `collabflow_workspaces` and `collabflow_snapshots`, loads existing rows, and writes new workspaces/snapshots to PostgreSQL. Otherwise it keeps the original `.data/snapshots.json` fallback. This gives restart-safe exported checkpoints without making PostgreSQL the live merge engine for CRDT updates.
 
 ## WebSocket And Presence Contract
 
@@ -77,7 +82,7 @@ WebSocket sync server
 Browser B
 
 Browsers also persist local state in IndexedDB.
-PostgreSQL stores workspace metadata and snapshots.
+PostgreSQL stores workspace metadata and exported snapshots.
 ```
 
 Presence should remain ephemeral awareness state. It should not be written into durable document snapshots because it describes who is currently connected, not the workspace content.

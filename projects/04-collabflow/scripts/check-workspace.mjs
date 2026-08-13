@@ -4,6 +4,8 @@ import { join } from "node:path";
 const requiredFiles = [
   "package.json",
   ".env.example",
+  "compose.yaml",
+  "db/schema.sql",
   "apps/web/package.json",
   "apps/web/src/app/page.tsx",
   "apps/web/src/app/layout.tsx",
@@ -57,9 +59,31 @@ if (
   !apiFile.includes("sync_update_log") ||
   !apiFile.includes("awareness_update") ||
   !apiFile.includes("presence_fields") ||
-  !apiFile.includes("SNAPSHOT_STORE_PATH")
+  !apiFile.includes("SNAPSHOT_STORE_PATH") ||
+  !apiFile.includes("DATABASE_URL") ||
+  !apiFile.includes("SNAPSHOT_STORAGE_MODE") ||
+  !apiFile.includes("collabflow_snapshots")
 ) {
-  throw new Error("API must expose workspace, websocket sync, sync-contract, and snapshot boundaries.");
+  throw new Error("API must expose workspace, websocket sync, sync-contract, and optional PostgreSQL snapshot boundaries.");
+}
+
+const schemaFile = readFileSync("db/schema.sql", "utf8");
+if (
+  !schemaFile.includes("collabflow_workspaces") ||
+  !schemaFile.includes("collabflow_snapshots") ||
+  !schemaFile.includes("idx_collabflow_snapshots_workspace_created") ||
+  !schemaFile.includes("jsonb")
+) {
+  throw new Error("PostgreSQL schema must define workspace and snapshot tables.");
+}
+
+const composeFile = readFileSync("compose.yaml", "utf8");
+if (
+  !composeFile.includes("postgres:16-alpine") ||
+  !composeFile.includes("./.data/postgres") ||
+  !composeFile.includes("./db/schema.sql")
+) {
+  throw new Error("Compose stack must keep PostgreSQL state under the project .data folder.");
 }
 
 const syncContract = readFileSync("SYNC_CONTRACT.md", "utf8");

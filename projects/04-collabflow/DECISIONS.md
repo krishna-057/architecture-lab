@@ -54,3 +54,17 @@ Rejected alternatives:
 - Add the `y-websocket` server package immediately. It is mature and likely useful later, but it would introduce a separate Node service before the project demonstrates the message contract itself.
 - Persist every Yjs update in PostgreSQL now. Durable update logs need compaction and retention decisions; exported snapshots are enough durability for this slice.
 - Treat presence as document data. Presence remains ephemeral awareness state because stale cursors and collaborator labels should not appear in durable snapshots.
+
+## Add optional PostgreSQL snapshot storage before durable update logs
+
+Decision:
+CollabFlow now stores exported workspaces and snapshots in PostgreSQL when `DATABASE_URL` is configured. Without PostgreSQL, the API keeps the existing `.data/snapshots.json` fallback.
+
+Why:
+Exported snapshots are the first durable server-side artifact users expect to survive an API restart. PostgreSQL fits that checkpoint boundary without asking the API to interpret or merge live CRDT updates.
+
+Rejected alternatives:
+
+- Persist every Yjs update now. That needs compaction, retention, and replay semantics beyond this slice.
+- Remove the JSON fallback. That would make lightweight local checks depend on Docker even when the sync behavior itself does not need it.
+- Store presence in PostgreSQL. Presence remains current connection state, not durable workspace content.
