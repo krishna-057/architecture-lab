@@ -6,10 +6,11 @@ Tasks should stay small enough for one focused session.
 
 ### Ready
 
-No ready tasks remain for the current CollabFlow portfolio slice.
+- [ ] Add CollabFlow compaction checkpoint generation.
 
 ### Completed
 
+- [x] Add CollabFlow durable Yjs update-log foundation.
 - [x] Add CollabFlow durable update log compaction notes.
 - [x] Add CollabFlow optional PostgreSQL snapshot storage.
 

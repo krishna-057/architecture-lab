@@ -17,3 +17,28 @@ create table if not exists collabflow_snapshots (
 
 create index if not exists idx_collabflow_snapshots_workspace_created
   on collabflow_snapshots(workspace_id, created_at);
+
+create table if not exists collabflow_yjs_updates (
+  update_id bigserial primary key,
+  workspace_id uuid not null references collabflow_workspaces(workspace_id) on delete cascade,
+  update_seq bigint not null,
+  update_bytes bytea not null,
+  update_hash text not null,
+  client_id text not null,
+  created_at timestamptz not null,
+  compacted_at timestamptz,
+  unique (workspace_id, update_seq),
+  unique (workspace_id, update_hash)
+);
+
+create table if not exists collabflow_compaction_checkpoints (
+  checkpoint_id uuid primary key,
+  workspace_id uuid not null references collabflow_workspaces(workspace_id) on delete cascade,
+  compacted_through_seq bigint not null,
+  state_vector bytea not null,
+  snapshot_update bytea not null,
+  created_at timestamptz not null
+);
+
+create index if not exists idx_collabflow_yjs_updates_workspace_seq
+  on collabflow_yjs_updates(workspace_id, update_seq);

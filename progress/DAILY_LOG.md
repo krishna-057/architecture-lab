@@ -2,6 +2,36 @@
 
 ## 2026-08-13
 
+Added CollabFlow durable Yjs update-log foundation.
+
+Added:
+- PostgreSQL `collabflow_yjs_updates` and `collabflow_compaction_checkpoints` schema initialization.
+- Websocket `yjs_update` append helper that stores opaque Yjs update bytes, assigns per-workspace `update_seq`, and deduplicates PostgreSQL retries with SHA-256 `update_hash`.
+- Replay loading of non-compacted PostgreSQL update tails into the existing websocket replay path.
+- `sync_ready` metadata showing whether durable update logging is active and the latest update sequence.
+- README, architecture, sync contract, decision, interview-note, compaction-note, schema, and validation-marker updates.
+- Task queue update marking this promoted CollabFlow implementation slice complete and adding checkpoint generation as the next ready task.
+
+Validated the work by running:
+- `npm run check` from `projects/04-collabflow`
+- `python -m compileall services\api\app` from `projects/04-collabflow`
+- `docker compose -f compose.yaml config --quiet` from `projects/04-collabflow`
+- A direct Python smoke test covering fallback update append sequencing and replay state
+- `npm run build -w @collabflow/web` from `projects/04-collabflow`
+- `npx tsc --noEmit -p apps/web/tsconfig.json` from `projects/04-collabflow`
+- `git diff --check`
+
+Notes:
+- This run promoted the next CollabFlow implementation slice after the Ready queue was empty.
+- `git diff --check` reported only line-ending normalization warnings for touched text files.
+- Docker Desktop's Linux engine was not available, so a live PostgreSQL update-log smoke test could not run; schema, compose config, and fallback append sequencing passed.
+- Compaction checkpoint generation is still deferred; the new table exists, but the websocket path only appends and replays the current non-compacted update tail.
+
+Next recommended task:
+- Add CollabFlow compaction checkpoint generation.
+
+## 2026-08-13
+
 Added CollabFlow durable update log compaction notes.
 
 Added:

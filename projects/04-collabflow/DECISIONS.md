@@ -82,3 +82,17 @@ Rejected alternatives:
 - Add append-only update persistence immediately. That would create a real durability path, but without compaction and replay tests it could become an ever-growing log with unclear recovery semantics.
 - Store decoded task/title fields in the update log. That would make querying easier, but it would break the server's current role as an opaque Yjs transport and risk inventing a second merge model.
 - Delete compacted updates immediately. Marking them first with `compacted_at` gives rollback room if checkpoint generation or client replay has a bug.
+
+## Add durable Yjs update-log tables before compaction workers
+
+Decision:
+CollabFlow now appends incoming websocket `yjs_update` payloads to PostgreSQL when `DATABASE_URL` is configured. Updates remain opaque bytes, get a per-workspace `update_seq`, and are deduplicated by SHA-256 `update_hash`. The API also initializes the future `collabflow_compaction_checkpoints` table, but does not generate checkpoints yet.
+
+Why:
+This is the smallest durable-sync step after documenting compaction. It makes API restarts safer for live update replay in PostgreSQL mode without introducing a background worker, server-side Yjs document materialization, or retention cleanup in the same slice.
+
+Rejected alternatives:
+
+- Implement compaction in the websocket handler. That would block live fanout on potentially expensive document merges.
+- Require PostgreSQL for every local run. The in-memory fallback still keeps lightweight local checks fast.
+- Store base64 text instead of bytes. Base64 is the websocket envelope, but PostgreSQL should store the actual update bytes and only re-encode for replay.

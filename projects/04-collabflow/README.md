@@ -9,6 +9,7 @@ The current slice is a local-first workspace shell with a small realtime sync pa
 - browser IndexedDB snapshots for offline persistence
 - a FastAPI API at `services/api` for workspace metadata, sync contract discovery, websocket fanout, and durable snapshot export
 - optional PostgreSQL snapshot storage when `DATABASE_URL` is configured, with JSON-file fallback for dependency-light local checks
+- optional PostgreSQL Yjs update-log tables for durable replay when the API is running in PostgreSQL mode
 - `SYNC_CONTRACT.md` plus API discovery for the websocket room, Yjs update, and presence contract
 - `docs/update-log-compaction.md` for the next durable update-log and compaction design
 
@@ -68,7 +69,7 @@ This is intentionally a development sync shell, not a production collaboration s
 
 When `DATABASE_URL` is set, exported workspace snapshots are stored in PostgreSQL tables initialized from `db/schema.sql`. This makes durable checkpoints restart-safe without changing the live collaboration rule: Yjs and IndexedDB still own active editing, while the API stores explicit checkpoints for recovery/export.
 
-Durable websocket update persistence is documented but not implemented in this slice. The intended path is an append-only `collabflow_yjs_updates` log, replay from the newest compacted checkpoint plus tail updates, and compaction into `collabflow_compaction_checkpoints` once update count or byte thresholds are crossed.
+Durable websocket update persistence now has its first storage boundary. In PostgreSQL mode, incoming `yjs_update` messages are written to an append-only `collabflow_yjs_updates` table with per-workspace sequence numbers and SHA-256 deduplication before being broadcast to peers. File mode keeps the lightweight in-memory replay behavior for dependency-light local checks. Compaction into `collabflow_compaction_checkpoints` remains the next step.
 
 ## Sync Contract
 

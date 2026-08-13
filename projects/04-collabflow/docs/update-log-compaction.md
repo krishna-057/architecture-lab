@@ -68,4 +68,4 @@ Awareness messages must never enter this log. They are connection state, not doc
 
 ## Deferred Implementation
 
-This note intentionally stops before adding durable websocket update writes. The current API still uses an in-memory `sync_update_log`; exported snapshots are already durable through PostgreSQL when configured. The next implementation slice should add the update tables, append-only websocket persistence, replay from PostgreSQL, and a small compaction smoke test.
+The first durable update-log slice now creates these tables and appends websocket `yjs_update` payloads in PostgreSQL mode. Compaction is still deferred: the next implementation slice should generate `collabflow_compaction_checkpoints`, mark older rows with `compacted_at`, replay checkpoint plus tail updates, and add a compaction smoke test.

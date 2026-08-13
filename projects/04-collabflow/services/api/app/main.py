@@ -1,3 +1,6 @@
+import base64
+import binascii
+import hashlib
 import json
 import os
 from datetime import datetime, timezone
@@ -107,6 +110,7 @@ SNAPSHOT_STORAGE_MODE = "postgres" if DATABASE_URL and psycopg is not None else 
 workspaces: dict[UUID, WorkspaceResponse] = {}
 snapshots: dict[UUID, list[SnapshotResponse]] = {}
 sync_update_log: dict[UUID, list[str]] = {}
+sync_update_sequences: dict[UUID, int] = {}
 sync_rooms: dict[str, set[WebSocket]] = {}
 sync_connections: dict[WebSocket, dict[str, Any]] = {}
 presence_by_room: dict[str, dict[str, dict[str, Any]]] = {}
@@ -164,6 +168,40 @@ def init_postgres_store() -> None:
                   on collabflow_snapshots(workspace_id, created_at);
                 """
             )
+            cursor.execute(
+                """
+                create table if not exists collabflow_yjs_updates (
+                  update_id bigserial primary key,
+                  workspace_id uuid not null references collabflow_workspaces(workspace_id) on delete cascade,
+                  update_seq bigint not null,
+                  update_bytes bytea not null,
+                  update_hash text not null,
+                  client_id text not null,
+                  created_at timestamptz not null,
+                  compacted_at timestamptz,
+                  unique (workspace_id, update_seq),
+                  unique (workspace_id, update_hash)
+                );
+                """
+            )
+            cursor.execute(
+                """
+                create table if not exists collabflow_compaction_checkpoints (
+                  checkpoint_id uuid primary key,
+                  workspace_id uuid not null references collabflow_workspaces(workspace_id) on delete cascade,
+                  compacted_through_seq bigint not null,
+                  state_vector bytea not null,
+                  snapshot_update bytea not null,
+                  created_at timestamptz not null
+                );
+                """
+            )
+            cursor.execute(
+                """
+                create index if not exists idx_collabflow_yjs_updates_workspace_seq
+                  on collabflow_yjs_updates(workspace_id, update_seq);
+                """
+            )
 
 
 def load_postgres_snapshots() -> None:
@@ -189,6 +227,22 @@ def load_postgres_snapshots() -> None:
             for row in cursor.fetchall():
                 snapshot = SnapshotResponse(**row)
                 snapshots.setdefault(snapshot.workspace_id, []).append(snapshot)
+
+            cursor.execute(
+                """
+                select workspace_id, update_seq, encode(update_bytes, 'base64') as update_payload
+                from collabflow_yjs_updates
+                where compacted_at is null
+                order by workspace_id, update_seq
+                """
+            )
+            for row in cursor.fetchall():
+                workspace_id = row["workspace_id"]
+                sync_update_log.setdefault(workspace_id, []).append(base64_to_urlsafe(row["update_payload"]))
+                sync_update_sequences[workspace_id] = max(
+                    sync_update_sequences.get(workspace_id, 0),
+                    int(row["update_seq"]),
+                )
 
 
 def load_file_snapshots() -> None:
@@ -289,6 +343,63 @@ def persist_snapshot(snapshot: SnapshotResponse) -> None:
                     snapshot.created_at,
                 ),
             )
+
+
+def base64_to_urlsafe(value: str) -> str:
+    return value.rstrip("=").replace("+", "-").replace("/", "_")
+
+
+def urlsafe_to_bytes(value: str) -> bytes:
+    padded_value = value + ("=" * ((4 - len(value) % 4) % 4))
+    return base64.urlsafe_b64decode(padded_value.encode("ascii"))
+
+
+def append_sync_update(workspace_id: UUID, client_id: str, encoded_update: str) -> int:
+    if SNAPSHOT_STORAGE_MODE == "file":
+        next_sequence = sync_update_sequences.get(workspace_id, 0) + 1
+        sync_update_sequences[workspace_id] = next_sequence
+        sync_update_log.setdefault(workspace_id, []).append(encoded_update)
+        return next_sequence
+
+    update_bytes = urlsafe_to_bytes(encoded_update)
+    update_hash = hashlib.sha256(update_bytes).hexdigest()
+    connection = postgres_connection()
+    if connection is None:
+        raise RuntimeError("PostgreSQL is required for durable sync update storage.")
+
+    with connection:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                """
+                select update_seq from collabflow_yjs_updates
+                where workspace_id = %s and update_hash = %s
+                """,
+                (workspace_id, update_hash),
+            )
+            existing = cursor.fetchone()
+            if existing is not None:
+                return int(existing["update_seq"])
+
+            cursor.execute(
+                "select coalesce(max(update_seq), 0) + 1 as next_sequence from collabflow_yjs_updates where workspace_id = %s",
+                (workspace_id,),
+            )
+            next_sequence = int(cursor.fetchone()["next_sequence"])
+            cursor.execute(
+                """
+                insert into collabflow_yjs_updates (
+                  workspace_id, update_seq, update_bytes, update_hash, client_id, created_at
+                )
+                values (%s, %s, %s, %s, %s, %s)
+                """,
+                (workspace_id, next_sequence, update_bytes, update_hash, client_id, now_utc()),
+            )
+
+    sync_update_sequences[workspace_id] = max(sync_update_sequences.get(workspace_id, 0), next_sequence)
+    current_updates = sync_update_log.setdefault(workspace_id, [])
+    if encoded_update not in current_updates:
+        current_updates.append(encoded_update)
+    return next_sequence
 
 
 def require_workspace(workspace_id: UUID) -> WorkspaceResponse:
@@ -532,6 +643,8 @@ async def collabflow_sync(websocket: WebSocket) -> None:
                         "client_id": client_id,
                         "peer_count": len(sync_rooms.get(room_id, set())),
                         "update_count": len(sync_update_log.get(workspace_id, [])),
+                        "durable_update_log": SNAPSHOT_STORAGE_MODE == "postgres",
+                        "latest_update_seq": sync_update_sequences.get(workspace_id, 0),
                     }
                 )
 
@@ -581,7 +694,12 @@ async def collabflow_sync(websocket: WebSocket) -> None:
                     await websocket.send_json({"type": "sync_error", "detail": "Missing Yjs update."})
                     continue
 
-                sync_update_log.setdefault(workspace_id, []).append(update)
+                try:
+                    update_seq = append_sync_update(workspace_id, client_id, update)
+                except (RuntimeError, ValueError, TypeError, binascii.Error):
+                    await websocket.send_json({"type": "sync_error", "detail": "Could not persist Yjs update."})
+                    continue
+
                 await broadcast_to_room(
                     room_id,
                     {
@@ -590,6 +708,7 @@ async def collabflow_sync(websocket: WebSocket) -> None:
                         "room_id": room_id,
                         "client_id": client_id,
                         "update": update,
+                        "update_seq": update_seq,
                         "sender": "browser",
                         "received_at": now_utc().isoformat(),
                     },

@@ -63,19 +63,27 @@ if (
   !apiFile.includes("SNAPSHOT_STORE_PATH") ||
   !apiFile.includes("DATABASE_URL") ||
   !apiFile.includes("SNAPSHOT_STORAGE_MODE") ||
-  !apiFile.includes("collabflow_snapshots")
+  !apiFile.includes("collabflow_snapshots") ||
+  !apiFile.includes("collabflow_yjs_updates") ||
+  !apiFile.includes("append_sync_update") ||
+  !apiFile.includes("update_hash") ||
+  !apiFile.includes("durable_update_log")
 ) {
-  throw new Error("API must expose workspace, websocket sync, sync-contract, and optional PostgreSQL snapshot boundaries.");
+  throw new Error("API must expose workspace, websocket sync, sync-contract, optional PostgreSQL snapshots, and durable update-log boundaries.");
 }
 
 const schemaFile = readFileSync("db/schema.sql", "utf8");
 if (
   !schemaFile.includes("collabflow_workspaces") ||
   !schemaFile.includes("collabflow_snapshots") ||
+  !schemaFile.includes("collabflow_yjs_updates") ||
+  !schemaFile.includes("collabflow_compaction_checkpoints") ||
   !schemaFile.includes("idx_collabflow_snapshots_workspace_created") ||
+  !schemaFile.includes("idx_collabflow_yjs_updates_workspace_seq") ||
+  !schemaFile.includes("update_hash") ||
   !schemaFile.includes("jsonb")
 ) {
-  throw new Error("PostgreSQL schema must define workspace and snapshot tables.");
+  throw new Error("PostgreSQL schema must define workspace, snapshot, Yjs update, and compaction checkpoint tables.");
 }
 
 const composeFile = readFileSync("compose.yaml", "utf8");

@@ -43,7 +43,7 @@ The current FastAPI app accepts this websocket endpoint. It validates the worksp
 
 Durable messages affect document recovery or compaction. Ephemeral messages are connection state only.
 
-Exported snapshots are stored in PostgreSQL when `DATABASE_URL` is configured and in `.data/snapshots.json` otherwise. Yjs update replay is still in-memory in this development shell; the durable update-log direction is documented in `docs/update-log-compaction.md`.
+Exported snapshots are stored in PostgreSQL when `DATABASE_URL` is configured and in `.data/snapshots.json` otherwise. Yjs update replay is also written to PostgreSQL in that mode through `collabflow_yjs_updates`; file mode keeps the in-memory development replay path. The compaction direction is documented in `docs/update-log-compaction.md`.
 
 The development server also sends operational control messages:
 
