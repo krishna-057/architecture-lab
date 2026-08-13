@@ -154,6 +154,8 @@ type DeliveryContract = {
       fallback_secret_source: string;
       secret_preview: string;
       route_secret_rule: string;
+      timestamp_tolerance_seconds: number;
+      verification_example_endpoint: string;
       headers: string[];
     };
     suppression_window_max_seconds: number;
@@ -325,6 +327,7 @@ function formatTime(value: string) {
 export default function HookRelayHome() {
   const [contract, setContract] = useState<DeliveryContract | null>(null);
   const [verificationExample, setVerificationExample] = useState<ReceiverVerificationExample | null>(null);
+  const [alertVerificationExample, setAlertVerificationExample] = useState<ReceiverVerificationExample | null>(null);
   const [endpoints, setEndpoints] = useState<Endpoint[]>([]);
   const [events, setEvents] = useState<DeliveryEvent[]>([]);
   const [deliveries, setDeliveries] = useState<DeliveryAttempt[]>([]);
@@ -477,6 +480,7 @@ export default function HookRelayHome() {
     const [
       nextContract,
       nextVerificationExample,
+      nextAlertVerificationExample,
       nextProducerKeys,
       nextEndpoints,
       nextEvents,
@@ -485,6 +489,7 @@ export default function HookRelayHome() {
     ] = await Promise.all([
       requestJson<DeliveryContract>("/api/delivery-contract"),
       requestJson<ReceiverVerificationExample>("/api/receiver-verification-example"),
+      requestJson<ReceiverVerificationExample>("/api/alert-receiver-verification-example"),
       requestJson<ProducerApiKey[]>("/api/producer-api-keys"),
       requestJson<Endpoint[]>("/api/endpoints"),
       requestJson<DeliveryEvent[]>("/api/events"),
@@ -494,6 +499,7 @@ export default function HookRelayHome() {
 
     setContract(nextContract);
     setVerificationExample(nextVerificationExample);
+    setAlertVerificationExample(nextAlertVerificationExample);
     setProducerKeys(nextProducerKeys);
     setEndpoints(nextEndpoints);
     setEvents(nextEvents);
@@ -1332,6 +1338,10 @@ export default function HookRelayHome() {
               <dd>{contract?.receiver_verification.timestamp_tolerance_seconds ?? 0}s</dd>
             </div>
             <div>
+              <dt>Alert Window</dt>
+              <dd>{contract?.receiver_failure_alert_routing.notification_signing.timestamp_tolerance_seconds ?? 0}s</dd>
+            </div>
+            <div>
               <dt>Retry Jitter</dt>
               <dd>{Math.round((contract?.retry_policy.jitter_ratio ?? 0) * 100)}% bounded</dd>
             </div>
@@ -1382,6 +1392,35 @@ export default function HookRelayHome() {
             </dl>
           ) : (
             <p>Receiver verification example is loading.</p>
+          )}
+        </section>
+
+        <section className="panel-block">
+          <div className="section-header">
+            <span>Alert Receiver Verification</span>
+            <strong>{alertVerificationExample ? `${alertVerificationExample.timestamp_tolerance_seconds}s` : "loading"}</strong>
+          </div>
+          {alertVerificationExample ? (
+            <dl className="detail-list">
+              <div>
+                <dt>Signed Payload</dt>
+                <dd>{alertVerificationExample.signed_payload}</dd>
+              </div>
+              <div>
+                <dt>Sample Secret</dt>
+                <dd>{alertVerificationExample.sample_secret}</dd>
+              </div>
+              <div>
+                <dt>Required Headers</dt>
+                <dd>{alertVerificationExample.required_headers.join(", ")}</dd>
+              </div>
+              <div>
+                <dt>Verifier</dt>
+                <dd>{alertVerificationExample.node_example}</dd>
+              </div>
+            </dl>
+          ) : (
+            <p>Alert receiver verification example is loading.</p>
           )}
         </section>
 

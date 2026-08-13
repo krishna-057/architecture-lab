@@ -50,6 +50,7 @@ API and worker operations also write provider-neutral observability spans. In me
 | `GET /health` | Report API, storage, queue, and worker mode. |
 | `GET /api/delivery-contract` | Discover idempotency, signature, receiver verification, retry, replay authorization, queue, and storage rules. |
 | `GET /api/receiver-verification-example` | Return sample receiver verification inputs, required headers, and Node.js digest expression. |
+| `GET /api/alert-receiver-verification-example` | Return sample alert notification receiver verification inputs, required headers, timestamp tolerance, and Node.js digest expression. |
 | `GET /api/observability/spans` | Return recent provider-neutral spans with trace ids, span ids, timing, status, and delivery attributes. |
 | `GET /api/failure-alerts` | Return recent owner-scoped receiver failure alerts. |
 | `POST /api/failure-alerts/:alert_id/acknowledge` | Add acknowledgement audit fields to one owner-scoped unacknowledged alert. |
@@ -113,7 +114,7 @@ Each delivery signs:
 <HookRelay-Timestamp>.<raw JSON event payload>
 ```
 
-The receiver verification example exposes the required headers, a sample payload, a sample secret, and the HMAC expression. A five-minute timestamp tolerance is documented as the first replay-protection window before real receiver SDKs or middleware exist.
+The receiver verification example exposes the required headers, a sample payload, a sample secret, and the HMAC expression. A five-minute timestamp tolerance is documented as the first replay-protection window before real receiver SDKs or middleware exist. Alert notification receivers get the same explicit freshness window through `/api/alert-receiver-verification-example`, but with `HookRelay-Alert-Timestamp`, `HookRelay-Alert-Signature`, and the route alert notification secret instead of endpoint delivery credentials.
 
 ## Retry And Replay
 

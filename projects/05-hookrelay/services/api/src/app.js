@@ -1,5 +1,5 @@
 import Fastify from "fastify";
-import { dispatchAndRecordAlertNotification } from "./alert-notifier.js";
+import { buildAlertReceiverVerificationExample, dispatchAndRecordAlertNotification } from "./alert-notifier.js";
 import {
   alertNotificationRetryDelaysSeconds,
   alertNotificationSigningSecret,
@@ -405,6 +405,8 @@ export function createHookRelayApp({
         fallback_secret_source: "HOOKRELAY_ALERT_NOTIFICATION_SIGNING_SECRET",
         secret_preview: `${alertNotificationSigningSecret.slice(0, 7)}...`,
         route_secret_rule: "Alert routes store a generated or operator-supplied notification_signing_secret; emitted alerts snapshot it for manual retry.",
+        timestamp_tolerance_seconds: 300,
+        verification_example_endpoint: "/api/alert-receiver-verification-example",
         headers: ["HookRelay-Alert-Timestamp", "HookRelay-Alert-Signature"]
       },
       suppression_window_max_seconds: failureAlertSuppressionMaxSeconds,
@@ -433,6 +435,7 @@ export function createHookRelayApp({
   }));
 
   app.get("/api/receiver-verification-example", async () => buildReceiverVerificationExample());
+  app.get("/api/alert-receiver-verification-example", async () => buildAlertReceiverVerificationExample());
 
   app.get("/api/observability/spans", async (request) => {
     const limit = Math.min(Math.max(Number(request.query?.limit ?? 50), 1), 100);

@@ -1,5 +1,33 @@
 # Daily Log
 
+## 2026-08-13
+
+Added HookRelay alert receiver timestamp tolerance example.
+
+Added:
+- `GET /api/alert-receiver-verification-example` with alert notification sample payload, alert-specific headers, route alert secret, HMAC expression, and 300-second timestamp tolerance.
+- Contract discovery fields for alert notification signing freshness and the verification example endpoint.
+- Dashboard display for the alert receiver verification example alongside the existing delivery receiver verification example.
+- README, architecture, delivery contract, decision, interview-note, and validation-marker updates explaining why alert receivers use route alert secrets and `HookRelay-Alert-*` headers.
+- Task queue update marking the current HookRelay portfolio slice complete.
+
+Validated the work by running:
+- `npm run check` from `projects/05-hookrelay`
+- `npm run check -w @hookrelay/api` from `projects/05-hookrelay`
+- `npx tsc --noEmit -p apps/web/tsconfig.json` from `projects/05-hookrelay`
+- `npm run build -w @hookrelay/web` from `projects/05-hookrelay`
+- A local Fastify smoke test covering contract discovery of alert receiver timestamp tolerance, the new alert receiver verification endpoint, required alert headers, sample id headers, and HMAC verification over the raw alert body
+- `docker compose -f projects\05-hookrelay\compose.yaml config`
+- `git diff --check`
+
+Notes:
+- This run used `K:\AutoPilot_Projects\FlashReserve_run_20260810`, which was clean and up to date with GitHub at startup.
+- The alert receiver freshness example is intentionally API-level guidance, not a full SDK; SDK helpers, alert secret rotation, automatic notification retry workers, and per-target history remain deferred.
+- `git diff --check` reported only line-ending normalization warnings for touched text files.
+
+Next recommended task:
+- Move the active queue to the next unfinished portfolio project or promote one final polish task from the master plan.
+
 ## 2026-08-12
 
 Added HookRelay per-route alert signing secrets.

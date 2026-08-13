@@ -81,6 +81,8 @@ Observability should attach one trace across event ingestion, job enqueue, each 
 - Separate alert signing keeps notification targets from depending on receiver credentials and mirrors the delivery signature model without coupling the two side effects.
 - Alert notification secrets now live per route. Operators may supply one, or HookRelay generates one and returns only a preview.
 - Emitted alerts snapshot the route signing secret so manual notification retry keeps the same verification contract even if the route changes later.
+- Alert receivers get their own verification example because they use `HookRelay-Alert-*` headers and route alert secrets, not delivery endpoint secrets.
+- The alert verification example includes a 300-second timestamp tolerance, so alert targets can reject stale captured notifications before comparing HMAC signatures.
 - This is intentionally not a full alerting system yet; it creates the durable field that later dashboards, alerts, and endpoint-specific retry policy can use.
 
 ## Endpoint Rate Limit Talking Points

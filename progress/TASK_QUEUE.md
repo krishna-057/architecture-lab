@@ -6,10 +6,11 @@ Tasks should stay small enough for one focused session.
 
 ### Ready
 
-- [ ] Add HookRelay alert receiver timestamp tolerance example.
+No ready tasks remain for the current HookRelay portfolio slice.
 
 ### Completed
 
+- [x] Add HookRelay alert receiver timestamp tolerance example.
 - [x] Add HookRelay per-route alert signing secrets.
 - [x] Add HookRelay signed alert notifications.
 - [x] Add HookRelay notification retry tracking.

@@ -68,6 +68,7 @@ Default URLs:
 | `GET /health` | Local service health and worker mode. |
 | `GET /api/delivery-contract` | Discover retry, signature, replay, and idempotency rules. |
 | `GET /api/receiver-verification-example` | Show a receiver-side HMAC verification example with sample payload and headers. |
+| `GET /api/alert-receiver-verification-example` | Show an alert notification receiver HMAC verification example with a five-minute freshness window. |
 | `GET /api/observability/spans` | List recent event ingestion, enqueue, replay, worker, and outbound HTTP spans. |
 | `GET /api/failure-alerts` | List recent owner-scoped receiver failure alerts emitted by matching alert routes. |
 | `POST /api/failure-alerts/:alert_id/acknowledge` | Require an owner-scoped operator/admin key and add acknowledgement audit metadata to one unacknowledged failure alert. |

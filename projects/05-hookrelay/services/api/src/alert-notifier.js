@@ -43,6 +43,44 @@ export function buildAlertNotificationRequest(alert) {
   };
 }
 
+export function buildAlertReceiverVerificationExample() {
+  const sampleSecret = "whsec_alert_destination_example";
+  const sampleAlert = {
+    alert_id: "alert_example",
+    route_id: "aroute_example",
+    owner_id: "owner_demo",
+    delivery_id: "delivery_example",
+    endpoint_id: "endpoint_example",
+    event_id: "event_example",
+    failure_class: "receiver_http_5xx",
+    delivery_status: "failed",
+    message: "failed delivery delivery_example matched receiver_http_5xx for Billing listener",
+    created_at: "2026-08-13T00:00:00.000Z"
+  };
+  const body = JSON.stringify(sampleAlert);
+  const timestamp = 1_786_588_800;
+
+  return {
+    timestamp_tolerance_seconds: 300,
+    signed_payload: "<HookRelay-Alert-Timestamp>.<raw JSON alert notification body>",
+    required_headers: [
+      "HookRelay-Alert-Timestamp",
+      "HookRelay-Alert-Signature",
+      "X-HookRelay-Alert-Id",
+      "X-HookRelay-Delivery-Id"
+    ],
+    sample_secret: sampleSecret,
+    sample_payload: sampleAlert,
+    sample_headers: {
+      "X-HookRelay-Alert-Id": sampleAlert.alert_id,
+      "X-HookRelay-Delivery-Id": sampleAlert.delivery_id,
+      ...signAlertNotification({ body, timestamp, secret: sampleSecret })
+    },
+    node_example:
+      "const expected = 'v1=' + crypto.createHmac('sha256', secret).update(`${timestamp}.${rawBody}`).digest('hex');"
+  };
+}
+
 export async function dispatchAndRecordAlertNotification({ alert, store, observability, traceId, parentSpanId = null }) {
   let notification;
   try {

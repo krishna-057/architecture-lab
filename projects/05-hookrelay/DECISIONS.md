@@ -417,3 +417,22 @@ Rejected alternatives:
 
 Follow-up:
 Add timestamp tolerance examples for alert receivers, explicit alert secret rotation, automatic notification retry workers, and per-target notification history.
+
+## 2026-08-13: Add Alert Receiver Timestamp Tolerance Example
+
+Decision:
+Expose `GET /api/alert-receiver-verification-example` for webhook alert notification targets. The example uses `HookRelay-Alert-Timestamp`, `HookRelay-Alert-Signature`, the raw JSON alert notification body, a route alert notification secret, and a 300-second freshness window.
+
+Why:
+- Alert notification signatures prove integrity, but receivers also need a freshness rule to reject stale captured posts.
+- Keeping the alert example separate from receiver delivery verification prevents teams from accidentally using endpoint delivery secrets for alert targets.
+- Reusing the same HMAC expression shape keeps verification familiar while making the header names and secret source explicit.
+- Publishing the example from the API keeps the dashboard, contract discovery, and receiver implementation guidance aligned with real signing code.
+
+Rejected alternatives:
+- Only document the rule in Markdown: useful, but clients benefit from a concrete API sample with headers and payload.
+- Reuse `/api/receiver-verification-example`: that would blur endpoint delivery signatures with alert notification signatures.
+- Add a full receiver SDK now: helpful later, but too broad for this final portfolio slice.
+
+Follow-up:
+Add explicit alert secret rotation, automatic notification retry workers, per-target notification history, and receiver SDK helpers.

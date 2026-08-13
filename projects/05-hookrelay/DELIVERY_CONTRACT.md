@@ -150,6 +150,14 @@ GET /api/receiver-verification-example
 
 The example includes the required headers, a sample payload, a sample secret, and the Node.js digest expression a receiver would use.
 
+Alert notification receivers use the same freshness rule over alert notification headers:
+
+```text
+GET /api/alert-receiver-verification-example
+```
+
+That example includes `HookRelay-Alert-Timestamp`, `HookRelay-Alert-Signature`, `X-HookRelay-Alert-Id`, `X-HookRelay-Delivery-Id`, a sample alert payload, a route alert notification secret, and a 300-second tolerance. Receivers should reject alert notification requests when the timestamp is outside the tolerance before comparing the HMAC digest.
+
 ## Retry Policy
 
 The scaffold exposes the intended retry ladder:
@@ -408,6 +416,8 @@ The request includes `Content-Type: application/json`, `X-HookRelay-Alert-Id`, `
 
 `HookRelay-Alert-Signature` uses the same `v1=<hex digest>` shape as receiver delivery signatures, but it is signed with the route's alert notification secret rather than an endpoint signing secret. Older local alert records without a stored route secret fall back to `HOOKRELAY_ALERT_NOTIFICATION_SIGNING_SECRET`. That keeps alert notification receivers able to verify integrity and freshness without exposing receiver endpoint secrets to alert targets.
 
+Alert notification receivers should enforce the documented 300-second timestamp tolerance from `GET /api/alert-receiver-verification-example`. The HMAC proves payload integrity, while the timestamp window rejects stale captured notification posts.
+
 HookRelay records the outcome on the alert record:
 
 ```json
@@ -476,6 +486,8 @@ Contract discovery exposes alert routing as:
       "secret_source": "receiver_failure_alert_routes.notification_signing_secret",
       "fallback_secret_source": "HOOKRELAY_ALERT_NOTIFICATION_SIGNING_SECRET",
       "route_secret_rule": "Alert routes store a generated or operator-supplied notification_signing_secret; emitted alerts snapshot it for manual retry.",
+      "timestamp_tolerance_seconds": 300,
+      "verification_example_endpoint": "/api/alert-receiver-verification-example",
       "headers": ["HookRelay-Alert-Timestamp", "HookRelay-Alert-Signature"]
     },
     "suppression_window_max_seconds": 86400,
