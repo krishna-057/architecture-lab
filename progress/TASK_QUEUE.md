@@ -6,10 +6,11 @@ Tasks should stay small enough for one focused session.
 
 ### Ready
 
-- [ ] Add CollabFlow durable update log compaction notes.
+No ready tasks remain for the current CollabFlow portfolio slice.
 
 ### Completed
 
+- [x] Add CollabFlow durable update log compaction notes.
 - [x] Add CollabFlow optional PostgreSQL snapshot storage.
 
 ## Completed Project: HookRelay

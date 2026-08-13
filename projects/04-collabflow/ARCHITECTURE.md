@@ -55,6 +55,12 @@ The browser owns the active collaborative document. The API does not interpret o
 
 The snapshot API chooses storage at startup. If `DATABASE_URL` is set and `psycopg` is installed, FastAPI initializes `collabflow_workspaces` and `collabflow_snapshots`, loads existing rows, and writes new workspaces/snapshots to PostgreSQL. Otherwise it keeps the original `.data/snapshots.json` fallback. This gives restart-safe exported checkpoints without making PostgreSQL the live merge engine for CRDT updates.
 
+## Durable Update Log Direction
+
+Durable Yjs update storage should be added as an append-only log before it becomes the default replay source. The proposed shape is documented in `docs/update-log-compaction.md`: store opaque Yjs update bytes in `collabflow_yjs_updates`, assign a per-workspace `update_seq`, deduplicate retries by `update_hash`, and periodically write compacted Yjs checkpoints in `collabflow_compaction_checkpoints`.
+
+Compaction should reduce replay cost, not change document ownership. The browser and Yjs still own merge semantics; the server stores ordered update bytes, serves checkpoints plus tail updates on reconnect, and keeps awareness messages out of durable storage.
+
 ## WebSocket And Presence Contract
 
 The websocket implementation is a first development shell that honors the server-discoverable contract:
@@ -67,7 +73,7 @@ The websocket implementation is a first development shell that honors the server
 | Message types | `sync_request`, `yjs_update`, `awareness_update`, `snapshot_offer`. |
 | Presence retention | Ephemeral Yjs awareness only; never persisted into snapshots. |
 | Reconnect | Load IndexedDB, reconnect, request missing updates, then resume snapshot exports. |
-| Update storage | In-memory per API process; durable update logs and compaction are deferred. |
+| Update storage | In-memory per API process today; durable log and compaction policy are documented in `docs/update-log-compaction.md`. |
 
 ## Future Sync Shape
 

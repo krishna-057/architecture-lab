@@ -68,3 +68,17 @@ Rejected alternatives:
 - Persist every Yjs update now. That needs compaction, retention, and replay semantics beyond this slice.
 - Remove the JSON fallback. That would make lightweight local checks depend on Docker even when the sync behavior itself does not need it.
 - Store presence in PostgreSQL. Presence remains current connection state, not durable workspace content.
+
+## Document durable update-log compaction before implementing it
+
+Decision:
+CollabFlow now documents the intended durable Yjs update log and compaction model in `docs/update-log-compaction.md`, but keeps the runtime websocket replay in memory for this slice.
+
+Why:
+Persisting every Yjs update is easy to start and surprisingly easy to get wrong. Replay order, duplicate websocket retries, checkpoint generation, retention, and failure handling all affect data recovery. Writing those rules before adding tables and websocket writes gives the next implementation a narrow contract instead of a vague "make sync durable" task.
+
+Rejected alternatives:
+
+- Add append-only update persistence immediately. That would create a real durability path, but without compaction and replay tests it could become an ever-growing log with unclear recovery semantics.
+- Store decoded task/title fields in the update log. That would make querying easier, but it would break the server's current role as an opaque Yjs transport and risk inventing a second merge model.
+- Delete compacted updates immediately. Marking them first with `compacted_at` gives rollback room if checkpoint generation or client replay has a bug.

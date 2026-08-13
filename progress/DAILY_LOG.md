@@ -2,6 +2,33 @@
 
 ## 2026-08-13
 
+Added CollabFlow durable update log compaction notes.
+
+Added:
+- `docs/update-log-compaction.md` with the proposed `collabflow_yjs_updates` and `collabflow_compaction_checkpoints` durability model.
+- Replay rules for newest checkpoint plus tail updates, with stable per-workspace `update_seq` ordering.
+- Deduplication, retention, failure-mode, and presence-exclusion rules for future durable Yjs update storage.
+- README, architecture, sync contract, decision, interview-note, and validation-marker updates explaining that compaction reduces replay cost without changing Yjs merge ownership.
+- Task queue update marking this CollabFlow slice complete.
+
+Validated the work by running:
+- `npm run check` from `projects/04-collabflow`
+- `python -m compileall services\api\app` from `projects/04-collabflow`
+- `docker compose -f compose.yaml config --quiet` from `projects/04-collabflow`
+- `npm run build -w @collabflow/web` from `projects/04-collabflow`
+- `npx tsc --noEmit -p apps/web/tsconfig.json` from `projects/04-collabflow`
+- `git diff --check`
+
+Notes:
+- This run continued from `K:\AutoPilot_Projects\FlashReserve_run_20260810`, which was clean and up to date with GitHub at startup.
+- `git diff --check` reported only line-ending normalization warnings for touched text files.
+- This is intentionally a design slice, not durable websocket persistence. The runtime still uses in-memory `sync_update_log` until the next implementation slice adds append-only storage and replay tests.
+
+Next recommended task:
+- Promote the next CollabFlow implementation slice or move to PersonaBridge portfolio depth work.
+
+## 2026-08-13
+
 Added CollabFlow optional PostgreSQL snapshot storage.
 
 Added:

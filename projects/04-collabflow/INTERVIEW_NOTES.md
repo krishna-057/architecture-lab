@@ -36,3 +36,11 @@ The server deliberately does not inspect document fields. It treats `yjs_update`
 The limitations are explicit. In-memory replay is useful for local demos and multi-tab validation, but it is not durable across API restarts and it does not solve compaction, authorization, backpressure, or horizontal scaling. Those are later architecture topics after the provider lifecycle is proven.
 
 The optional PostgreSQL slice improves restart safety for exported checkpoints without overclaiming production sync. In an interview, that distinction is the point: durable snapshots and durable collaboration history are related, but they are not the same problem.
+
+## Durable Update Log Talking Points
+
+The next durable-sync step should store Yjs updates as opaque bytes in an append-only PostgreSQL log. The server should assign a per-workspace sequence and deduplicate retries with an update hash, but it should not decode the CRDT payload into task/title fields. Decoding would create a second merge model, which is exactly what Yjs is already solving.
+
+Compaction matters because replaying every keystroke forever makes reconnect slower over time. The proposed design keeps a compacted checkpoint plus tail updates: clients apply the checkpoint first, then the remaining update log. That gives bounded replay without losing Yjs' conflict-free merge behavior.
+
+Presence stays out of compaction. Cursor and collaborator status updates are useful in the room, but they are not document history and should not be restored as if they were durable content.

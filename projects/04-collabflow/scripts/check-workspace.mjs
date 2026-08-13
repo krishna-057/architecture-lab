@@ -12,7 +12,8 @@ const requiredFiles = [
   "services/api/Dockerfile",
   "services/api/requirements.txt",
   "services/api/app/main.py",
-  "SYNC_CONTRACT.md"
+  "SYNC_CONTRACT.md",
+  "docs/update-log-compaction.md"
 ];
 
 const rootPackage = JSON.parse(readFileSync("package.json", "utf8"));
@@ -92,9 +93,23 @@ if (
   !syncContract.includes("yjs_update") ||
   !syncContract.includes("awareness_update") ||
   !syncContract.includes("/ws/collabflow") ||
-  !syncContract.includes("Presence is Yjs awareness state")
+  !syncContract.includes("Presence is Yjs awareness state") ||
+  !syncContract.includes("docs/update-log-compaction.md")
 ) {
-  throw new Error("SYNC_CONTRACT.md must define websocket rooms, Yjs updates, and awareness presence.");
+  throw new Error("SYNC_CONTRACT.md must define websocket rooms, Yjs updates, awareness presence, and the durable compaction reference.");
+}
+
+const compactionNotes = readFileSync("docs/update-log-compaction.md", "utf8");
+if (
+  !compactionNotes.includes("collabflow_yjs_updates") ||
+  !compactionNotes.includes("collabflow_compaction_checkpoints") ||
+  !compactionNotes.includes("update_seq") ||
+  !compactionNotes.includes("update_hash") ||
+  !compactionNotes.includes("snapshot_update") ||
+  !compactionNotes.includes("compacted_at") ||
+  !compactionNotes.includes("Awareness messages must never enter this log")
+) {
+  throw new Error("Update-log compaction notes must define durable Yjs replay, checkpoint, dedupe, and presence-exclusion rules.");
 }
 
 console.log("CollabFlow scaffold and sync contract check passed.");

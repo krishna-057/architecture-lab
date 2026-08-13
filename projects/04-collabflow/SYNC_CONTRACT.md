@@ -43,7 +43,7 @@ The current FastAPI app accepts this websocket endpoint. It validates the worksp
 
 Durable messages affect document recovery or compaction. Ephemeral messages are connection state only.
 
-Exported snapshots are stored in PostgreSQL when `DATABASE_URL` is configured and in `.data/snapshots.json` otherwise. Yjs update replay is still in-memory in this development shell; durable update logs and compaction remain separate follow-up work.
+Exported snapshots are stored in PostgreSQL when `DATABASE_URL` is configured and in `.data/snapshots.json` otherwise. Yjs update replay is still in-memory in this development shell; the durable update-log direction is documented in `docs/update-log-compaction.md`.
 
 The development server also sends operational control messages:
 
@@ -77,9 +77,11 @@ Clients should:
 4. Apply missing in-memory Yjs updates from the sync server.
 5. Resume local edits and export durable snapshots only after the Yjs document catches up.
 
+When durable update storage is added, `sync_request` should replay the newest compaction checkpoint first and then all tail updates after that checkpoint. The replay contract should remain opaque Yjs bytes; clients should not depend on server-side document-field interpretation.
+
 ## Deferred Until Later Slices
 
 - Signed workspace membership and authorization.
 - Backpressure and heartbeat handling.
-- Durable update log storage and compaction.
+- Durable update log storage and compaction implementation.
 - Multi-device conflict tests against a running sync provider.
