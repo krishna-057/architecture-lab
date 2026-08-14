@@ -6,10 +6,11 @@ Tasks should stay small enough for one focused session.
 
 ### Ready
 
-- [ ] Add CollabFlow compaction checkpoint generation.
+- [ ] Add CollabFlow server-side compaction worker notes and retention cleanup.
 
 ### Completed
 
+- [x] Add CollabFlow compaction checkpoint generation.
 - [x] Add CollabFlow durable Yjs update-log foundation.
 - [x] Add CollabFlow durable update log compaction notes.
 - [x] Add CollabFlow optional PostgreSQL snapshot storage.

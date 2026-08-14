@@ -69,7 +69,7 @@ This is intentionally a development sync shell, not a production collaboration s
 
 When `DATABASE_URL` is set, exported workspace snapshots are stored in PostgreSQL tables initialized from `db/schema.sql`. This makes durable checkpoints restart-safe without changing the live collaboration rule: Yjs and IndexedDB still own active editing, while the API stores explicit checkpoints for recovery/export.
 
-Durable websocket update persistence now has its first storage boundary. In PostgreSQL mode, incoming `yjs_update` messages are written to an append-only `collabflow_yjs_updates` table with per-workspace sequence numbers and SHA-256 deduplication before being broadcast to peers. File mode keeps the lightweight in-memory replay behavior for dependency-light local checks. Compaction into `collabflow_compaction_checkpoints` remains the next step.
+Durable websocket update persistence now has its first storage boundary. In PostgreSQL mode, incoming `yjs_update` messages are written to an append-only `collabflow_yjs_updates` table with per-workspace sequence numbers and SHA-256 deduplication before being broadcast to peers. Snapshot export sends a compact Yjs state update and state vector from the browser; the API stores that as a `collabflow_compaction_checkpoints` row and marks update rows through the checkpoint sequence as compacted. File mode keeps the lightweight in-memory replay behavior for dependency-light local checks.
 
 ## Sync Contract
 

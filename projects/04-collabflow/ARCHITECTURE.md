@@ -57,9 +57,9 @@ The snapshot API chooses storage at startup. If `DATABASE_URL` is set and `psyco
 
 ## Durable Update Log Direction
 
-Durable Yjs update storage starts as an append-only log in PostgreSQL mode. The API stores opaque Yjs update bytes in `collabflow_yjs_updates`, assigns a per-workspace `update_seq`, deduplicates retries by `update_hash`, and keeps `collabflow_compaction_checkpoints` ready for the next compaction slice.
+Durable Yjs update storage starts as an append-only log in PostgreSQL mode. The API stores opaque Yjs update bytes in `collabflow_yjs_updates`, assigns a per-workspace `update_seq`, deduplicates retries by `update_hash`, and records browser-generated compact state updates in `collabflow_compaction_checkpoints` during snapshot export.
 
-Compaction should reduce replay cost, not change document ownership. The browser and Yjs still own merge semantics; the server stores ordered update bytes, replays the current non-compacted tail on reconnect, and keeps awareness messages out of durable storage.
+Compaction reduces replay cost without changing document ownership. The browser and Yjs still own merge semantics; the server stores ordered update bytes, replays the latest checkpoint followed by the current non-compacted tail on reconnect, and keeps awareness messages out of durable storage.
 
 ## WebSocket And Presence Contract
 

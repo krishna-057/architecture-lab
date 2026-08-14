@@ -1,5 +1,34 @@
 # Daily Log
 
+## 2026-08-14
+
+Added CollabFlow compaction checkpoint generation.
+
+Added:
+- Snapshot export now sends browser-generated Yjs `state_vector` and compact `snapshot_update` payloads.
+- FastAPI creates PostgreSQL `collabflow_compaction_checkpoints` rows when snapshot export includes compact Yjs state.
+- Checkpoint creation marks update rows through the current workspace `update_seq` as compacted and clears the in-process replay tail.
+- Startup and websocket replay now include the latest compaction checkpoint before non-compacted tail updates.
+- README, architecture, sync contract, decisions, interview notes, compaction notes, validation markers, daily log, and task queue updates.
+
+Validated the work by running:
+- `npm run check` from `projects/04-collabflow`
+- `python -m compileall services\api\app` from `projects/04-collabflow`
+- `docker compose -f compose.yaml config --quiet` from `projects/04-collabflow`
+- A direct Python smoke test covering file-mode snapshot export with checkpoint fields and no-op compaction
+- `npm run build -w @collabflow/web` from `projects/04-collabflow`
+- `npx tsc --noEmit -p apps/web/tsconfig.json` from `projects/04-collabflow`
+- `git diff --check`
+
+Notes:
+- This run continued from `K:\AutoPilot_Projects\FlashReserve_run_20260810` because the default `K:\AutoPilot_Projects\FlashReserve` checkout contains older uncommitted HookRelay work.
+- `git diff --check` reported only line-ending normalization warnings for touched text files.
+- Docker Desktop's Linux engine was not available, so a live PostgreSQL checkpoint smoke test could not run; schema, compose config, and file-mode checkpoint-field handling passed.
+- Checkpoint generation is client-assisted. The browser owns the Yjs document and sends compact update bytes during snapshot export; server-side Yjs worker compaction remains deferred.
+
+Next recommended task:
+- Add CollabFlow server-side compaction worker notes and retention cleanup.
+
 ## 2026-08-13
 
 Added CollabFlow durable Yjs update-log foundation.

@@ -86,6 +86,8 @@ class CreateSnapshotRequest(BaseModel):
     notes: str = Field(default="", max_length=5000)
     tasks: list[str] = Field(default_factory=list, max_length=100)
     version_vector: int = Field(ge=0)
+    state_vector: str | None = Field(default=None, max_length=100000)
+    snapshot_update: str | None = Field(default=None, max_length=5000000)
 
 
 class SnapshotResponse(BaseModel):
@@ -111,6 +113,7 @@ workspaces: dict[UUID, WorkspaceResponse] = {}
 snapshots: dict[UUID, list[SnapshotResponse]] = {}
 sync_update_log: dict[UUID, list[str]] = {}
 sync_update_sequences: dict[UUID, int] = {}
+sync_compaction_checkpoints: dict[UUID, dict[str, Any]] = {}
 sync_rooms: dict[str, set[WebSocket]] = {}
 sync_connections: dict[WebSocket, dict[str, Any]] = {}
 presence_by_room: dict[str, dict[str, dict[str, Any]]] = {}
@@ -227,6 +230,29 @@ def load_postgres_snapshots() -> None:
             for row in cursor.fetchall():
                 snapshot = SnapshotResponse(**row)
                 snapshots.setdefault(snapshot.workspace_id, []).append(snapshot)
+
+            cursor.execute(
+                """
+                select distinct on (workspace_id)
+                  checkpoint_id,
+                  workspace_id,
+                  compacted_through_seq,
+                  encode(snapshot_update, 'base64') as snapshot_update
+                from collabflow_compaction_checkpoints
+                order by workspace_id, created_at desc
+                """
+            )
+            for row in cursor.fetchall():
+                workspace_id = row["workspace_id"]
+                sync_compaction_checkpoints[workspace_id] = {
+                    "checkpoint_id": str(row["checkpoint_id"]),
+                    "compacted_through_seq": int(row["compacted_through_seq"]),
+                    "snapshot_update": base64_to_urlsafe(row["snapshot_update"]),
+                }
+                sync_update_sequences[workspace_id] = max(
+                    sync_update_sequences.get(workspace_id, 0),
+                    int(row["compacted_through_seq"]),
+                )
 
             cursor.execute(
                 """
@@ -400,6 +426,62 @@ def append_sync_update(workspace_id: UUID, client_id: str, encoded_update: str) 
     if encoded_update not in current_updates:
         current_updates.append(encoded_update)
     return next_sequence
+
+
+def create_compaction_checkpoint(
+    workspace_id: UUID,
+    compacted_through_seq: int,
+    state_vector: str | None,
+    snapshot_update: str | None,
+) -> UUID | None:
+    if SNAPSHOT_STORAGE_MODE != "postgres" or not state_vector or not snapshot_update or compacted_through_seq <= 0:
+        return None
+
+    connection = postgres_connection()
+    if connection is None:
+        raise RuntimeError("PostgreSQL is required for compaction checkpoint generation.")
+
+    checkpoint_id = uuid4()
+    state_vector_bytes = urlsafe_to_bytes(state_vector)
+    snapshot_update_bytes = urlsafe_to_bytes(snapshot_update)
+
+    with connection:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                """
+                insert into collabflow_compaction_checkpoints (
+                  checkpoint_id, workspace_id, compacted_through_seq, state_vector, snapshot_update, created_at
+                )
+                values (%s, %s, %s, %s, %s, %s)
+                """,
+                (
+                    checkpoint_id,
+                    workspace_id,
+                    compacted_through_seq,
+                    state_vector_bytes,
+                    snapshot_update_bytes,
+                    now_utc(),
+                ),
+            )
+            cursor.execute(
+                """
+                update collabflow_yjs_updates
+                set compacted_at = coalesce(compacted_at, %s)
+                where workspace_id = %s
+                  and update_seq <= %s
+                  and compacted_at is null
+                """,
+                (now_utc(), workspace_id, compacted_through_seq),
+            )
+
+    sync_compaction_checkpoints[workspace_id] = {
+        "checkpoint_id": str(checkpoint_id),
+        "compacted_through_seq": compacted_through_seq,
+        "snapshot_update": snapshot_update,
+    }
+    sync_update_log[workspace_id] = []
+    sync_update_sequences[workspace_id] = max(sync_update_sequences.get(workspace_id, 0), compacted_through_seq)
+    return checkpoint_id
 
 
 def require_workspace(workspace_id: UUID) -> WorkspaceResponse:
@@ -645,8 +727,27 @@ async def collabflow_sync(websocket: WebSocket) -> None:
                         "update_count": len(sync_update_log.get(workspace_id, [])),
                         "durable_update_log": SNAPSHOT_STORAGE_MODE == "postgres",
                         "latest_update_seq": sync_update_sequences.get(workspace_id, 0),
+                        "checkpoint_id": sync_compaction_checkpoints.get(workspace_id, {}).get("checkpoint_id"),
+                        "compacted_through_seq": sync_compaction_checkpoints.get(workspace_id, {}).get(
+                            "compacted_through_seq",
+                            0,
+                        ),
                     }
                 )
+
+                checkpoint = sync_compaction_checkpoints.get(workspace_id)
+                if checkpoint is not None:
+                    await websocket.send_json(
+                        {
+                            "type": "yjs_update",
+                            "workspace_id": str(workspace_id),
+                            "room_id": room_id,
+                            "update": checkpoint["snapshot_update"],
+                            "checkpoint_id": checkpoint["checkpoint_id"],
+                            "compacted_through_seq": checkpoint["compacted_through_seq"],
+                            "sender": "sync_server",
+                        }
+                    )
 
                 for update in sync_update_log.get(workspace_id, []):
                     await websocket.send_json(
@@ -769,6 +870,7 @@ def list_snapshots(workspace_id: UUID) -> list[SnapshotResponse]:
 @app.post("/api/workspaces/{workspace_id}/snapshots", response_model=SnapshotResponse)
 def create_snapshot(workspace_id: UUID, payload: CreateSnapshotRequest) -> SnapshotResponse:
     require_workspace(workspace_id)
+    compacted_through_seq = sync_update_sequences.get(workspace_id, 0)
     snapshot = SnapshotResponse(
         snapshot_id=uuid4(),
         workspace_id=workspace_id,
@@ -780,4 +882,13 @@ def create_snapshot(workspace_id: UUID, payload: CreateSnapshotRequest) -> Snaps
     )
     snapshots.setdefault(workspace_id, []).append(snapshot)
     persist_snapshot(snapshot)
+    try:
+        create_compaction_checkpoint(
+            workspace_id,
+            compacted_through_seq,
+            payload.state_vector,
+            payload.snapshot_update,
+        )
+    except (RuntimeError, ValueError, TypeError, binascii.Error):
+        raise HTTPException(status_code=422, detail="Could not create compaction checkpoint.")
     return snapshot

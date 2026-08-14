@@ -468,13 +468,18 @@ export default function CollabFlowHome() {
 
     setStatusMessage("Exporting durable snapshot...");
     try {
+      const activeDoc = ydocRef.current;
+      const stateVector = activeDoc ? bytesToBase64Url(Y.encodeStateVector(activeDoc)) : undefined;
+      const snapshotUpdate = activeDoc ? bytesToBase64Url(Y.encodeStateAsUpdate(activeDoc)) : undefined;
       const snapshot = await requestJson<Snapshot>(`/api/workspaces/${workspaceId}/snapshots`, {
         method: "POST",
         body: JSON.stringify({
           title,
           notes,
           tasks,
-          version_vector: versionVector
+          version_vector: versionVector,
+          state_vector: stateVector,
+          snapshot_update: snapshotUpdate
         })
       });
       setSnapshots((current) => [...current, snapshot]);

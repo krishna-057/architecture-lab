@@ -96,3 +96,17 @@ Rejected alternatives:
 - Implement compaction in the websocket handler. That would block live fanout on potentially expensive document merges.
 - Require PostgreSQL for every local run. The in-memory fallback still keeps lightweight local checks fast.
 - Store base64 text instead of bytes. Base64 is the websocket envelope, but PostgreSQL should store the actual update bytes and only re-encode for replay.
+
+## Generate compaction checkpoints from browser-owned Yjs state
+
+Decision:
+Snapshot export now includes a browser-generated Yjs `snapshot_update` and `state_vector`. In PostgreSQL mode, the API writes those bytes to `collabflow_compaction_checkpoints`, marks update rows through the current workspace sequence as compacted, and replays the latest checkpoint before the remaining update tail on reconnect.
+
+Why:
+The browser already owns the active Yjs document. Using its compact state update keeps this slice small and avoids adding a second CRDT runtime inside FastAPI before there is a real need for server-side compaction workers.
+
+Rejected alternatives:
+
+- Add a Python Yjs implementation now. That would make server-side compaction possible, but it adds dependency and semantic risk before the simpler client-assisted checkpoint path is proven.
+- Compact without replaying checkpoints. That would reduce stored tail rows but break reconnect recovery.
+- Compact in file mode. File mode is intentionally a lightweight development fallback, not the durable-sync path.

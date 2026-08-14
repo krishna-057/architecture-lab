@@ -46,3 +46,5 @@ Compaction matters because replaying every keystroke forever makes reconnect slo
 Presence stays out of compaction. Cursor and collaborator status updates are useful in the room, but they are not document history and should not be restored as if they were durable content.
 
 The first implementation step now exists in PostgreSQL mode: incoming Yjs updates are appended as bytes with a workspace sequence and hash dedupe before broadcast. That is intentionally short of full production sync because checkpoint generation, retention cleanup, and multi-process backpressure are still separate concerns.
+
+Checkpoint generation is client-assisted for now. The browser sends a compact Yjs state update during snapshot export, and the API stores it as a replay checkpoint before marking earlier update rows compacted. That is a pragmatic intermediate step: it proves bounded replay without adding a server-side CRDT engine too early.

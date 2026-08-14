@@ -77,7 +77,7 @@ Clients should:
 4. Apply missing in-memory Yjs updates from the sync server.
 5. Resume local edits and export durable snapshots only after the Yjs document catches up.
 
-When durable update storage is added, `sync_request` should replay the newest compaction checkpoint first and then all tail updates after that checkpoint. The replay contract should remain opaque Yjs bytes; clients should not depend on server-side document-field interpretation.
+In PostgreSQL mode, `sync_request` replays the newest compaction checkpoint first and then all tail updates after that checkpoint. The replay contract remains opaque Yjs bytes; clients must not depend on server-side document-field interpretation.
 
 ## Deferred Until Later Slices
 

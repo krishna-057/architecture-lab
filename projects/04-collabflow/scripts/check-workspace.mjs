@@ -39,6 +39,8 @@ if (
   !appPage.includes("new WebSocket") ||
   !appPage.includes("Y.applyUpdate") ||
   !appPage.includes("Y.encodeStateAsUpdate") ||
+  !appPage.includes("state_vector") ||
+  !appPage.includes("snapshot_update") ||
   !appPage.includes("/sync-contract") ||
   !appPage.includes("WebSocket Messages") ||
   !appPage.includes("Live Sync") ||
@@ -66,6 +68,9 @@ if (
   !apiFile.includes("collabflow_snapshots") ||
   !apiFile.includes("collabflow_yjs_updates") ||
   !apiFile.includes("append_sync_update") ||
+  !apiFile.includes("create_compaction_checkpoint") ||
+  !apiFile.includes("sync_compaction_checkpoints") ||
+  !apiFile.includes("compacted_through_seq") ||
   !apiFile.includes("update_hash") ||
   !apiFile.includes("durable_update_log")
 ) {
@@ -115,6 +120,7 @@ if (
   !compactionNotes.includes("update_hash") ||
   !compactionNotes.includes("snapshot_update") ||
   !compactionNotes.includes("compacted_at") ||
+  !compactionNotes.toLowerCase().includes("compaction checkpoint generation") ||
   !compactionNotes.includes("Awareness messages must never enter this log")
 ) {
   throw new Error("Update-log compaction notes must define durable Yjs replay, checkpoint, dedupe, and presence-exclusion rules.");

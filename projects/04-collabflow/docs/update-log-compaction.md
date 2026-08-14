@@ -68,4 +68,4 @@ Awareness messages must never enter this log. They are connection state, not doc
 
 ## Deferred Implementation
 
-The first durable update-log slice now creates these tables and appends websocket `yjs_update` payloads in PostgreSQL mode. Compaction is still deferred: the next implementation slice should generate `collabflow_compaction_checkpoints`, mark older rows with `compacted_at`, replay checkpoint plus tail updates, and add a compaction smoke test.
+The first durable update-log slice now creates these tables and appends websocket `yjs_update` payloads in PostgreSQL mode. Compaction checkpoint generation is client-assisted: snapshot export sends a compact Yjs `snapshot_update` and `state_vector`, the API stores them in `collabflow_compaction_checkpoints`, marks older rows with `compacted_at`, and replays checkpoint plus tail updates on reconnect. A later production worker can move this compaction server-side once the project needs multi-process coordination.
