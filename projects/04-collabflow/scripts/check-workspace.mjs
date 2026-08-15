@@ -13,7 +13,8 @@ const requiredFiles = [
   "services/api/requirements.txt",
   "services/api/app/main.py",
   "SYNC_CONTRACT.md",
-  "docs/update-log-compaction.md"
+  "docs/update-log-compaction.md",
+  "docs/membership-authorization.md"
 ];
 
 const rootPackage = JSON.parse(readFileSync("package.json", "utf8"));
@@ -110,9 +111,10 @@ if (
   !syncContract.includes("awareness_update") ||
   !syncContract.includes("/ws/collabflow") ||
   !syncContract.includes("Presence is Yjs awareness state") ||
+  !syncContract.includes("docs/membership-authorization.md") ||
   !syncContract.includes("docs/update-log-compaction.md")
 ) {
-  throw new Error("SYNC_CONTRACT.md must define websocket rooms, Yjs updates, awareness presence, and the durable compaction reference.");
+  throw new Error("SYNC_CONTRACT.md must define websocket rooms, Yjs updates, awareness presence, membership, and durable compaction references.");
 }
 
 const compactionNotes = readFileSync("docs/update-log-compaction.md", "utf8");
@@ -128,6 +130,19 @@ if (
   !compactionNotes.includes("Awareness messages must never enter this log")
 ) {
   throw new Error("Update-log compaction notes must define durable Yjs replay, checkpoint, dedupe, and presence-exclusion rules.");
+}
+
+const membershipNotes = readFileSync("docs/membership-authorization.md", "utf8");
+if (
+  !membershipNotes.includes("X-CollabFlow-User-Id") ||
+  !membershipNotes.includes("collabflow_workspace_memberships") ||
+  !membershipNotes.includes("owner") ||
+  !membershipNotes.includes("editor") ||
+  !membershipNotes.includes("viewer") ||
+  !membershipNotes.includes("Non-member workspace access: `404`") ||
+  !membershipNotes.includes("only `editor` or `owner` may send `yjs_update`")
+) {
+  throw new Error("Membership authorization notes must define identity headers, roles, storage, privacy, and websocket update rules.");
 }
 
 console.log("CollabFlow scaffold and sync contract check passed.");

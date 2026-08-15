@@ -30,7 +30,7 @@ The advertised endpoint is configured by `SYNC_WEBSOCKET_URL` and defaults to:
 ws://localhost:8300/ws/collabflow
 ```
 
-The current FastAPI app accepts this websocket endpoint. It validates the workspace room, replays in-memory Yjs updates for the workspace, broadcasts new Yjs updates to other connected browsers, and fans out ephemeral presence.
+The current FastAPI app accepts this websocket endpoint. It validates the workspace room, replays in-memory Yjs updates for the workspace, broadcasts new Yjs updates to other connected browsers, and fans out ephemeral presence. The next authorization boundary is documented in `docs/membership-authorization.md`: members may join a room, while only `owner` and `editor` roles may send durable `yjs_update` messages.
 
 ## Message Types
 
@@ -81,7 +81,7 @@ In PostgreSQL mode, `sync_request` replays the newest compaction checkpoint firs
 
 ## Deferred Until Later Slices
 
-- Signed workspace membership and authorization.
+- Runtime workspace membership enforcement.
 - Backpressure and heartbeat handling.
 - Durable update log storage and compaction implementation.
 - Multi-device conflict tests against a running sync provider.

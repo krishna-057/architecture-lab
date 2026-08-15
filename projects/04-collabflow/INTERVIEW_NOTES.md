@@ -50,3 +50,11 @@ The first implementation step now exists in PostgreSQL mode: incoming Yjs update
 Checkpoint generation is client-assisted for now. The browser sends a compact Yjs state update during snapshot export, and the API stores it as a replay checkpoint before marking earlier update rows compacted. That is a pragmatic intermediate step: it proves bounded replay without adding a server-side CRDT engine too early.
 
 Retention cleanup is deliberately boring: compacted rows are kept for a short window, then deleted. That is the kind of operational detail interviewers like because it shows the system has a rollback story and a storage-growth story, not just a happy-path compaction diagram.
+
+## Authorization Talking Points
+
+The membership contract separates authentication from authorization. Development headers provide a stable local identity, while workspace membership decides what that identity can do. That makes it easy to replace headers with OAuth later without changing route-level permission rules.
+
+The websocket path needs role checks too. Joining a room and sending durable Yjs updates are different capabilities: viewers may receive replay and send awareness, but only editors and owners should append document updates or export snapshots.
+
+Non-member access should return `404` for private workspace routes. That avoids confirming whether a workspace id exists, which is the right default for collaborative documents.

@@ -1,5 +1,30 @@
 # Daily Log
 
+## 2026-08-16
+
+Added CollabFlow workspace membership authorization contract.
+
+Added:
+- `docs/membership-authorization.md` covering development identity headers, `owner`/`editor`/`viewer` roles, proposed membership table, route rules, websocket permissions, and failure responses.
+- Sync contract notes clarifying that members may join websocket rooms while only editors and owners may send durable `yjs_update` messages.
+- README, architecture, decision, interview-note, validation-marker, daily-log, and task-queue updates.
+
+Validated the work by running:
+- `npm run check` from `projects/04-collabflow`
+- `python -m compileall services\api\app` from `projects/04-collabflow`
+- `docker compose -f compose.yaml config --quiet` from `projects/04-collabflow`
+- `npm run build -w @collabflow/web` from `projects/04-collabflow`
+- `npx tsc --noEmit -p apps/web/tsconfig.json` from `projects/04-collabflow`
+- `git diff --check`
+
+Notes:
+- This is intentionally a contract slice. Runtime membership persistence and enforcement are the next implementation step.
+- Docker Desktop's Linux engine was not available; this contract-only slice did not require a live PostgreSQL smoke test.
+- `git diff --check` reported only line-ending normalization warnings for touched text files.
+
+Next recommended task:
+- Add CollabFlow workspace membership runtime enforcement.
+
 ## 2026-08-15
 
 Added CollabFlow compaction retention cleanup.

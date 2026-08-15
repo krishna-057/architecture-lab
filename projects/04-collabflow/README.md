@@ -12,6 +12,7 @@ The current slice is a local-first workspace shell with a small realtime sync pa
 - optional PostgreSQL Yjs update-log tables for durable replay when the API is running in PostgreSQL mode
 - `SYNC_CONTRACT.md` plus API discovery for the websocket room, Yjs update, and presence contract
 - `docs/update-log-compaction.md` for the next durable update-log and compaction design
+- `docs/membership-authorization.md` for the workspace membership roles and route authorization contract
 
 ## Architecture Focus
 
@@ -72,6 +73,8 @@ When `DATABASE_URL` is set, exported workspace snapshots are stored in PostgreSQ
 Durable websocket update persistence now has its first storage boundary. In PostgreSQL mode, incoming `yjs_update` messages are written to an append-only `collabflow_yjs_updates` table with per-workspace sequence numbers and SHA-256 deduplication before being broadcast to peers. Snapshot export sends a compact Yjs state update and state vector from the browser; the API stores that as a `collabflow_compaction_checkpoints` row and marks update rows through the checkpoint sequence as compacted. File mode keeps the lightweight in-memory replay behavior for dependency-light local checks.
 
 Compacted update rows are retained briefly before deletion. `COMPACTED_UPDATE_RETENTION_HOURS` defaults to `72`, and the API runs a small cleanup pass on PostgreSQL-mode startup. A later worker can call the same retention rule on a schedule when the sync service moves beyond single-process development.
+
+Workspace authorization is documented before enforcement. The contract uses development identity headers, `owner`/`editor`/`viewer` roles, private-workspace `404` behavior for non-members, and editor-only durable update writes. Runtime enforcement is the next implementation step.
 
 ## Sync Contract
 

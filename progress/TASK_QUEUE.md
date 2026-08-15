@@ -6,10 +6,11 @@ Tasks should stay small enough for one focused session.
 
 ### Ready
 
-- [ ] Add CollabFlow workspace membership authorization contract.
+- [ ] Add CollabFlow workspace membership runtime enforcement.
 
 ### Completed
 
+- [x] Add CollabFlow workspace membership authorization contract.
 - [x] Add CollabFlow server-side compaction worker notes and retention cleanup.
 - [x] Add CollabFlow compaction checkpoint generation.
 - [x] Add CollabFlow durable Yjs update-log foundation.

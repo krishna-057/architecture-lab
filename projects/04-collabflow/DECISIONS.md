@@ -124,3 +124,17 @@ Rejected alternatives:
 - Delete compacted rows immediately. That removes rollback space and makes checkpoint bugs harder to recover from.
 - Add a scheduler now. A separate worker is useful later, but adding a runtime only to call one SQL cleanup rule would be extra machinery.
 - Keep compacted rows forever. That makes compaction less meaningful because storage would still grow without bound.
+
+## Define workspace membership authorization before enforcing it
+
+Decision:
+CollabFlow now documents workspace membership roles, development identity headers, proposed membership table, HTTP route rules, websocket join/update rules, and failure semantics in `docs/membership-authorization.md`.
+
+Why:
+Authorization touches every boundary: workspace discovery, snapshot export, websocket room joins, durable Yjs update writes, and member management. Defining the contract first keeps the next implementation from accidentally mixing authentication, membership persistence, and sync behavior in one large change.
+
+Rejected alternatives:
+
+- Add OAuth immediately. That would be more realistic, but it would distract from the workspace authorization model and add provider setup to the architecture lab.
+- Let anyone with a workspace id join. That is convenient for demos, but it makes private workspace ids bearer secrets.
+- Treat viewers as completely passive. Viewers should not write document updates, but they can still send awareness because presence is ephemeral connection state.
