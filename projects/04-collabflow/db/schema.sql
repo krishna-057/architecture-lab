@@ -42,3 +42,7 @@ create table if not exists collabflow_compaction_checkpoints (
 
 create index if not exists idx_collabflow_yjs_updates_workspace_seq
   on collabflow_yjs_updates(workspace_id, update_seq);
+
+create index if not exists idx_collabflow_yjs_updates_compacted_at
+  on collabflow_yjs_updates(compacted_at)
+  where compacted_at is not null;

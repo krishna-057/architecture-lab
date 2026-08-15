@@ -55,7 +55,7 @@ Compaction can run inline for local development, but production should move it t
 
 ## Retention Rule
 
-After a checkpoint is written and verified, older updates can be marked with `compacted_at` instead of deleted immediately. A later cleanup job can delete compacted rows after a short retention window. Keeping a window makes failed deploys and broken compaction code easier to roll back.
+After a checkpoint is written and verified, older updates are marked with `compacted_at` instead of deleted immediately. Retention cleanup deletes compacted rows after `COMPACTED_UPDATE_RETENTION_HOURS`, which defaults to 72 hours. Keeping a window makes failed deploys and broken compaction code easier to roll back.
 
 Awareness messages must never enter this log. They are connection state, not document history.
 
@@ -68,4 +68,4 @@ Awareness messages must never enter this log. They are connection state, not doc
 
 ## Deferred Implementation
 
-The first durable update-log slice now creates these tables and appends websocket `yjs_update` payloads in PostgreSQL mode. Compaction checkpoint generation is client-assisted: snapshot export sends a compact Yjs `snapshot_update` and `state_vector`, the API stores them in `collabflow_compaction_checkpoints`, marks older rows with `compacted_at`, and replays checkpoint plus tail updates on reconnect. A later production worker can move this compaction server-side once the project needs multi-process coordination.
+The first durable update-log slice now creates these tables and appends websocket `yjs_update` payloads in PostgreSQL mode. Compaction checkpoint generation is client-assisted: snapshot export sends a compact Yjs `snapshot_update` and `state_vector`, the API stores them in `collabflow_compaction_checkpoints`, marks older rows with `compacted_at`, and replays checkpoint plus tail updates on reconnect. Startup retention cleanup removes old compacted rows. A later production worker can move compaction and cleanup scheduling server-side once the project needs multi-process coordination.

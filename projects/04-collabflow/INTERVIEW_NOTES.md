@@ -48,3 +48,5 @@ Presence stays out of compaction. Cursor and collaborator status updates are use
 The first implementation step now exists in PostgreSQL mode: incoming Yjs updates are appended as bytes with a workspace sequence and hash dedupe before broadcast. That is intentionally short of full production sync because checkpoint generation, retention cleanup, and multi-process backpressure are still separate concerns.
 
 Checkpoint generation is client-assisted for now. The browser sends a compact Yjs state update during snapshot export, and the API stores it as a replay checkpoint before marking earlier update rows compacted. That is a pragmatic intermediate step: it proves bounded replay without adding a server-side CRDT engine too early.
+
+Retention cleanup is deliberately boring: compacted rows are kept for a short window, then deleted. That is the kind of operational detail interviewers like because it shows the system has a rollback story and a storage-growth story, not just a happy-path compaction diagram.

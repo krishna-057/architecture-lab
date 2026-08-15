@@ -3,7 +3,7 @@ import binascii
 import hashlib
 import json
 import os
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Literal
 from uuid import UUID, uuid4
@@ -108,6 +108,7 @@ if not SNAPSHOT_STORE_PATH.is_absolute():
 SYNC_WEBSOCKET_URL = os.getenv("SYNC_WEBSOCKET_URL", "ws://localhost:8300/ws/collabflow")
 DATABASE_URL = os.getenv("DATABASE_URL")
 SNAPSHOT_STORAGE_MODE = "postgres" if DATABASE_URL and psycopg is not None else "file"
+COMPACTED_UPDATE_RETENTION_HOURS = int(os.getenv("COMPACTED_UPDATE_RETENTION_HOURS", "72"))
 
 workspaces: dict[UUID, WorkspaceResponse] = {}
 snapshots: dict[UUID, list[SnapshotResponse]] = {}
@@ -203,6 +204,13 @@ def init_postgres_store() -> None:
                 """
                 create index if not exists idx_collabflow_yjs_updates_workspace_seq
                   on collabflow_yjs_updates(workspace_id, update_seq);
+                """
+            )
+            cursor.execute(
+                """
+                create index if not exists idx_collabflow_yjs_updates_compacted_at
+                  on collabflow_yjs_updates(compacted_at)
+                  where compacted_at is not null;
                 """
             )
 
@@ -312,6 +320,7 @@ def load_snapshot_store() -> None:
     if SNAPSHOT_STORAGE_MODE == "postgres":
         init_postgres_store()
         load_postgres_snapshots()
+        cleanup_compacted_updates()
         return
 
     load_file_snapshots()
@@ -484,6 +493,28 @@ def create_compaction_checkpoint(
     return checkpoint_id
 
 
+def cleanup_compacted_updates(retention_hours: int = COMPACTED_UPDATE_RETENTION_HOURS) -> int:
+    if SNAPSHOT_STORAGE_MODE != "postgres":
+        return 0
+
+    connection = postgres_connection()
+    if connection is None:
+        return 0
+
+    cutoff = now_utc() - timedelta(hours=retention_hours)
+    with connection:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                """
+                delete from collabflow_yjs_updates
+                where compacted_at is not null
+                  and compacted_at < %s
+                """,
+                (cutoff,),
+            )
+            return int(cursor.rowcount or 0)
+
+
 def require_workspace(workspace_id: UUID) -> WorkspaceResponse:
     workspace = workspaces.get(workspace_id)
     if workspace is None:
@@ -642,6 +673,7 @@ def health() -> dict[str, str]:
         "storage": SNAPSHOT_STORAGE_MODE,
         "crdt_runtime": "yjs",
         "sync_transport": "websocket_sync",
+        "compacted_update_retention_hours": str(COMPACTED_UPDATE_RETENTION_HOURS),
     }
 
 

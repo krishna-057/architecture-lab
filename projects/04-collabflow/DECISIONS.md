@@ -110,3 +110,17 @@ Rejected alternatives:
 - Add a Python Yjs implementation now. That would make server-side compaction possible, but it adds dependency and semantic risk before the simpler client-assisted checkpoint path is proven.
 - Compact without replaying checkpoints. That would reduce stored tail rows but break reconnect recovery.
 - Compact in file mode. File mode is intentionally a lightweight development fallback, not the durable-sync path.
+
+## Add retention cleanup before a separate compaction worker
+
+Decision:
+CollabFlow now deletes PostgreSQL update rows whose `compacted_at` timestamp is older than `COMPACTED_UPDATE_RETENTION_HOURS`. The cleanup runs at API startup in PostgreSQL mode and uses the same rule a future worker should schedule.
+
+Why:
+The project needs a bounded log lifecycle before it needs a new worker process. Startup cleanup is enough for the development architecture, while the retention window preserves rollback room if a checkpoint is bad.
+
+Rejected alternatives:
+
+- Delete compacted rows immediately. That removes rollback space and makes checkpoint bugs harder to recover from.
+- Add a scheduler now. A separate worker is useful later, but adding a runtime only to call one SQL cleanup rule would be extra machinery.
+- Keep compacted rows forever. That makes compaction less meaningful because storage would still grow without bound.

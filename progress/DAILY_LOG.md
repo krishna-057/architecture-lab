@@ -1,5 +1,34 @@
 # Daily Log
 
+## 2026-08-15
+
+Added CollabFlow compaction retention cleanup.
+
+Added:
+- `COMPACTED_UPDATE_RETENTION_HOURS` configuration with a 72-hour default.
+- PostgreSQL startup cleanup for `collabflow_yjs_updates` rows whose `compacted_at` value is older than the retention window.
+- Partial `idx_collabflow_yjs_updates_compacted_at` index for cleanup scans.
+- Health metadata for the configured compacted-update retention window.
+- README, architecture, decision, interview-note, compaction-note, schema, env, validation-marker, daily-log, and task-queue updates.
+
+Validated the work by running:
+- `npm run check` from `projects/04-collabflow`
+- `python -m compileall services\api\app` from `projects/04-collabflow`
+- `docker compose -f compose.yaml config --quiet` from `projects/04-collabflow`
+- A direct Python smoke test covering file-mode retention cleanup no-op behavior and health metadata
+- `npm run build -w @collabflow/web` from `projects/04-collabflow`
+- `npx tsc --noEmit -p apps/web/tsconfig.json` from `projects/04-collabflow`
+- `git diff --check`
+
+Notes:
+- This run continued from `K:\AutoPilot_Projects\FlashReserve_run_20260810`; the default `K:\AutoPilot_Projects\FlashReserve` checkout still has older uncommitted HookRelay work.
+- `git diff --check` reported only line-ending normalization warnings for touched text files.
+- Docker Desktop's Linux engine was not available, so a live PostgreSQL retention cleanup smoke test could not run; schema, compose config, and file-mode retention behavior passed.
+- Retention cleanup currently runs on PostgreSQL-mode API startup. A separate scheduled worker remains deferred until the project needs multi-process sync operations.
+
+Next recommended task:
+- Add CollabFlow workspace membership authorization contract.
+
 ## 2026-08-14
 
 Added CollabFlow compaction checkpoint generation.

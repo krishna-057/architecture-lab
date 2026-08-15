@@ -71,6 +71,8 @@ if (
   !apiFile.includes("create_compaction_checkpoint") ||
   !apiFile.includes("sync_compaction_checkpoints") ||
   !apiFile.includes("compacted_through_seq") ||
+  !apiFile.includes("COMPACTED_UPDATE_RETENTION_HOURS") ||
+  !apiFile.includes("cleanup_compacted_updates") ||
   !apiFile.includes("update_hash") ||
   !apiFile.includes("durable_update_log")
 ) {
@@ -85,6 +87,7 @@ if (
   !schemaFile.includes("collabflow_compaction_checkpoints") ||
   !schemaFile.includes("idx_collabflow_snapshots_workspace_created") ||
   !schemaFile.includes("idx_collabflow_yjs_updates_workspace_seq") ||
+  !schemaFile.includes("idx_collabflow_yjs_updates_compacted_at") ||
   !schemaFile.includes("update_hash") ||
   !schemaFile.includes("jsonb")
 ) {
@@ -120,6 +123,7 @@ if (
   !compactionNotes.includes("update_hash") ||
   !compactionNotes.includes("snapshot_update") ||
   !compactionNotes.includes("compacted_at") ||
+  !compactionNotes.includes("retention cleanup") ||
   !compactionNotes.toLowerCase().includes("compaction checkpoint generation") ||
   !compactionNotes.includes("Awareness messages must never enter this log")
 ) {

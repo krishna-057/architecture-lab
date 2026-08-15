@@ -61,6 +61,8 @@ Durable Yjs update storage starts as an append-only log in PostgreSQL mode. The 
 
 Compaction reduces replay cost without changing document ownership. The browser and Yjs still own merge semantics; the server stores ordered update bytes, replays the latest checkpoint followed by the current non-compacted tail on reconnect, and keeps awareness messages out of durable storage.
 
+Retention cleanup is intentionally conservative. Compacted update rows are marked first, retained for `COMPACTED_UPDATE_RETENTION_HOURS`, then deleted by a PostgreSQL-mode cleanup helper. This keeps rollback room after checkpoint creation while preventing the update log from growing forever.
+
 ## WebSocket And Presence Contract
 
 The websocket implementation is a first development shell that honors the server-discoverable contract:
