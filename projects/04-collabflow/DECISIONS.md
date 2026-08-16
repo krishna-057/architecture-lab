@@ -138,3 +138,17 @@ Rejected alternatives:
 - Add OAuth immediately. That would be more realistic, but it would distract from the workspace authorization model and add provider setup to the architecture lab.
 - Let anyone with a workspace id join. That is convenient for demos, but it makes private workspace ids bearer secrets.
 - Treat viewers as completely passive. Viewers should not write document updates, but they can still send awareness because presence is ephemeral connection state.
+
+## Enforce development workspace membership before production auth
+
+Decision:
+CollabFlow now enforces membership with development identity headers. Workspace creators become owners, workspace lists are member-scoped, snapshots require viewer/editor role as appropriate, websocket joins require membership, and durable `yjs_update` writes require editor or owner role.
+
+Why:
+This proves the authorization boundary without adding an identity provider. The important architecture signal is role-based workspace access across HTTP and websocket paths; OAuth can replace the identity header later.
+
+Rejected alternatives:
+
+- Wait for production auth before enforcing roles. That would keep collaboration routes open longer than necessary.
+- Enforce HTTP routes only. Websocket update writes are durable document mutations and need the same role model.
+- Make viewers unable to send awareness. Awareness is ephemeral presence, so allowing it keeps read-only collaboration useful without changing document state.

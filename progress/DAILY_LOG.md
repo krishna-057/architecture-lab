@@ -2,6 +2,37 @@
 
 ## 2026-08-16
 
+Added CollabFlow workspace membership runtime enforcement.
+
+Added:
+- Development identity headers for HTTP workspace routes.
+- Workspace creator owner membership creation.
+- File and PostgreSQL membership persistence through `collabflow_workspace_memberships`.
+- Member-scoped workspace listing, viewer-gated workspace/sync/snapshot reads, editor-gated snapshot export, and owner-only member management endpoints.
+- Websocket membership checks on `sync_request` and editor/owner enforcement for durable `yjs_update` writes.
+- Frontend development identity headers and websocket user identity payloads.
+- Schema, docs, validation-marker, daily-log, and task-queue updates.
+
+Validated the work by running:
+- `npm run check` from `projects/04-collabflow`
+- `python -m compileall services\api\app` from `projects/04-collabflow`
+- A direct Python smoke test covering missing identity rejection, creator owner membership, member-scoped listing, viewer snapshot export rejection, editor snapshot export, and last-owner removal protection
+- `docker compose -f compose.yaml config --quiet` from `projects/04-collabflow`
+- `npm run build -w @collabflow/web` from `projects/04-collabflow`
+- `npx tsc --noEmit -p apps/web/tsconfig.json` from `projects/04-collabflow`
+- `git diff --check`
+
+Notes:
+- This run continued from `K:\AutoPilot_Projects\FlashReserve_run_20260810`; the default `K:\AutoPilot_Projects\FlashReserve` checkout still has older uncommitted HookRelay work.
+- Runtime membership enforcement uses development headers only. Signed sessions and production authentication remain deferred.
+- Docker Desktop's Linux engine was not available, so a live PostgreSQL membership smoke test could not run; schema, compose config, and file-mode runtime role checks passed.
+- `git diff --check` reported only line-ending normalization warnings for touched text files.
+
+Next recommended task:
+- Add CollabFlow signed session identity notes.
+
+## 2026-08-16
+
 Added CollabFlow workspace membership authorization contract.
 
 Added:

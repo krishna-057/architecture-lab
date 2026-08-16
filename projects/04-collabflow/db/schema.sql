@@ -46,3 +46,13 @@ create index if not exists idx_collabflow_yjs_updates_workspace_seq
 create index if not exists idx_collabflow_yjs_updates_compacted_at
   on collabflow_yjs_updates(compacted_at)
   where compacted_at is not null;
+
+create table if not exists collabflow_workspace_memberships (
+  workspace_id uuid not null references collabflow_workspaces(workspace_id) on delete cascade,
+  user_id text not null,
+  display_name text not null,
+  role text not null check (role in ('owner', 'editor', 'viewer')),
+  created_at timestamptz not null,
+  updated_at timestamptz not null,
+  primary key (workspace_id, user_id)
+);

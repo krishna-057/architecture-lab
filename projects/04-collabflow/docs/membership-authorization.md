@@ -1,10 +1,10 @@
 # CollabFlow Workspace Membership Authorization Contract
 
-CollabFlow currently uses development client identity for local sync. The next secure boundary is workspace membership: every HTTP snapshot action and websocket sync join should be evaluated against the caller's role in the workspace.
+CollabFlow uses development client identity for local sync and enforces workspace membership at the HTTP and websocket boundaries. This is not production authentication, but it proves the authorization shape before OAuth or password login is added.
 
 ## Development Identity
 
-The development API should accept these headers until a real identity provider is added:
+The development API accepts these headers until a real identity provider is added:
 
 ```text
 X-CollabFlow-User-Id: user_123
@@ -13,7 +13,7 @@ X-CollabFlow-Display-Name: Krishna
 
 These headers are not authentication. They are a stable local identity envelope so route ownership, membership checks, presence labels, and audit fields can be implemented before OAuth or password login.
 
-## Proposed Roles
+## Roles
 
 | Role | Can read | Can edit | Can export snapshot | Can manage members |
 | --- | --- | --- | --- | --- |
@@ -23,7 +23,7 @@ These headers are not authentication. They are a stable local identity envelope 
 
 The creator of a workspace becomes its first `owner`. Owners can invite members and change roles. A workspace must always have at least one owner.
 
-## Proposed Tables
+## Membership Table
 
 ```sql
 create table collabflow_workspace_memberships (
@@ -37,7 +37,7 @@ create table collabflow_workspace_memberships (
 );
 ```
 
-This table is intentionally separate from Yjs update history. Membership decides who can join a room or mutate a workspace; CRDT updates still remain opaque document bytes.
+This table is intentionally separate from Yjs update history. Membership decides who can join a room or mutate a workspace; CRDT updates still remain opaque document bytes. File-mode local checks persist the same membership shape inside `.data/snapshots.json`.
 
 ## Route Rules
 

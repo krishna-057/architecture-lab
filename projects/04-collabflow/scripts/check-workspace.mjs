@@ -42,6 +42,8 @@ if (
   !appPage.includes("Y.encodeStateAsUpdate") ||
   !appPage.includes("state_vector") ||
   !appPage.includes("snapshot_update") ||
+  !appPage.includes("X-CollabFlow-User-Id") ||
+  !appPage.includes("NEXT_PUBLIC_COLLABFLOW_USER_ID") ||
   !appPage.includes("/sync-contract") ||
   !appPage.includes("WebSocket Messages") ||
   !appPage.includes("Live Sync") ||
@@ -67,6 +69,11 @@ if (
   !apiFile.includes("DATABASE_URL") ||
   !apiFile.includes("SNAPSHOT_STORAGE_MODE") ||
   !apiFile.includes("collabflow_snapshots") ||
+  !apiFile.includes("collabflow_workspace_memberships") ||
+  !apiFile.includes("MembershipResponse") ||
+  !apiFile.includes("identity_from_headers") ||
+  !apiFile.includes("require_membership") ||
+  !apiFile.includes("/api/workspaces/{workspace_id}/members") ||
   !apiFile.includes("collabflow_yjs_updates") ||
   !apiFile.includes("append_sync_update") ||
   !apiFile.includes("create_compaction_checkpoint") ||
@@ -86,6 +93,7 @@ if (
   !schemaFile.includes("collabflow_snapshots") ||
   !schemaFile.includes("collabflow_yjs_updates") ||
   !schemaFile.includes("collabflow_compaction_checkpoints") ||
+  !schemaFile.includes("collabflow_workspace_memberships") ||
   !schemaFile.includes("idx_collabflow_snapshots_workspace_created") ||
   !schemaFile.includes("idx_collabflow_yjs_updates_workspace_seq") ||
   !schemaFile.includes("idx_collabflow_yjs_updates_compacted_at") ||

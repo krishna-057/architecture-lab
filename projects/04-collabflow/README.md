@@ -74,7 +74,7 @@ Durable websocket update persistence now has its first storage boundary. In Post
 
 Compacted update rows are retained briefly before deletion. `COMPACTED_UPDATE_RETENTION_HOURS` defaults to `72`, and the API runs a small cleanup pass on PostgreSQL-mode startup. A later worker can call the same retention rule on a schedule when the sync service moves beyond single-process development.
 
-Workspace authorization is documented before enforcement. The contract uses development identity headers, `owner`/`editor`/`viewer` roles, private-workspace `404` behavior for non-members, and editor-only durable update writes. Runtime enforcement is the next implementation step.
+Workspace authorization is enforced with development identity headers. The runtime creates an `owner` membership for the workspace creator, filters workspace lists by membership, protects snapshots and sync-contract reads, blocks viewer websocket document updates, and exposes owner-only member management endpoints.
 
 ## Sync Contract
 

@@ -94,6 +94,8 @@ type LocalState = {
 };
 
 const apiBaseUrl = (process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8300").replace(/\/$/, "");
+const developmentUserId = process.env.NEXT_PUBLIC_COLLABFLOW_USER_ID ?? "local-owner";
+const developmentDisplayName = process.env.NEXT_PUBLIC_COLLABFLOW_DISPLAY_NAME ?? "Local Owner";
 const indexedDbName = "collabflow-local-first";
 const indexedDbStore = "workspace-snapshots";
 const remoteUpdateOrigin = "collabflow-remote";
@@ -103,6 +105,8 @@ async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
     ...init,
     headers: {
       "Content-Type": "application/json",
+      "X-CollabFlow-User-Id": developmentUserId,
+      "X-CollabFlow-Display-Name": developmentDisplayName,
       ...init?.headers
     }
   });
@@ -335,6 +339,7 @@ export default function CollabFlowHome() {
             room_id: nextContract.room_id,
             document_id: nextContract.document_id,
             client_id: identity.clientId,
+            user_id: developmentUserId,
             display_name: identity.displayName
           })
         );

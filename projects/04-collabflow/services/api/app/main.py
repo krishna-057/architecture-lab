@@ -15,7 +15,7 @@ except ImportError:  # pragma: no cover - optional durable mode dependency
     psycopg = None
     dict_row = None
 
-from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, Header, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.encoders import jsonable_encoder
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
@@ -46,6 +46,30 @@ class WorkspaceResponse(BaseModel):
     name: str
     status: Literal["local_ready", "sync_ready"]
     created_at: datetime
+
+
+class WorkspaceIdentity(BaseModel):
+    user_id: str
+    display_name: str
+
+
+class MembershipResponse(BaseModel):
+    workspace_id: UUID
+    user_id: str
+    display_name: str
+    role: Literal["owner", "editor", "viewer"]
+    created_at: datetime
+    updated_at: datetime
+
+
+class CreateMembershipRequest(BaseModel):
+    user_id: str = Field(min_length=1, max_length=120)
+    display_name: str = Field(min_length=1, max_length=120)
+    role: Literal["owner", "editor", "viewer"] = "viewer"
+
+
+class UpdateMembershipRequest(BaseModel):
+    role: Literal["owner", "editor", "viewer"]
 
 
 class SyncMessageContract(BaseModel):
@@ -111,6 +135,7 @@ SNAPSHOT_STORAGE_MODE = "postgres" if DATABASE_URL and psycopg is not None else 
 COMPACTED_UPDATE_RETENTION_HOURS = int(os.getenv("COMPACTED_UPDATE_RETENTION_HOURS", "72"))
 
 workspaces: dict[UUID, WorkspaceResponse] = {}
+memberships: dict[UUID, dict[str, MembershipResponse]] = {}
 snapshots: dict[UUID, list[SnapshotResponse]] = {}
 sync_update_log: dict[UUID, list[str]] = {}
 sync_update_sequences: dict[UUID, int] = {}
@@ -213,6 +238,19 @@ def init_postgres_store() -> None:
                   where compacted_at is not null;
                 """
             )
+            cursor.execute(
+                """
+                create table if not exists collabflow_workspace_memberships (
+                  workspace_id uuid not null references collabflow_workspaces(workspace_id) on delete cascade,
+                  user_id text not null,
+                  display_name text not null,
+                  role text not null check (role in ('owner', 'editor', 'viewer')),
+                  created_at timestamptz not null,
+                  updated_at timestamptz not null,
+                  primary key (workspace_id, user_id)
+                );
+                """
+            )
 
 
 def load_postgres_snapshots() -> None:
@@ -238,6 +276,17 @@ def load_postgres_snapshots() -> None:
             for row in cursor.fetchall():
                 snapshot = SnapshotResponse(**row)
                 snapshots.setdefault(snapshot.workspace_id, []).append(snapshot)
+
+            cursor.execute(
+                """
+                select workspace_id, user_id, display_name, role, created_at, updated_at
+                from collabflow_workspace_memberships
+                order by created_at
+                """
+            )
+            for row in cursor.fetchall():
+                membership = MembershipResponse(**row)
+                memberships.setdefault(membership.workspace_id, {})[membership.user_id] = membership
 
             cursor.execute(
                 """
@@ -297,6 +346,10 @@ def load_file_snapshots() -> None:
         snapshot = SnapshotResponse(**raw_snapshot)
         snapshots.setdefault(snapshot.workspace_id, []).append(snapshot)
 
+    for raw_membership in raw_payload.get("memberships", []):
+        membership = MembershipResponse(**raw_membership)
+        memberships.setdefault(membership.workspace_id, {})[membership.user_id] = membership
+
 
 def persist_file_snapshots() -> None:
     SNAPSHOT_STORE_PATH.parent.mkdir(parents=True, exist_ok=True)
@@ -309,6 +362,11 @@ def persist_file_snapshots() -> None:
             model_as_json_dict(snapshot)
             for workspace_snapshots in snapshots.values()
             for snapshot in sorted(workspace_snapshots, key=lambda item: item.created_at)
+        ],
+        "memberships": [
+            model_as_json_dict(membership)
+            for workspace_memberships in memberships.values()
+            for membership in sorted(workspace_memberships.values(), key=lambda item: item.created_at)
         ],
     }
     tmp_path = SNAPSHOT_STORE_PATH.with_suffix(".tmp")
@@ -346,6 +404,57 @@ def persist_workspace(workspace: WorkspaceResponse) -> None:
                     status = excluded.status
                 """,
                 (workspace.workspace_id, workspace.name, workspace.status, workspace.created_at),
+            )
+
+
+def persist_membership(membership: MembershipResponse) -> None:
+    if SNAPSHOT_STORAGE_MODE == "file":
+        persist_file_snapshots()
+        return
+
+    connection = postgres_connection()
+    if connection is None:
+        return
+
+    with connection:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                """
+                insert into collabflow_workspace_memberships (
+                  workspace_id, user_id, display_name, role, created_at, updated_at
+                )
+                values (%s, %s, %s, %s, %s, %s)
+                on conflict (workspace_id, user_id) do update
+                set display_name = excluded.display_name,
+                    role = excluded.role,
+                    updated_at = excluded.updated_at
+                """,
+                (
+                    membership.workspace_id,
+                    membership.user_id,
+                    membership.display_name,
+                    membership.role,
+                    membership.created_at,
+                    membership.updated_at,
+                ),
+            )
+
+
+def delete_membership(workspace_id: UUID, user_id: str) -> None:
+    memberships.get(workspace_id, {}).pop(user_id, None)
+    if SNAPSHOT_STORAGE_MODE == "file":
+        persist_file_snapshots()
+        return
+
+    connection = postgres_connection()
+    if connection is None:
+        return
+
+    with connection:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                "delete from collabflow_workspace_memberships where workspace_id = %s and user_id = %s",
+                (workspace_id, user_id),
             )
 
 
@@ -522,6 +631,43 @@ def require_workspace(workspace_id: UUID) -> WorkspaceResponse:
     return workspace
 
 
+def identity_from_headers(
+    x_collabflow_user_id: str | None,
+    x_collabflow_display_name: str | None,
+) -> WorkspaceIdentity:
+    user_id = x_collabflow_user_id.strip() if isinstance(x_collabflow_user_id, str) else ""
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Missing workspace identity.")
+    display_name = (
+        x_collabflow_display_name.strip()
+        if isinstance(x_collabflow_display_name, str) and x_collabflow_display_name.strip()
+        else user_id
+    )
+    return WorkspaceIdentity(user_id=user_id, display_name=display_name)
+
+
+def get_membership(workspace_id: UUID, user_id: str) -> MembershipResponse | None:
+    return memberships.get(workspace_id, {}).get(user_id)
+
+
+def role_rank(role: str) -> int:
+    return {"viewer": 1, "editor": 2, "owner": 3}[role]
+
+
+def require_membership(workspace_id: UUID, identity: WorkspaceIdentity, minimum_role: str) -> MembershipResponse:
+    require_workspace(workspace_id)
+    membership = get_membership(workspace_id, identity.user_id)
+    if membership is None:
+        raise HTTPException(status_code=404, detail="Workspace not found.")
+    if role_rank(membership.role) < role_rank(minimum_role):
+        raise HTTPException(status_code=403, detail="Insufficient workspace role.")
+    return membership
+
+
+def owner_count(workspace_id: UUID) -> int:
+    return sum(1 for membership in memberships.get(workspace_id, {}).values() if membership.role == "owner")
+
+
 def mark_workspace_sync_ready(workspace_id: UUID) -> None:
     workspace = require_workspace(workspace_id)
     if workspace.status == "sync_ready":
@@ -545,7 +691,7 @@ def sync_contract_for(workspace_id: UUID) -> SyncContractResponse:
         sync_transport="websocket_sync",
         websocket_endpoint=SYNC_WEBSOCKET_URL,
         room_id=room_id,
-        auth_mode="development client identity header; signed workspace membership is deferred",
+        auth_mode="development identity headers with workspace membership roles",
         yjs_update_encoding="base64url encoded Yjs binary update bytes",
         messages=[
             SyncMessageContract(
@@ -678,7 +824,12 @@ def health() -> dict[str, str]:
 
 
 @app.post("/api/workspaces", response_model=WorkspaceResponse)
-def create_workspace(payload: CreateWorkspaceRequest) -> WorkspaceResponse:
+def create_workspace(
+    payload: CreateWorkspaceRequest,
+    x_collabflow_user_id: str | None = Header(default=None),
+    x_collabflow_display_name: str | None = Header(default=None),
+) -> WorkspaceResponse:
+    identity = identity_from_headers(x_collabflow_user_id, x_collabflow_display_name)
     workspace = WorkspaceResponse(
         workspace_id=uuid4(),
         name=payload.name,
@@ -687,23 +838,57 @@ def create_workspace(payload: CreateWorkspaceRequest) -> WorkspaceResponse:
     )
     workspaces[workspace.workspace_id] = workspace
     snapshots[workspace.workspace_id] = []
+    memberships[workspace.workspace_id] = {
+        identity.user_id: MembershipResponse(
+            workspace_id=workspace.workspace_id,
+            user_id=identity.user_id,
+            display_name=identity.display_name,
+            role="owner",
+            created_at=workspace.created_at,
+            updated_at=workspace.created_at,
+        )
+    }
     persist_workspace(workspace)
+    persist_membership(memberships[workspace.workspace_id][identity.user_id])
     return workspace
 
 
 @app.get("/api/workspaces", response_model=list[WorkspaceResponse])
-def list_workspaces() -> list[WorkspaceResponse]:
-    return sorted(workspaces.values(), key=lambda workspace: workspace.created_at)
+def list_workspaces(
+    x_collabflow_user_id: str | None = Header(default=None),
+    x_collabflow_display_name: str | None = Header(default=None),
+) -> list[WorkspaceResponse]:
+    identity = identity_from_headers(x_collabflow_user_id, x_collabflow_display_name)
+    visible_workspace_ids = [
+        workspace_id
+        for workspace_id, workspace_memberships in memberships.items()
+        if identity.user_id in workspace_memberships
+    ]
+    return sorted(
+        [workspaces[workspace_id] for workspace_id in visible_workspace_ids if workspace_id in workspaces],
+        key=lambda workspace: workspace.created_at,
+    )
 
 
 @app.get("/api/workspaces/{workspace_id}", response_model=WorkspaceResponse)
-def get_workspace(workspace_id: UUID) -> WorkspaceResponse:
+def get_workspace(
+    workspace_id: UUID,
+    x_collabflow_user_id: str | None = Header(default=None),
+    x_collabflow_display_name: str | None = Header(default=None),
+) -> WorkspaceResponse:
+    identity = identity_from_headers(x_collabflow_user_id, x_collabflow_display_name)
+    require_membership(workspace_id, identity, "viewer")
     return require_workspace(workspace_id)
 
 
 @app.get("/api/workspaces/{workspace_id}/sync-contract", response_model=SyncContractResponse)
-def get_sync_contract(workspace_id: UUID) -> SyncContractResponse:
-    require_workspace(workspace_id)
+def get_sync_contract(
+    workspace_id: UUID,
+    x_collabflow_user_id: str | None = Header(default=None),
+    x_collabflow_display_name: str | None = Header(default=None),
+) -> SyncContractResponse:
+    identity = identity_from_headers(x_collabflow_user_id, x_collabflow_display_name)
+    require_membership(workspace_id, identity, "viewer")
     return sync_contract_for(workspace_id)
 
 
@@ -719,6 +904,14 @@ async def collabflow_sync(websocket: WebSocket) -> None:
             if message_type == "sync_request":
                 workspace_id = UUID(str(message.get("workspace_id")))
                 require_workspace(workspace_id)
+                user_id = str(message.get("user_id") or "").strip()
+                if not user_id:
+                    await websocket.send_json({"type": "sync_error", "detail": "Missing workspace identity."})
+                    continue
+                membership = get_membership(workspace_id, user_id)
+                if membership is None:
+                    await websocket.send_json({"type": "sync_error", "detail": "Workspace not found."})
+                    continue
                 room_id = str(message.get("room_id"))
                 expected_room_id = f"workspace:{workspace_id}"
                 if room_id != expected_room_id:
@@ -732,11 +925,13 @@ async def collabflow_sync(websocket: WebSocket) -> None:
                     continue
 
                 client_id = str(message.get("client_id") or uuid4())
-                display_name = str(message.get("display_name") or "Collaborator")
+                display_name = membership.display_name
                 sync_connections[websocket] = {
                     "workspace_id": workspace_id,
                     "room_id": room_id,
                     "client_id": client_id,
+                    "user_id": user_id,
+                    "role": membership.role,
                 }
                 sync_rooms.setdefault(room_id, set()).add(websocket)
                 mark_workspace_sync_ready(workspace_id)
@@ -755,6 +950,7 @@ async def collabflow_sync(websocket: WebSocket) -> None:
                         "workspace_id": str(workspace_id),
                         "room_id": room_id,
                         "client_id": client_id,
+                        "role": membership.role,
                         "peer_count": len(sync_rooms.get(room_id, set())),
                         "update_count": len(sync_update_log.get(workspace_id, [])),
                         "durable_update_log": SNAPSHOT_STORAGE_MODE == "postgres",
@@ -822,6 +1018,9 @@ async def collabflow_sync(websocket: WebSocket) -> None:
             client_id = state["client_id"]
 
             if message_type == "yjs_update":
+                if role_rank(str(state.get("role", "viewer"))) < role_rank("editor"):
+                    await websocket.send_json({"type": "sync_error", "detail": "Insufficient workspace role."})
+                    continue
                 update = str(message.get("update") or "")
                 if not update:
                     await websocket.send_json({"type": "sync_error", "detail": "Missing Yjs update."})
@@ -894,14 +1093,25 @@ async def collabflow_sync(websocket: WebSocket) -> None:
 
 
 @app.get("/api/workspaces/{workspace_id}/snapshots", response_model=list[SnapshotResponse])
-def list_snapshots(workspace_id: UUID) -> list[SnapshotResponse]:
-    require_workspace(workspace_id)
+def list_snapshots(
+    workspace_id: UUID,
+    x_collabflow_user_id: str | None = Header(default=None),
+    x_collabflow_display_name: str | None = Header(default=None),
+) -> list[SnapshotResponse]:
+    identity = identity_from_headers(x_collabflow_user_id, x_collabflow_display_name)
+    require_membership(workspace_id, identity, "viewer")
     return sorted(snapshots.get(workspace_id, []), key=lambda snapshot: snapshot.created_at)
 
 
 @app.post("/api/workspaces/{workspace_id}/snapshots", response_model=SnapshotResponse)
-def create_snapshot(workspace_id: UUID, payload: CreateSnapshotRequest) -> SnapshotResponse:
-    require_workspace(workspace_id)
+def create_snapshot(
+    workspace_id: UUID,
+    payload: CreateSnapshotRequest,
+    x_collabflow_user_id: str | None = Header(default=None),
+    x_collabflow_display_name: str | None = Header(default=None),
+) -> SnapshotResponse:
+    identity = identity_from_headers(x_collabflow_user_id, x_collabflow_display_name)
+    require_membership(workspace_id, identity, "editor")
     compacted_through_seq = sync_update_sequences.get(workspace_id, 0)
     snapshot = SnapshotResponse(
         snapshot_id=uuid4(),
@@ -924,3 +1134,81 @@ def create_snapshot(workspace_id: UUID, payload: CreateSnapshotRequest) -> Snaps
     except (RuntimeError, ValueError, TypeError, binascii.Error):
         raise HTTPException(status_code=422, detail="Could not create compaction checkpoint.")
     return snapshot
+
+
+@app.get("/api/workspaces/{workspace_id}/members", response_model=list[MembershipResponse])
+def list_members(
+    workspace_id: UUID,
+    x_collabflow_user_id: str | None = Header(default=None),
+    x_collabflow_display_name: str | None = Header(default=None),
+) -> list[MembershipResponse]:
+    identity = identity_from_headers(x_collabflow_user_id, x_collabflow_display_name)
+    require_membership(workspace_id, identity, "viewer")
+    return sorted(memberships.get(workspace_id, {}).values(), key=lambda membership: membership.created_at)
+
+
+@app.post("/api/workspaces/{workspace_id}/members", response_model=MembershipResponse)
+def create_member(
+    workspace_id: UUID,
+    payload: CreateMembershipRequest,
+    x_collabflow_user_id: str | None = Header(default=None),
+    x_collabflow_display_name: str | None = Header(default=None),
+) -> MembershipResponse:
+    identity = identity_from_headers(x_collabflow_user_id, x_collabflow_display_name)
+    require_membership(workspace_id, identity, "owner")
+    now = now_utc()
+    existing = get_membership(workspace_id, payload.user_id)
+    membership = MembershipResponse(
+        workspace_id=workspace_id,
+        user_id=payload.user_id,
+        display_name=payload.display_name,
+        role=payload.role,
+        created_at=existing.created_at if existing is not None else now,
+        updated_at=now,
+    )
+    memberships.setdefault(workspace_id, {})[payload.user_id] = membership
+    persist_membership(membership)
+    return membership
+
+
+@app.patch("/api/workspaces/{workspace_id}/members/{user_id}", response_model=MembershipResponse)
+def update_member(
+    workspace_id: UUID,
+    user_id: str,
+    payload: UpdateMembershipRequest,
+    x_collabflow_user_id: str | None = Header(default=None),
+    x_collabflow_display_name: str | None = Header(default=None),
+) -> MembershipResponse:
+    identity = identity_from_headers(x_collabflow_user_id, x_collabflow_display_name)
+    require_membership(workspace_id, identity, "owner")
+    current = get_membership(workspace_id, user_id)
+    if current is None:
+        raise HTTPException(status_code=404, detail="Workspace member not found.")
+    if current.role == "owner" and payload.role != "owner" and owner_count(workspace_id) <= 1:
+        raise HTTPException(status_code=409, detail="Workspace must keep at least one owner.")
+
+    if hasattr(current, "model_copy"):
+        updated = current.model_copy(update={"role": payload.role, "updated_at": now_utc()})
+    else:
+        updated = current.copy(update={"role": payload.role, "updated_at": now_utc()})
+    memberships[workspace_id][user_id] = updated
+    persist_membership(updated)
+    return updated
+
+
+@app.delete("/api/workspaces/{workspace_id}/members/{user_id}")
+def remove_member(
+    workspace_id: UUID,
+    user_id: str,
+    x_collabflow_user_id: str | None = Header(default=None),
+    x_collabflow_display_name: str | None = Header(default=None),
+) -> dict[str, str]:
+    identity = identity_from_headers(x_collabflow_user_id, x_collabflow_display_name)
+    require_membership(workspace_id, identity, "owner")
+    current = get_membership(workspace_id, user_id)
+    if current is None:
+        raise HTTPException(status_code=404, detail="Workspace member not found.")
+    if current.role == "owner" and owner_count(workspace_id) <= 1:
+        raise HTTPException(status_code=409, detail="Workspace must keep at least one owner.")
+    delete_membership(workspace_id, user_id)
+    return {"status": "removed"}

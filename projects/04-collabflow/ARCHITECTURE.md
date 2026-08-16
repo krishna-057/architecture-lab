@@ -51,9 +51,9 @@ The browser owns the active collaborative document. The API does not interpret o
 | `GET /api/workspaces/{workspace_id}/snapshots` | List durable checkpoints exported for a workspace. |
 | `POST /api/workspaces/{workspace_id}/snapshots` | Persist a compact checkpoint of title, notes, tasks, and Yjs state-vector length. |
 
-## Membership Authorization Direction
+## Membership Authorization
 
-The authorization contract is documented in `docs/membership-authorization.md`. The intended model is workspace-scoped membership with `owner`, `editor`, and `viewer` roles. Development identity uses `X-CollabFlow-User-Id` and `X-CollabFlow-Display-Name` headers until production authentication is added.
+The authorization contract is documented in `docs/membership-authorization.md`. The runtime uses workspace-scoped membership with `owner`, `editor`, and `viewer` roles. Development identity uses `X-CollabFlow-User-Id` and `X-CollabFlow-Display-Name` headers until production authentication is added.
 
 Authorization must protect both HTTP and websocket boundaries. Viewers may read snapshots, join rooms, receive replay, and send ephemeral awareness. Only editors and owners may export snapshots or send durable `yjs_update` messages. Non-member workspace lookups should return `404` so private workspace ids are not confirmed.
 

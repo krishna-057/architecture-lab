@@ -58,3 +58,5 @@ The membership contract separates authentication from authorization. Development
 The websocket path needs role checks too. Joining a room and sending durable Yjs updates are different capabilities: viewers may receive replay and send awareness, but only editors and owners should append document updates or export snapshots.
 
 Non-member access should return `404` for private workspace routes. That avoids confirming whether a workspace id exists, which is the right default for collaborative documents.
+
+The runtime now enforces this contract with local development headers. That is a useful stepping stone: it demonstrates the hard part, consistent authorization across HTTP and websocket document writes, before spending time on login screens.
