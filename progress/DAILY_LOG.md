@@ -2,6 +2,31 @@
 
 ## 2026-08-16
 
+Added CollabFlow signed session identity notes.
+
+Added:
+- `docs/signed-session-identity.md` with the production identity path: signed HTTP-only session cookies, user identity payloads, membership-loaded roles, websocket session binding, CSRF double-submit protection, logout, and signing-secret rotation.
+- README, architecture, sync contract, membership authorization, decision, interview-note, validation-marker, daily-log, and task-queue updates.
+
+Validated the work by running:
+- `npm run check` from `projects/04-collabflow`
+- `python -m compileall services\api\app` from `projects/04-collabflow`
+- `docker compose -f compose.yaml config --quiet` from `projects/04-collabflow`
+- `npm run build -w @collabflow/web` from `projects/04-collabflow`
+- `npx tsc --noEmit -p apps/web/tsconfig.json` from `projects/04-collabflow`
+- `git diff --check`
+
+Notes:
+- This is intentionally a design slice. Runtime enforcement still uses development identity headers today.
+- The next implementation should add signed cookie verification, CSRF checks for mutating routes, websocket session binding, and tests proving development headers can be disabled.
+- Docker Desktop's Linux engine was not available; this contract-only slice did not require a live PostgreSQL smoke test.
+- `git diff --check` reported only line-ending normalization warnings for touched text files.
+
+Next recommended task:
+- Add CollabFlow signed session runtime enforcement.
+
+## 2026-08-16
+
 Added CollabFlow workspace membership runtime enforcement.
 
 Added:

@@ -60,3 +60,5 @@ The websocket path needs role checks too. Joining a room and sending durable Yjs
 Non-member access should return `404` for private workspace routes. That avoids confirming whether a workspace id exists, which is the right default for collaborative documents.
 
 The runtime now enforces this contract with local development headers. That is a useful stepping stone: it demonstrates the hard part, consistent authorization across HTTP and websocket document writes, before spending time on login screens.
+
+Signed sessions are the production identity path, but sessions should not carry workspace roles. Roles belong in `collabflow_workspace_memberships` so revoking an editor or removing a viewer takes effect immediately on the next request or websocket reconnect.

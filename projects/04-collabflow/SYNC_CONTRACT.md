@@ -32,6 +32,8 @@ ws://localhost:8300/ws/collabflow
 
 The current FastAPI app accepts this websocket endpoint. It validates the workspace room, enforces membership, replays in-memory Yjs updates for the workspace, broadcasts new Yjs updates to other connected browsers, and fans out ephemeral presence. The authorization boundary is documented in `docs/membership-authorization.md`: members may join a room, while only `owner` and `editor` roles may send durable `yjs_update` messages.
 
+The signed-session migration is documented in `docs/signed-session-identity.md`. Once implemented, websocket identity should come from the verified session cookie rather than a client-sent `user_id`.
+
 ## Message Types
 
 | Type | Sender | Encoding | Durable | Purpose |

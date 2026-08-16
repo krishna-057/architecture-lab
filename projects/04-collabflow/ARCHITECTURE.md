@@ -57,6 +57,8 @@ The authorization contract is documented in `docs/membership-authorization.md`. 
 
 Authorization must protect both HTTP and websocket boundaries. Viewers may read snapshots, join rooms, receive replay, and send ephemeral awareness. Only editors and owners may export snapshots or send durable `yjs_update` messages. Non-member workspace lookups should return `404` so private workspace ids are not confirmed.
 
+The signed-session migration path is documented in `docs/signed-session-identity.md`. Sessions should identify the user, not embed workspace roles; every request should still load membership from `collabflow_workspace_memberships`.
+
 ## Snapshot Storage
 
 The snapshot API chooses storage at startup. If `DATABASE_URL` is set and `psycopg` is installed, FastAPI initializes `collabflow_workspaces` and `collabflow_snapshots`, loads existing rows, and writes new workspaces/snapshots to PostgreSQL. Otherwise it keeps the original `.data/snapshots.json` fallback. This gives restart-safe exported checkpoints without making PostgreSQL the live merge engine for CRDT updates.

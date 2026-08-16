@@ -6,10 +6,11 @@ Tasks should stay small enough for one focused session.
 
 ### Ready
 
-- [ ] Add CollabFlow signed session identity notes.
+- [ ] Add CollabFlow signed session runtime enforcement.
 
 ### Completed
 
+- [x] Add CollabFlow signed session identity notes.
 - [x] Add CollabFlow workspace membership runtime enforcement.
 - [x] Add CollabFlow workspace membership authorization contract.
 - [x] Add CollabFlow server-side compaction worker notes and retention cleanup.

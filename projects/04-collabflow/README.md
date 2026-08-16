@@ -13,6 +13,7 @@ The current slice is a local-first workspace shell with a small realtime sync pa
 - `SYNC_CONTRACT.md` plus API discovery for the websocket room, Yjs update, and presence contract
 - `docs/update-log-compaction.md` for the next durable update-log and compaction design
 - `docs/membership-authorization.md` for the workspace membership roles and route authorization contract
+- `docs/signed-session-identity.md` for the production identity and CSRF migration path
 
 ## Architecture Focus
 
@@ -75,6 +76,8 @@ Durable websocket update persistence now has its first storage boundary. In Post
 Compacted update rows are retained briefly before deletion. `COMPACTED_UPDATE_RETENTION_HOURS` defaults to `72`, and the API runs a small cleanup pass on PostgreSQL-mode startup. A later worker can call the same retention rule on a schedule when the sync service moves beyond single-process development.
 
 Workspace authorization is enforced with development identity headers. The runtime creates an `owner` membership for the workspace creator, filters workspace lists by membership, protects snapshots and sync-contract reads, blocks viewer websocket document updates, and exposes owner-only member management endpoints.
+
+Production identity should use signed HTTP-only session cookies plus CSRF protection for mutating HTTP routes. The session should supply `user_id` and `display_name`; workspace roles still come from the membership table so permission changes apply immediately.
 
 ## Sync Contract
 

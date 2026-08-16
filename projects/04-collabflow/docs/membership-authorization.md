@@ -65,4 +65,4 @@ Viewer websocket sessions may receive replay and presence but must not broadcast
 
 ## Deferred Production Auth
 
-OAuth, password login, signed session cookies, and invite tokens are deferred. The contract should survive that migration because route authorization depends on `user_id` and role, not on how the user was authenticated.
+Signed session cookies are documented in `docs/signed-session-identity.md`. OAuth, password login, and invite tokens remain deferred. The contract should survive that migration because route authorization depends on `user_id` and role, not on how the user was authenticated.

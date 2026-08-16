@@ -152,3 +152,17 @@ Rejected alternatives:
 - Wait for production auth before enforcing roles. That would keep collaboration routes open longer than necessary.
 - Enforce HTTP routes only. Websocket update writes are durable document mutations and need the same role model.
 - Make viewers unable to send awareness. Awareness is ephemeral presence, so allowing it keeps read-only collaboration useful without changing document state.
+
+## Document signed sessions before replacing development headers
+
+Decision:
+CollabFlow now documents the production identity path in `docs/signed-session-identity.md`: HTTP-only signed session cookies, membership-loaded roles, websocket session binding, CSRF protection for mutating routes, and secret rotation.
+
+Why:
+Development headers are useful for local architecture work, but they should not become the mental model for production auth. Documenting signed sessions now keeps the next implementation bounded and preserves the existing membership checks.
+
+Rejected alternatives:
+
+- Store roles in the session token. That makes authorization fast, but role changes would not apply until session expiry.
+- Use bearer tokens for the browser app. Cookies are a better fit for same-origin browser sessions, provided CSRF is handled.
+- Skip CSRF because the app is local-first. Mutating HTTP routes still use cookies in the production shape, so they need CSRF protection.

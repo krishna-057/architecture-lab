@@ -14,7 +14,8 @@ const requiredFiles = [
   "services/api/app/main.py",
   "SYNC_CONTRACT.md",
   "docs/update-log-compaction.md",
-  "docs/membership-authorization.md"
+  "docs/membership-authorization.md",
+  "docs/signed-session-identity.md"
 ];
 
 const rootPackage = JSON.parse(readFileSync("package.json", "utf8"));
@@ -120,6 +121,7 @@ if (
   !syncContract.includes("/ws/collabflow") ||
   !syncContract.includes("Presence is Yjs awareness state") ||
   !syncContract.includes("docs/membership-authorization.md") ||
+  !syncContract.includes("docs/signed-session-identity.md") ||
   !syncContract.includes("docs/update-log-compaction.md")
 ) {
   throw new Error("SYNC_CONTRACT.md must define websocket rooms, Yjs updates, awareness presence, membership, and durable compaction references.");
@@ -151,6 +153,19 @@ if (
   !membershipNotes.includes("only `editor` or `owner` may send `yjs_update`")
 ) {
   throw new Error("Membership authorization notes must define identity headers, roles, storage, privacy, and websocket update rules.");
+}
+
+const signedSessionNotes = readFileSync("docs/signed-session-identity.md", "utf8");
+if (
+  !signedSessionNotes.includes("collabflow_session") ||
+  !signedSessionNotes.includes("COLLABFLOW_SESSION_SIGNING_SECRET") ||
+  !signedSessionNotes.includes("collabflow_workspace_memberships") ||
+  !signedSessionNotes.includes("X-CollabFlow-CSRF") ||
+  !signedSessionNotes.includes("collabflow_csrf") ||
+  !signedSessionNotes.includes("Do not trust a websocket `user_id` field") ||
+  !signedSessionNotes.includes("COLLABFLOW_DEV_IDENTITY_HEADERS=true")
+) {
+  throw new Error("Signed session notes must define cookie identity, membership role lookup, CSRF, websocket trust, and dev-header fallback.");
 }
 
 console.log("CollabFlow scaffold and sync contract check passed.");
