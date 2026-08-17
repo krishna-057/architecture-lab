@@ -100,13 +100,26 @@ const indexedDbName = "collabflow-local-first";
 const indexedDbStore = "workspace-snapshots";
 const remoteUpdateOrigin = "collabflow-remote";
 
+function cookieValue(name: string): string | null {
+  if (typeof document === "undefined") {
+    return null;
+  }
+
+  const prefix = `${name}=`;
+  const cookie = document.cookie.split("; ").find((item) => item.startsWith(prefix));
+  return cookie ? decodeURIComponent(cookie.slice(prefix.length)) : null;
+}
+
 async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
+  const csrfToken = cookieValue("collabflow_csrf");
   const response = await fetch(`${apiBaseUrl}${path}`, {
     ...init,
+    credentials: "include",
     headers: {
       "Content-Type": "application/json",
       "X-CollabFlow-User-Id": developmentUserId,
       "X-CollabFlow-Display-Name": developmentDisplayName,
+      ...(csrfToken ? { "X-CollabFlow-CSRF": csrfToken } : {}),
       ...init?.headers
     }
   });

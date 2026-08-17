@@ -166,3 +166,17 @@ Rejected alternatives:
 - Store roles in the session token. That makes authorization fast, but role changes would not apply until session expiry.
 - Use bearer tokens for the browser app. Cookies are a better fit for same-origin browser sessions, provided CSRF is handled.
 - Skip CSRF because the app is local-first. Mutating HTTP routes still use cookies in the production shape, so they need CSRF protection.
+
+## Enforce signed sessions without adding account management yet
+
+Decision:
+CollabFlow now verifies `collabflow_session` with `COLLABFLOW_SESSION_SIGNING_SECRET`, accepts `COLLABFLOW_PREVIOUS_SESSION_SIGNING_SECRET` during rotation, checks `X-CollabFlow-CSRF` against `collabflow_csrf` on cookie-backed mutations, and binds websocket membership to the verified session identity. Development headers remain available only when `COLLABFLOW_DEV_IDENTITY_HEADERS=true`.
+
+Why:
+This replaces the risky part of the local identity model, trusting browser-sent user ids, without adding login screens, password storage, OAuth callbacks, or invitation flows in the same slice. The architecture signal stays focused on session verification plus workspace role enforcement.
+
+Rejected alternatives:
+
+- Add a full auth product now. That would consume the daily slice on account management instead of collaboration authorization.
+- Disable development headers by default. That would be closer to production, but it would make local portfolio checks harder until a login endpoint exists.
+- Require CSRF on every request. Read-only routes do not mutate cookie-authenticated state, so the double-submit rule is scoped to writes.

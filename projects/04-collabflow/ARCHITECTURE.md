@@ -57,7 +57,7 @@ The authorization contract is documented in `docs/membership-authorization.md`. 
 
 Authorization must protect both HTTP and websocket boundaries. Viewers may read snapshots, join rooms, receive replay, and send ephemeral awareness. Only editors and owners may export snapshots or send durable `yjs_update` messages. Non-member workspace lookups should return `404` so private workspace ids are not confirmed.
 
-The signed-session migration path is documented in `docs/signed-session-identity.md`. Sessions should identify the user, not embed workspace roles; every request should still load membership from `collabflow_workspace_memberships`.
+The signed-session runtime path is documented in `docs/signed-session-identity.md`. Sessions identify the user, not workspace roles; every request still loads membership from `collabflow_workspace_memberships`. Cookie-backed mutations require a double-submit CSRF token, and websocket joins bind to the verified session identity instead of trusting a browser-sent `user_id`.
 
 ## Snapshot Storage
 

@@ -44,6 +44,8 @@ if (
   !appPage.includes("state_vector") ||
   !appPage.includes("snapshot_update") ||
   !appPage.includes("X-CollabFlow-User-Id") ||
+  !appPage.includes("X-CollabFlow-CSRF") ||
+  !appPage.includes('credentials: "include"') ||
   !appPage.includes("NEXT_PUBLIC_COLLABFLOW_USER_ID") ||
   !appPage.includes("/sync-contract") ||
   !appPage.includes("WebSocket Messages") ||
@@ -83,7 +85,13 @@ if (
   !apiFile.includes("COMPACTED_UPDATE_RETENTION_HOURS") ||
   !apiFile.includes("cleanup_compacted_updates") ||
   !apiFile.includes("update_hash") ||
-  !apiFile.includes("durable_update_log")
+  !apiFile.includes("durable_update_log") ||
+  !apiFile.includes("COLLABFLOW_SESSION_SIGNING_SECRET") ||
+  !apiFile.includes("COLLABFLOW_PREVIOUS_SESSION_SIGNING_SECRET") ||
+  !apiFile.includes("COLLABFLOW_DEV_IDENTITY_HEADERS") ||
+  !apiFile.includes("identity_from_signed_session_token") ||
+  !apiFile.includes("require_csrf_token") ||
+  !apiFile.includes("identity_from_websocket_message")
 ) {
   throw new Error("API must expose workspace, websocket sync, sync-contract, optional PostgreSQL snapshots, and durable update-log boundaries.");
 }

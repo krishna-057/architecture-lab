@@ -1,5 +1,36 @@
 # Daily Log
 
+## 2026-08-17
+
+Added CollabFlow signed session runtime enforcement.
+
+Added:
+- Signed `collabflow_session` verification with `COLLABFLOW_SESSION_SIGNING_SECRET` and `COLLABFLOW_PREVIOUS_SESSION_SIGNING_SECRET`.
+- `COLLABFLOW_DEV_IDENTITY_HEADERS` as the explicit local fallback switch.
+- Cookie-backed CSRF checks using `X-CollabFlow-CSRF` and `collabflow_csrf` on mutating HTTP routes.
+- Websocket session binding so a verified cookie identity overrides any client-sent `user_id`.
+- Frontend credentialed API requests and automatic CSRF header echo when the browser has a `collabflow_csrf` cookie.
+- README, architecture, sync contract, membership, signed-session, decision, interview-note, env, validation-marker, daily-log, and task-queue updates.
+
+Validated the work by running:
+- `npm run check` from `projects/04-collabflow`
+- `python -m compileall services\api\app` from `projects/04-collabflow`
+- Direct FastAPI smoke test for signed cookie workspace creation, CSRF rejection, membership owner creation, and disabled dev-header fallback
+- Direct FastAPI websocket smoke test proving a signed session identity overrides a forged `sync_request.user_id`
+- `docker compose -f compose.yaml config --quiet` from `projects/04-collabflow`
+- `npm run build -w @collabflow/web` from `projects/04-collabflow`
+- `npx tsc --noEmit -p apps/web/tsconfig.json` from `projects/04-collabflow`
+- `git diff --check`
+
+Notes:
+- Runtime verifies sessions and protects cookie-backed mutations, but login, logout endpoint wiring, invite tokens, and account management remain deferred.
+- A K: venv at `K:\AutoPilot_Projects\.venvs\collabflow-api` was used for FastAPI smoke tests because the default Python interpreter did not have FastAPI installed.
+- The first TypeScript no-emit run raced the Next build's `.next/types` generation; rerunning after the build passed.
+- `git diff --check` reported only line-ending normalization warnings for touched text files.
+
+Next recommended task:
+- Add CollabFlow session issuance and logout flow.
+
 ## 2026-08-16
 
 Added CollabFlow signed session identity notes.

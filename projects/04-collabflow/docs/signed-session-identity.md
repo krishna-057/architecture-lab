@@ -1,6 +1,6 @@
 # CollabFlow Signed Session Identity Notes
 
-CollabFlow currently enforces authorization with development identity headers. Production identity should replace those headers with a signed session while keeping the same workspace membership role checks.
+CollabFlow now enforces the production-shaped identity boundary with signed session cookies while keeping development identity headers as a local fallback. The signed session identifies the user; workspace authorization still comes from membership role checks.
 
 ## Session Shape
 
@@ -26,7 +26,7 @@ The token must not contain workspace roles. Roles are loaded from `collabflow_wo
 
 ## Verification Rule
 
-Every HTTP request should resolve identity in this order:
+Every HTTP request resolves identity in this order:
 
 1. Verify `collabflow_session` with `COLLABFLOW_SESSION_SIGNING_SECRET`.
 2. Load `user_id` and `display_name` from the verified payload.
@@ -35,9 +35,11 @@ Every HTTP request should resolve identity in this order:
 
 Development identity headers remain a local-only fallback when `COLLABFLOW_DEV_IDENTITY_HEADERS=true`.
 
+`COLLABFLOW_PREVIOUS_SESSION_SIGNING_SECRET` may be set during rotation so active sessions can survive a short overlap window.
+
 ## WebSocket Handshake
 
-The websocket should authenticate before accepting durable sync work:
+The websocket authenticates before accepting durable sync work:
 
 1. Browser opens `WS /ws/collabflow` with the session cookie.
 2. Server verifies the signed session and binds `user_id` to the connection.
@@ -45,7 +47,7 @@ The websocket should authenticate before accepting durable sync work:
 4. Server checks membership before joining the room.
 5. Only `owner` and `editor` connections may send `yjs_update`; viewers may send `awareness_update`.
 
-Do not trust a websocket `user_id` field once signed sessions exist. The server-owned session identity should replace the development payload identity.
+Do not trust a websocket `user_id` field when `collabflow_session` is present. The server-owned session identity replaces the development payload identity; payload identity is accepted only through the local fallback path.
 
 ## CSRF Rule
 
@@ -63,6 +65,6 @@ Use a double-submit token: an `X-CollabFlow-CSRF` header must match a non-HTTP-o
 
 Sessions should expire quickly enough for a portfolio app, for example seven days. Logout can clear the cookie immediately. Secret rotation should accept a current and previous signing secret for a short overlap window, then retire the previous secret after active sessions expire.
 
-## Deferred Implementation
+## Runtime Scope
 
-This is intentionally a design slice. Runtime enforcement still uses development headers today. The next implementation should add signed cookie verification, CSRF checks for mutating HTTP routes, websocket session binding, and tests proving header identity can be disabled.
+Runtime enforcement now verifies signed cookie sessions, checks CSRF tokens on mutating cookie-backed HTTP requests, and binds websocket membership to the verified session identity. Login, logout endpoint wiring, invitation tokens, and real user registration remain deferred because this lab slice is focused on the authorization boundary, not account management.

@@ -61,4 +61,6 @@ Non-member access should return `404` for private workspace routes. That avoids 
 
 The runtime now enforces this contract with local development headers. That is a useful stepping stone: it demonstrates the hard part, consistent authorization across HTTP and websocket document writes, before spending time on login screens.
 
-Signed sessions are the production identity path, but sessions should not carry workspace roles. Roles belong in `collabflow_workspace_memberships` so revoking an editor or removing a viewer takes effect immediately on the next request or websocket reconnect.
+Signed sessions are now the production-shaped identity path, but sessions do not carry workspace roles. Roles belong in `collabflow_workspace_memberships` so revoking an editor or removing a viewer takes effect immediately on the next request or websocket reconnect.
+
+The runtime verifies cookie signatures, handles a previous signing secret for rotation, and uses CSRF double-submit tokens only on cookie-backed mutations. That is a practical middle ground: the app has a defensible auth boundary without pretending this slice also shipped registration, OAuth, or invitation lifecycle.

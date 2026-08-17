@@ -1,8 +1,12 @@
 # CollabFlow Workspace Membership Authorization Contract
 
-CollabFlow uses development client identity for local sync and enforces workspace membership at the HTTP and websocket boundaries. This is not production authentication, but it proves the authorization shape before OAuth or password login is added.
+CollabFlow uses signed session cookies for the production-shaped identity boundary and keeps development client identity headers for local sync. Workspace membership is enforced at the HTTP and websocket boundaries either way.
 
-## Development Identity
+## Identity Resolution
+
+The API first looks for a signed `collabflow_session` cookie. If present, the cookie must verify with `COLLABFLOW_SESSION_SIGNING_SECRET`, must not be expired, and supplies the server-owned `user_id` and `display_name`. A previous signing secret can be configured during short rotation windows.
+
+Development headers remain available only when `COLLABFLOW_DEV_IDENTITY_HEADERS=true`:
 
 The development API accepts these headers until a real identity provider is added:
 
@@ -11,7 +15,9 @@ X-CollabFlow-User-Id: user_123
 X-CollabFlow-Display-Name: Krishna
 ```
 
-These headers are not authentication. They are a stable local identity envelope so route ownership, membership checks, presence labels, and audit fields can be implemented before OAuth or password login.
+These headers are not production authentication. They are a stable local identity envelope so route ownership, membership checks, presence labels, and audit fields can be exercised before OAuth or password login.
+
+Cookie-backed mutating HTTP requests require the double-submit CSRF token: `X-CollabFlow-CSRF` must match the `collabflow_csrf` cookie. Read routes do not require that header.
 
 ## Roles
 
@@ -58,11 +64,12 @@ Viewer websocket sessions may receive replay and presence but must not broadcast
 
 ## Failure Responses
 
-- Missing local identity header: `401` for HTTP routes and `sync_error` with `detail: "Missing workspace identity."` for websocket joins.
+- Missing or invalid session, or missing local identity fallback: `401` for HTTP routes and `sync_error` for websocket joins.
+- Missing or invalid CSRF token on cookie-backed mutation: `403`.
 - Non-member workspace access: `404` rather than `403`, so private workspace ids are not confirmed.
 - Member without enough role: `403`.
 - Attempt to remove or demote the last owner: `409`.
 
-## Deferred Production Auth
+## Deferred Account Management
 
-Signed session cookies are documented in `docs/signed-session-identity.md`. OAuth, password login, and invite tokens remain deferred. The contract should survive that migration because route authorization depends on `user_id` and role, not on how the user was authenticated.
+Signed session enforcement is documented in `docs/signed-session-identity.md`. OAuth, password login, invite tokens, and session issuance endpoints remain deferred. The contract should survive that migration because route authorization depends on `user_id` and role, not on how the user was authenticated.

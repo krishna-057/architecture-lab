@@ -32,7 +32,7 @@ ws://localhost:8300/ws/collabflow
 
 The current FastAPI app accepts this websocket endpoint. It validates the workspace room, enforces membership, replays in-memory Yjs updates for the workspace, broadcasts new Yjs updates to other connected browsers, and fans out ephemeral presence. The authorization boundary is documented in `docs/membership-authorization.md`: members may join a room, while only `owner` and `editor` roles may send durable `yjs_update` messages.
 
-The signed-session migration is documented in `docs/signed-session-identity.md`. Once implemented, websocket identity should come from the verified session cookie rather than a client-sent `user_id`.
+Signed-session enforcement is documented in `docs/signed-session-identity.md`. When `collabflow_session` is present, websocket identity comes from the verified session cookie rather than a client-sent `user_id`; the client-sent identity remains only for the local development fallback.
 
 ## Message Types
 
@@ -83,7 +83,6 @@ In PostgreSQL mode, `sync_request` replays the newest compaction checkpoint firs
 
 ## Deferred Until Later Slices
 
-- Production authentication and signed session identity.
+- Login, logout, invite-token, and account-management screens.
 - Backpressure and heartbeat handling.
-- Durable update log storage and compaction implementation.
 - Multi-device conflict tests against a running sync provider.

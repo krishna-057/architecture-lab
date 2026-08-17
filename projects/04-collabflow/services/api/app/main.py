@@ -1,6 +1,7 @@
 import base64
 import binascii
 import hashlib
+import hmac
 import json
 import os
 from datetime import datetime, timedelta, timezone
@@ -15,7 +16,7 @@ except ImportError:  # pragma: no cover - optional durable mode dependency
     psycopg = None
     dict_row = None
 
-from fastapi import FastAPI, Header, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, Header, HTTPException, Request, WebSocket, WebSocketDisconnect
 from fastapi.encoders import jsonable_encoder
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
@@ -31,7 +32,7 @@ app = FastAPI(title="CollabFlow API", version="0.1.0")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=CORS_ALLOWED_ORIGINS,
-    allow_credentials=False,
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -133,6 +134,16 @@ SYNC_WEBSOCKET_URL = os.getenv("SYNC_WEBSOCKET_URL", "ws://localhost:8300/ws/col
 DATABASE_URL = os.getenv("DATABASE_URL")
 SNAPSHOT_STORAGE_MODE = "postgres" if DATABASE_URL and psycopg is not None else "file"
 COMPACTED_UPDATE_RETENTION_HOURS = int(os.getenv("COMPACTED_UPDATE_RETENTION_HOURS", "72"))
+COLLABFLOW_SESSION_COOKIE_NAME = os.getenv("COLLABFLOW_SESSION_COOKIE_NAME", "collabflow_session")
+COLLABFLOW_CSRF_COOKIE_NAME = os.getenv("COLLABFLOW_CSRF_COOKIE_NAME", "collabflow_csrf")
+COLLABFLOW_SESSION_SIGNING_SECRET = os.getenv("COLLABFLOW_SESSION_SIGNING_SECRET", "")
+COLLABFLOW_PREVIOUS_SESSION_SIGNING_SECRET = os.getenv("COLLABFLOW_PREVIOUS_SESSION_SIGNING_SECRET", "")
+COLLABFLOW_DEV_IDENTITY_HEADERS = os.getenv("COLLABFLOW_DEV_IDENTITY_HEADERS", "true").lower() in {
+    "1",
+    "true",
+    "yes",
+    "on",
+}
 
 workspaces: dict[UUID, WorkspaceResponse] = {}
 memberships: dict[UUID, dict[str, MembershipResponse]] = {}
@@ -631,10 +642,68 @@ def require_workspace(workspace_id: UUID) -> WorkspaceResponse:
     return workspace
 
 
+def bytes_to_urlsafe(value: bytes) -> str:
+    return base64.urlsafe_b64encode(value).decode("ascii").rstrip("=")
+
+
+def signed_session_secrets() -> list[str]:
+    return [
+        secret
+        for secret in [COLLABFLOW_SESSION_SIGNING_SECRET, COLLABFLOW_PREVIOUS_SESSION_SIGNING_SECRET]
+        if secret
+    ]
+
+
+def identity_from_signed_session_token(token: str | None) -> WorkspaceIdentity | None:
+    if not token:
+        return None
+
+    try:
+        encoded_payload, encoded_signature = token.split(".", 1)
+    except ValueError:
+        raise HTTPException(status_code=401, detail="Invalid workspace session.")
+
+    secrets = signed_session_secrets()
+    if not secrets:
+        raise HTTPException(status_code=401, detail="Workspace sessions are not configured.")
+
+    signed_value = encoded_payload.encode("ascii")
+    valid_signature = False
+    for secret in secrets:
+        expected_signature = hmac.new(secret.encode("utf8"), signed_value, hashlib.sha256).digest()
+        if hmac.compare_digest(bytes_to_urlsafe(expected_signature), encoded_signature):
+            valid_signature = True
+            break
+
+    if not valid_signature:
+        raise HTTPException(status_code=401, detail="Invalid workspace session.")
+
+    try:
+        payload = json.loads(urlsafe_to_bytes(encoded_payload).decode("utf8"))
+    except (binascii.Error, json.JSONDecodeError, UnicodeDecodeError):
+        raise HTTPException(status_code=401, detail="Invalid workspace session.")
+
+    expires_at = payload.get("expires_at")
+    try:
+        expires_at_datetime = datetime.fromisoformat(str(expires_at).replace("Z", "+00:00"))
+    except ValueError:
+        raise HTTPException(status_code=401, detail="Invalid workspace session.")
+    if expires_at_datetime <= now_utc():
+        raise HTTPException(status_code=401, detail="Workspace session expired.")
+
+    user_id = str(payload.get("user_id") or "").strip()
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Invalid workspace session.")
+    display_name = str(payload.get("display_name") or user_id).strip() or user_id
+    return WorkspaceIdentity(user_id=user_id, display_name=display_name)
+
+
 def identity_from_headers(
     x_collabflow_user_id: str | None,
     x_collabflow_display_name: str | None,
 ) -> WorkspaceIdentity:
+    if not COLLABFLOW_DEV_IDENTITY_HEADERS:
+        raise HTTPException(status_code=401, detail="Missing workspace session.")
     user_id = x_collabflow_user_id.strip() if isinstance(x_collabflow_user_id, str) else ""
     if not user_id:
         raise HTTPException(status_code=401, detail="Missing workspace identity.")
@@ -644,6 +713,37 @@ def identity_from_headers(
         else user_id
     )
     return WorkspaceIdentity(user_id=user_id, display_name=display_name)
+
+
+def identity_from_request(
+    request: Request,
+    x_collabflow_user_id: str | None,
+    x_collabflow_display_name: str | None,
+) -> WorkspaceIdentity:
+    session_identity = identity_from_signed_session_token(request.cookies.get(COLLABFLOW_SESSION_COOKIE_NAME))
+    if session_identity is not None:
+        return session_identity
+    return identity_from_headers(x_collabflow_user_id, x_collabflow_display_name)
+
+
+def require_csrf_token(request: Request, x_collabflow_csrf: str | None) -> None:
+    if not request.cookies.get(COLLABFLOW_SESSION_COOKIE_NAME):
+        return
+
+    cookie_token = request.cookies.get(COLLABFLOW_CSRF_COOKIE_NAME)
+    header_token = x_collabflow_csrf.strip() if isinstance(x_collabflow_csrf, str) else ""
+    if not cookie_token or not header_token or not hmac.compare_digest(cookie_token, header_token):
+        raise HTTPException(status_code=403, detail="Missing or invalid CSRF token.")
+
+
+def identity_from_websocket_message(websocket: WebSocket, message: dict[str, Any]) -> WorkspaceIdentity:
+    session_identity = identity_from_signed_session_token(websocket.cookies.get(COLLABFLOW_SESSION_COOKIE_NAME))
+    if session_identity is not None:
+        return session_identity
+
+    user_id = str(message.get("user_id") or "").strip()
+    display_name = str(message.get("display_name") or user_id).strip()
+    return identity_from_headers(user_id, display_name)
 
 
 def get_membership(workspace_id: UUID, user_id: str) -> MembershipResponse | None:
@@ -691,7 +791,7 @@ def sync_contract_for(workspace_id: UUID) -> SyncContractResponse:
         sync_transport="websocket_sync",
         websocket_endpoint=SYNC_WEBSOCKET_URL,
         room_id=room_id,
-        auth_mode="development identity headers with workspace membership roles",
+        auth_mode="signed session cookie with CSRF for mutating HTTP routes; development identity headers are local fallback only",
         yjs_update_encoding="base64url encoded Yjs binary update bytes",
         messages=[
             SyncMessageContract(
@@ -820,16 +920,21 @@ def health() -> dict[str, str]:
         "crdt_runtime": "yjs",
         "sync_transport": "websocket_sync",
         "compacted_update_retention_hours": str(COMPACTED_UPDATE_RETENTION_HOURS),
+        "session_auth": "signed_cookie",
+        "dev_identity_headers": str(COLLABFLOW_DEV_IDENTITY_HEADERS).lower(),
     }
 
 
 @app.post("/api/workspaces", response_model=WorkspaceResponse)
 def create_workspace(
+    request: Request,
     payload: CreateWorkspaceRequest,
     x_collabflow_user_id: str | None = Header(default=None),
     x_collabflow_display_name: str | None = Header(default=None),
+    x_collabflow_csrf: str | None = Header(default=None),
 ) -> WorkspaceResponse:
-    identity = identity_from_headers(x_collabflow_user_id, x_collabflow_display_name)
+    require_csrf_token(request, x_collabflow_csrf)
+    identity = identity_from_request(request, x_collabflow_user_id, x_collabflow_display_name)
     workspace = WorkspaceResponse(
         workspace_id=uuid4(),
         name=payload.name,
@@ -855,10 +960,11 @@ def create_workspace(
 
 @app.get("/api/workspaces", response_model=list[WorkspaceResponse])
 def list_workspaces(
+    request: Request,
     x_collabflow_user_id: str | None = Header(default=None),
     x_collabflow_display_name: str | None = Header(default=None),
 ) -> list[WorkspaceResponse]:
-    identity = identity_from_headers(x_collabflow_user_id, x_collabflow_display_name)
+    identity = identity_from_request(request, x_collabflow_user_id, x_collabflow_display_name)
     visible_workspace_ids = [
         workspace_id
         for workspace_id, workspace_memberships in memberships.items()
@@ -872,22 +978,24 @@ def list_workspaces(
 
 @app.get("/api/workspaces/{workspace_id}", response_model=WorkspaceResponse)
 def get_workspace(
+    request: Request,
     workspace_id: UUID,
     x_collabflow_user_id: str | None = Header(default=None),
     x_collabflow_display_name: str | None = Header(default=None),
 ) -> WorkspaceResponse:
-    identity = identity_from_headers(x_collabflow_user_id, x_collabflow_display_name)
+    identity = identity_from_request(request, x_collabflow_user_id, x_collabflow_display_name)
     require_membership(workspace_id, identity, "viewer")
     return require_workspace(workspace_id)
 
 
 @app.get("/api/workspaces/{workspace_id}/sync-contract", response_model=SyncContractResponse)
 def get_sync_contract(
+    request: Request,
     workspace_id: UUID,
     x_collabflow_user_id: str | None = Header(default=None),
     x_collabflow_display_name: str | None = Header(default=None),
 ) -> SyncContractResponse:
-    identity = identity_from_headers(x_collabflow_user_id, x_collabflow_display_name)
+    identity = identity_from_request(request, x_collabflow_user_id, x_collabflow_display_name)
     require_membership(workspace_id, identity, "viewer")
     return sync_contract_for(workspace_id)
 
@@ -904,11 +1012,12 @@ async def collabflow_sync(websocket: WebSocket) -> None:
             if message_type == "sync_request":
                 workspace_id = UUID(str(message.get("workspace_id")))
                 require_workspace(workspace_id)
-                user_id = str(message.get("user_id") or "").strip()
-                if not user_id:
-                    await websocket.send_json({"type": "sync_error", "detail": "Missing workspace identity."})
+                try:
+                    identity = identity_from_websocket_message(websocket, message)
+                except HTTPException as error:
+                    await websocket.send_json({"type": "sync_error", "detail": error.detail})
                     continue
-                membership = get_membership(workspace_id, user_id)
+                membership = get_membership(workspace_id, identity.user_id)
                 if membership is None:
                     await websocket.send_json({"type": "sync_error", "detail": "Workspace not found."})
                     continue
@@ -930,7 +1039,7 @@ async def collabflow_sync(websocket: WebSocket) -> None:
                     "workspace_id": workspace_id,
                     "room_id": room_id,
                     "client_id": client_id,
-                    "user_id": user_id,
+                    "user_id": identity.user_id,
                     "role": membership.role,
                 }
                 sync_rooms.setdefault(room_id, set()).add(websocket)
@@ -1094,23 +1203,27 @@ async def collabflow_sync(websocket: WebSocket) -> None:
 
 @app.get("/api/workspaces/{workspace_id}/snapshots", response_model=list[SnapshotResponse])
 def list_snapshots(
+    request: Request,
     workspace_id: UUID,
     x_collabflow_user_id: str | None = Header(default=None),
     x_collabflow_display_name: str | None = Header(default=None),
 ) -> list[SnapshotResponse]:
-    identity = identity_from_headers(x_collabflow_user_id, x_collabflow_display_name)
+    identity = identity_from_request(request, x_collabflow_user_id, x_collabflow_display_name)
     require_membership(workspace_id, identity, "viewer")
     return sorted(snapshots.get(workspace_id, []), key=lambda snapshot: snapshot.created_at)
 
 
 @app.post("/api/workspaces/{workspace_id}/snapshots", response_model=SnapshotResponse)
 def create_snapshot(
+    request: Request,
     workspace_id: UUID,
     payload: CreateSnapshotRequest,
     x_collabflow_user_id: str | None = Header(default=None),
     x_collabflow_display_name: str | None = Header(default=None),
+    x_collabflow_csrf: str | None = Header(default=None),
 ) -> SnapshotResponse:
-    identity = identity_from_headers(x_collabflow_user_id, x_collabflow_display_name)
+    require_csrf_token(request, x_collabflow_csrf)
+    identity = identity_from_request(request, x_collabflow_user_id, x_collabflow_display_name)
     require_membership(workspace_id, identity, "editor")
     compacted_through_seq = sync_update_sequences.get(workspace_id, 0)
     snapshot = SnapshotResponse(
@@ -1138,23 +1251,27 @@ def create_snapshot(
 
 @app.get("/api/workspaces/{workspace_id}/members", response_model=list[MembershipResponse])
 def list_members(
+    request: Request,
     workspace_id: UUID,
     x_collabflow_user_id: str | None = Header(default=None),
     x_collabflow_display_name: str | None = Header(default=None),
 ) -> list[MembershipResponse]:
-    identity = identity_from_headers(x_collabflow_user_id, x_collabflow_display_name)
+    identity = identity_from_request(request, x_collabflow_user_id, x_collabflow_display_name)
     require_membership(workspace_id, identity, "viewer")
     return sorted(memberships.get(workspace_id, {}).values(), key=lambda membership: membership.created_at)
 
 
 @app.post("/api/workspaces/{workspace_id}/members", response_model=MembershipResponse)
 def create_member(
+    request: Request,
     workspace_id: UUID,
     payload: CreateMembershipRequest,
     x_collabflow_user_id: str | None = Header(default=None),
     x_collabflow_display_name: str | None = Header(default=None),
+    x_collabflow_csrf: str | None = Header(default=None),
 ) -> MembershipResponse:
-    identity = identity_from_headers(x_collabflow_user_id, x_collabflow_display_name)
+    require_csrf_token(request, x_collabflow_csrf)
+    identity = identity_from_request(request, x_collabflow_user_id, x_collabflow_display_name)
     require_membership(workspace_id, identity, "owner")
     now = now_utc()
     existing = get_membership(workspace_id, payload.user_id)
@@ -1173,13 +1290,16 @@ def create_member(
 
 @app.patch("/api/workspaces/{workspace_id}/members/{user_id}", response_model=MembershipResponse)
 def update_member(
+    request: Request,
     workspace_id: UUID,
     user_id: str,
     payload: UpdateMembershipRequest,
     x_collabflow_user_id: str | None = Header(default=None),
     x_collabflow_display_name: str | None = Header(default=None),
+    x_collabflow_csrf: str | None = Header(default=None),
 ) -> MembershipResponse:
-    identity = identity_from_headers(x_collabflow_user_id, x_collabflow_display_name)
+    require_csrf_token(request, x_collabflow_csrf)
+    identity = identity_from_request(request, x_collabflow_user_id, x_collabflow_display_name)
     require_membership(workspace_id, identity, "owner")
     current = get_membership(workspace_id, user_id)
     if current is None:
@@ -1198,12 +1318,15 @@ def update_member(
 
 @app.delete("/api/workspaces/{workspace_id}/members/{user_id}")
 def remove_member(
+    request: Request,
     workspace_id: UUID,
     user_id: str,
     x_collabflow_user_id: str | None = Header(default=None),
     x_collabflow_display_name: str | None = Header(default=None),
+    x_collabflow_csrf: str | None = Header(default=None),
 ) -> dict[str, str]:
-    identity = identity_from_headers(x_collabflow_user_id, x_collabflow_display_name)
+    require_csrf_token(request, x_collabflow_csrf)
+    identity = identity_from_request(request, x_collabflow_user_id, x_collabflow_display_name)
     require_membership(workspace_id, identity, "owner")
     current = get_membership(workspace_id, user_id)
     if current is None:
