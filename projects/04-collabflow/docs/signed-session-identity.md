@@ -37,6 +37,12 @@ Development identity headers remain a local-only fallback when `COLLABFLOW_DEV_I
 
 `COLLABFLOW_PREVIOUS_SESSION_SIGNING_SECRET` may be set during rotation so active sessions can survive a short overlap window.
 
+## Session Issuance
+
+`POST /api/session` issues the signed `collabflow_session` cookie and a readable `collabflow_csrf` cookie for local portfolio use. The endpoint accepts `user_id` and `display_name`; it is intentionally not a password login or OAuth callback. Its job is to exercise the signed-cookie boundary before real account management exists.
+
+The web shell exposes this through a compact `Use Signed Session` control. After the cookie is issued, normal workspace creation, snapshot export, member management, and websocket joins use the same session verification path as production-shaped requests.
+
 ## WebSocket Handshake
 
 The websocket authenticates before accepting durable sync work:
@@ -63,8 +69,8 @@ Use a double-submit token: an `X-CollabFlow-CSRF` header must match a non-HTTP-o
 
 ## Logout And Rotation
 
-Sessions should expire quickly enough for a portfolio app, for example seven days. Logout can clear the cookie immediately. Secret rotation should accept a current and previous signing secret for a short overlap window, then retire the previous secret after active sessions expire.
+Sessions expire through `COLLABFLOW_SESSION_TTL_DAYS`, which defaults to seven days. `DELETE /api/session` clears both the session cookie and CSRF cookie after the CSRF header is validated. Secret rotation should accept a current and previous signing secret for a short overlap window, then retire the previous secret after active sessions expire.
 
 ## Runtime Scope
 
-Runtime enforcement now verifies signed cookie sessions, checks CSRF tokens on mutating cookie-backed HTTP requests, and binds websocket membership to the verified session identity. Login, logout endpoint wiring, invitation tokens, and real user registration remain deferred because this lab slice is focused on the authorization boundary, not account management.
+Runtime enforcement now verifies signed cookie sessions, issues and clears session cookies, checks CSRF tokens on mutating cookie-backed HTTP requests, and binds websocket membership to the verified session identity. Password login, OAuth, invitation tokens, and real user registration remain deferred because this lab slice is focused on the session boundary, not account management.

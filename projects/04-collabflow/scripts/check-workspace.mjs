@@ -46,6 +46,9 @@ if (
   !appPage.includes("X-CollabFlow-User-Id") ||
   !appPage.includes("X-CollabFlow-CSRF") ||
   !appPage.includes('credentials: "include"') ||
+  !appPage.includes("/api/session") ||
+  !appPage.includes("Use Signed Session") ||
+  !appPage.includes("Logout") ||
   !appPage.includes("NEXT_PUBLIC_COLLABFLOW_USER_ID") ||
   !appPage.includes("/sync-contract") ||
   !appPage.includes("WebSocket Messages") ||
@@ -88,7 +91,12 @@ if (
   !apiFile.includes("durable_update_log") ||
   !apiFile.includes("COLLABFLOW_SESSION_SIGNING_SECRET") ||
   !apiFile.includes("COLLABFLOW_PREVIOUS_SESSION_SIGNING_SECRET") ||
+  !apiFile.includes("COLLABFLOW_SESSION_TTL_DAYS") ||
   !apiFile.includes("COLLABFLOW_DEV_IDENTITY_HEADERS") ||
+  !apiFile.includes('@app.post("/api/session"') ||
+  !apiFile.includes('@app.delete("/api/session"') ||
+  !apiFile.includes("issue_session_cookies") ||
+  !apiFile.includes("clear_session_cookies") ||
   !apiFile.includes("identity_from_signed_session_token") ||
   !apiFile.includes("require_csrf_token") ||
   !apiFile.includes("identity_from_websocket_message")
@@ -170,6 +178,8 @@ if (
   !signedSessionNotes.includes("collabflow_workspace_memberships") ||
   !signedSessionNotes.includes("X-CollabFlow-CSRF") ||
   !signedSessionNotes.includes("collabflow_csrf") ||
+  !signedSessionNotes.includes("POST /api/session") ||
+  !signedSessionNotes.includes("DELETE /api/session") ||
   !signedSessionNotes.includes("Do not trust a websocket `user_id` field") ||
   !signedSessionNotes.includes("COLLABFLOW_DEV_IDENTITY_HEADERS=true")
 ) {

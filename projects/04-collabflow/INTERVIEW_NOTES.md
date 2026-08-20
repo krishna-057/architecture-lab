@@ -64,3 +64,5 @@ The runtime now enforces this contract with local development headers. That is a
 Signed sessions are now the production-shaped identity path, but sessions do not carry workspace roles. Roles belong in `collabflow_workspace_memberships` so revoking an editor or removing a viewer takes effect immediately on the next request or websocket reconnect.
 
 The runtime verifies cookie signatures, handles a previous signing secret for rotation, and uses CSRF double-submit tokens only on cookie-backed mutations. That is a practical middle ground: the app has a defensible auth boundary without pretending this slice also shipped registration, OAuth, or invitation lifecycle.
+
+Session issuance is intentionally local and boring. `POST /api/session` turns a supplied development identity into the signed cookie and CSRF token the rest of the system already enforces, while `DELETE /api/session` clears both cookies through the same CSRF boundary. In an interview, the useful explanation is that this proves the browser session lifecycle without dragging in account recovery or provider-specific OAuth details.

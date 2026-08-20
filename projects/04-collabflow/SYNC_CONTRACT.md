@@ -34,6 +34,8 @@ The current FastAPI app accepts this websocket endpoint. It validates the worksp
 
 Signed-session enforcement is documented in `docs/signed-session-identity.md`. When `collabflow_session` is present, websocket identity comes from the verified session cookie rather than a client-sent `user_id`; the client-sent identity remains only for the local development fallback.
 
+The browser can obtain that cookie through `POST /api/session` and clear it through `DELETE /api/session`. These HTTP endpoints are outside the websocket message protocol, but they define which identity the websocket handshake will bind.
+
 ## Message Types
 
 | Type | Sender | Encoding | Durable | Purpose |
@@ -83,6 +85,6 @@ In PostgreSQL mode, `sync_request` replays the newest compaction checkpoint firs
 
 ## Deferred Until Later Slices
 
-- Login, logout, invite-token, and account-management screens.
+- Password login, OAuth, invite-token, and account-management screens.
 - Backpressure and heartbeat handling.
 - Multi-device conflict tests against a running sync provider.

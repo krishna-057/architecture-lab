@@ -49,6 +49,14 @@ type Snapshot = {
   created_at: string;
 };
 
+type Session = {
+  user_id: string;
+  display_name: string;
+  expires_at: string;
+  csrf_token: string;
+  auth_mode: "signed_cookie";
+};
+
 type PresenceState = {
   client_id: string;
   display_name: string;
@@ -225,6 +233,7 @@ export default function CollabFlowHome() {
   const [syncStatus, setSyncStatus] = useState<"idle" | "connecting" | "connected" | "offline">("idle");
   const [syncedUpdateCount, setSyncedUpdateCount] = useState(0);
   const [peerPresence, setPeerPresence] = useState<PresenceState[]>([]);
+  const [session, setSession] = useState<Session | null>(null);
   const ydocRef = useRef<Y.Doc | null>(null);
   const syncSocketRef = useRef<WebSocket | null>(null);
   const ydocUpdateHandlerRef = useRef<((update: Uint8Array, origin: unknown) => void) | null>(null);
@@ -411,6 +420,36 @@ export default function CollabFlowHome() {
     setSnapshots(nextSnapshots);
   }
 
+  async function createSignedSession() {
+    try {
+      const nextSession = await requestJson<Session>("/api/session", {
+        method: "POST",
+        body: JSON.stringify({
+          user_id: developmentUserId,
+          display_name: developmentDisplayName
+        })
+      });
+      setSession(nextSession);
+      setStatusMessage(`Signed session active for ${nextSession.display_name}.`);
+    } catch (error) {
+      setStatusMessage(error instanceof Error ? error.message : "Could not create a signed session.");
+    }
+  }
+
+  async function logoutSession() {
+    try {
+      await requestJson<{ status: string }>("/api/session", { method: "DELETE" });
+      closeSyncProvider();
+      setSession(null);
+      setWorkspace(null);
+      setContract(null);
+      setSnapshots([]);
+      setStatusMessage("Signed session cleared. Development headers remain available for local fallback.");
+    } catch (error) {
+      setStatusMessage(error instanceof Error ? error.message : "Could not clear the signed session.");
+    }
+  }
+
   async function createWorkspace() {
     setStatusMessage("Creating workspace boundary...");
     setSnapshots([]);
@@ -506,6 +545,16 @@ export default function CollabFlowHome() {
       setStatusMessage(error instanceof Error ? error.message : "Could not export the snapshot.");
     }
   }
+
+  useEffect(() => {
+    void requestJson<Session>("/api/session")
+      .then((currentSession) => {
+        setSession(currentSession);
+      })
+      .catch(() => {
+        setSession(null);
+      });
+  }, []);
 
   useEffect(() => {
     if (!workspaceId) {
@@ -773,6 +822,20 @@ export default function CollabFlowHome() {
           <div className="panel-header">
             <span>Runtime</span>
             <strong>{apiBaseUrl}</strong>
+          </div>
+          <dl className="contract-list">
+            <div>
+              <dt>Session</dt>
+              <dd>{session ? `${session.display_name} (${session.auth_mode})` : "Development identity fallback"}</dd>
+            </div>
+          </dl>
+          <div className="action-stack">
+            <button type="button" onClick={createSignedSession}>
+              Use Signed Session
+            </button>
+            <button type="button" onClick={logoutSession} disabled={!session}>
+              Logout
+            </button>
           </div>
           <p>{statusMessage}</p>
         </section>

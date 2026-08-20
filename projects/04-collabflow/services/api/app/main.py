@@ -4,6 +4,7 @@ import hashlib
 import hmac
 import json
 import os
+import secrets
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Literal
@@ -16,7 +17,7 @@ except ImportError:  # pragma: no cover - optional durable mode dependency
     psycopg = None
     dict_row = None
 
-from fastapi import FastAPI, Header, HTTPException, Request, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, Header, HTTPException, Request, Response, WebSocket, WebSocketDisconnect
 from fastapi.encoders import jsonable_encoder
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
@@ -52,6 +53,19 @@ class WorkspaceResponse(BaseModel):
 class WorkspaceIdentity(BaseModel):
     user_id: str
     display_name: str
+
+
+class CreateSessionRequest(BaseModel):
+    user_id: str = Field(min_length=1, max_length=120)
+    display_name: str = Field(min_length=1, max_length=120)
+
+
+class SessionResponse(BaseModel):
+    user_id: str
+    display_name: str
+    expires_at: datetime
+    csrf_token: str
+    auth_mode: Literal["signed_cookie"]
 
 
 class MembershipResponse(BaseModel):
@@ -138,6 +152,13 @@ COLLABFLOW_SESSION_COOKIE_NAME = os.getenv("COLLABFLOW_SESSION_COOKIE_NAME", "co
 COLLABFLOW_CSRF_COOKIE_NAME = os.getenv("COLLABFLOW_CSRF_COOKIE_NAME", "collabflow_csrf")
 COLLABFLOW_SESSION_SIGNING_SECRET = os.getenv("COLLABFLOW_SESSION_SIGNING_SECRET", "")
 COLLABFLOW_PREVIOUS_SESSION_SIGNING_SECRET = os.getenv("COLLABFLOW_PREVIOUS_SESSION_SIGNING_SECRET", "")
+COLLABFLOW_SESSION_TTL_DAYS = int(os.getenv("COLLABFLOW_SESSION_TTL_DAYS", "7"))
+COLLABFLOW_SESSION_COOKIE_SECURE = os.getenv("COLLABFLOW_SESSION_COOKIE_SECURE", "false").lower() in {
+    "1",
+    "true",
+    "yes",
+    "on",
+}
 COLLABFLOW_DEV_IDENTITY_HEADERS = os.getenv("COLLABFLOW_DEV_IDENTITY_HEADERS", "true").lower() in {
     "1",
     "true",
@@ -654,6 +675,69 @@ def signed_session_secrets() -> list[str]:
     ]
 
 
+def active_session_signing_secret() -> str:
+    if not COLLABFLOW_SESSION_SIGNING_SECRET:
+        raise HTTPException(status_code=500, detail="Workspace session signing is not configured.")
+    return COLLABFLOW_SESSION_SIGNING_SECRET
+
+
+def signed_session_token(payload: dict[str, Any]) -> str:
+    encoded_payload = bytes_to_urlsafe(json.dumps(payload, separators=(",", ":"), sort_keys=True).encode("utf8"))
+    signature = hmac.new(
+        active_session_signing_secret().encode("utf8"),
+        encoded_payload.encode("ascii"),
+        hashlib.sha256,
+    ).digest()
+    return f"{encoded_payload}.{bytes_to_urlsafe(signature)}"
+
+
+def issue_session_cookies(response: Response, identity: WorkspaceIdentity) -> SessionResponse:
+    expires_at = now_utc() + timedelta(days=COLLABFLOW_SESSION_TTL_DAYS)
+    csrf_token = secrets.token_urlsafe(32)
+    token = signed_session_token(
+        {
+            "session_id": f"sess_{secrets.token_urlsafe(18)}",
+            "user_id": identity.user_id,
+            "display_name": identity.display_name,
+            "issued_at": now_utc().isoformat(),
+            "expires_at": expires_at.isoformat(),
+        }
+    )
+    max_age = COLLABFLOW_SESSION_TTL_DAYS * 24 * 60 * 60
+    response.set_cookie(
+        COLLABFLOW_SESSION_COOKIE_NAME,
+        token,
+        max_age=max_age,
+        expires=max_age,
+        httponly=True,
+        secure=COLLABFLOW_SESSION_COOKIE_SECURE,
+        samesite="lax",
+        path="/",
+    )
+    response.set_cookie(
+        COLLABFLOW_CSRF_COOKIE_NAME,
+        csrf_token,
+        max_age=max_age,
+        expires=max_age,
+        httponly=False,
+        secure=COLLABFLOW_SESSION_COOKIE_SECURE,
+        samesite="lax",
+        path="/",
+    )
+    return SessionResponse(
+        user_id=identity.user_id,
+        display_name=identity.display_name,
+        expires_at=expires_at,
+        csrf_token=csrf_token,
+        auth_mode="signed_cookie",
+    )
+
+
+def clear_session_cookies(response: Response) -> None:
+    response.delete_cookie(COLLABFLOW_SESSION_COOKIE_NAME, path="/", samesite="lax")
+    response.delete_cookie(COLLABFLOW_CSRF_COOKIE_NAME, path="/", samesite="lax")
+
+
 def identity_from_signed_session_token(token: str | None) -> WorkspaceIdentity | None:
     if not token:
         return None
@@ -923,6 +1007,42 @@ def health() -> dict[str, str]:
         "session_auth": "signed_cookie",
         "dev_identity_headers": str(COLLABFLOW_DEV_IDENTITY_HEADERS).lower(),
     }
+
+
+@app.post("/api/session", response_model=SessionResponse)
+def create_session(response: Response, payload: CreateSessionRequest) -> SessionResponse:
+    identity = WorkspaceIdentity(user_id=payload.user_id.strip(), display_name=payload.display_name.strip())
+    return issue_session_cookies(response, identity)
+
+
+@app.get("/api/session", response_model=SessionResponse)
+def get_session(request: Request) -> SessionResponse:
+    identity = identity_from_signed_session_token(request.cookies.get(COLLABFLOW_SESSION_COOKIE_NAME))
+    if identity is None:
+        raise HTTPException(status_code=401, detail="Missing workspace session.")
+
+    csrf_token = request.cookies.get(COLLABFLOW_CSRF_COOKIE_NAME)
+    if not csrf_token:
+        raise HTTPException(status_code=401, detail="Missing workspace CSRF token.")
+
+    return SessionResponse(
+        user_id=identity.user_id,
+        display_name=identity.display_name,
+        expires_at=now_utc() + timedelta(days=COLLABFLOW_SESSION_TTL_DAYS),
+        csrf_token=csrf_token,
+        auth_mode="signed_cookie",
+    )
+
+
+@app.delete("/api/session")
+def delete_session(
+    request: Request,
+    response: Response,
+    x_collabflow_csrf: str | None = Header(default=None),
+) -> dict[str, str]:
+    require_csrf_token(request, x_collabflow_csrf)
+    clear_session_cookies(response)
+    return {"status": "signed_out"}
 
 
 @app.post("/api/workspaces", response_model=WorkspaceResponse)

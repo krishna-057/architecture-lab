@@ -6,6 +6,8 @@ CollabFlow uses signed session cookies for the production-shaped identity bounda
 
 The API first looks for a signed `collabflow_session` cookie. If present, the cookie must verify with `COLLABFLOW_SESSION_SIGNING_SECRET`, must not be expired, and supplies the server-owned `user_id` and `display_name`. A previous signing secret can be configured during short rotation windows.
 
+`POST /api/session` can issue that cookie for local portfolio use, and `DELETE /api/session` clears it. Those endpoints prove the session lifecycle, but they are not a full account system.
+
 Development headers remain available only when `COLLABFLOW_DEV_IDENTITY_HEADERS=true`:
 
 The development API accepts these headers until a real identity provider is added:
@@ -49,6 +51,8 @@ This table is intentionally separate from Yjs update history. Membership decides
 
 | Route | Required role |
 | --- | --- |
+| `POST /api/session` | Issues a signed session for local portfolio use. |
+| `DELETE /api/session` | Clears the signed session after CSRF validation. |
 | `POST /api/workspaces` | Creates an `owner` membership for the caller. |
 | `GET /api/workspaces` | Returns workspaces where caller is a member. |
 | `GET /api/workspaces/{workspace_id}` | `viewer`, `editor`, or `owner`. |
@@ -72,4 +76,4 @@ Viewer websocket sessions may receive replay and presence but must not broadcast
 
 ## Deferred Account Management
 
-Signed session enforcement is documented in `docs/signed-session-identity.md`. OAuth, password login, invite tokens, and session issuance endpoints remain deferred. The contract should survive that migration because route authorization depends on `user_id` and role, not on how the user was authenticated.
+Signed session enforcement and local issuance are documented in `docs/signed-session-identity.md`. OAuth, password login, invite tokens, and user registration remain deferred. The contract should survive that migration because route authorization depends on `user_id` and role, not on how the user was authenticated.

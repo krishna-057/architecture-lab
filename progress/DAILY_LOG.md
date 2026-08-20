@@ -1,5 +1,35 @@
 # Daily Log
 
+## 2026-08-20
+
+Added CollabFlow session issuance and logout flow.
+
+Added:
+- `POST /api/session` to issue a signed `collabflow_session` cookie and readable `collabflow_csrf` double-submit token for the local portfolio shell.
+- `GET /api/session` to inspect the active signed session.
+- `DELETE /api/session` to clear both cookies after CSRF validation.
+- `COLLABFLOW_SESSION_TTL_DAYS` and `COLLABFLOW_SESSION_COOKIE_SECURE` configuration.
+- Web controls to activate or clear a signed session while keeping development identity headers as the local fallback.
+- README, architecture, sync contract, membership, signed-session, decision, interview-note, env, validation-marker, daily-log, and task-queue updates.
+
+Validated the work by running:
+- `npm run check` from `projects/04-collabflow`
+- `python -m compileall services\api\app` from `projects/04-collabflow`
+- Direct FastAPI smoke test for session issuance, current-session read, CSRF rejection, workspace owner creation through the issued cookie, logout, and post-logout rejection
+- `docker compose -f compose.yaml config --quiet` from `projects/04-collabflow`
+- `npm run build -w @collabflow/web` from `projects/04-collabflow`
+- `npx tsc --noEmit -p apps/web/tsconfig.json` from `projects/04-collabflow`
+- `git diff --check`
+
+Notes:
+- Session issuance is intentionally local and identity-only. Password login, OAuth, registration, and invite flows remain deferred.
+- A K: venv at `K:\AutoPilot_Projects\.venvs\collabflow-api` was used for FastAPI smoke tests.
+- The generated `apps/web/tsconfig.tsbuildinfo` build artifact was removed before commit.
+- `git diff --check` reported only line-ending normalization warnings for touched text files.
+
+Next recommended task:
+- Add CollabFlow invite token membership flow.
+
 ## 2026-08-17
 
 Added CollabFlow signed session runtime enforcement.

@@ -180,3 +180,17 @@ Rejected alternatives:
 - Add a full auth product now. That would consume the daily slice on account management instead of collaboration authorization.
 - Disable development headers by default. That would be closer to production, but it would make local portfolio checks harder until a login endpoint exists.
 - Require CSRF on every request. Read-only routes do not mutate cookie-authenticated state, so the double-submit rule is scoped to writes.
+
+## Add local session issuance before full account management
+
+Decision:
+CollabFlow now exposes `POST /api/session` to issue a signed session cookie and CSRF cookie from a supplied `user_id` and `display_name`, plus `DELETE /api/session` to clear both cookies after CSRF validation. The web shell has compact controls to activate or clear that session.
+
+Why:
+The previous slice could verify signed cookies, but there was no first-class way for the browser shell to obtain one. This keeps the portfolio demo honest: users can exercise the cookie, CSRF, and websocket session-binding path without pretending a full login product exists.
+
+Rejected alternatives:
+
+- Add password login now. That would require storage, reset flows, and threat modeling that are outside the collaboration architecture slice.
+- Keep using only manually crafted cookies. That proves verification in tests, but it leaves the browser workflow stuck on development headers.
+- Make logout a client-only cookie deletion. The server should own the cookie attributes and CSRF validation so clearing the session follows the same boundary as issuing it.
