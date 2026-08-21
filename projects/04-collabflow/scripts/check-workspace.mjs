@@ -49,6 +49,10 @@ if (
   !appPage.includes("/api/session") ||
   !appPage.includes("Use Signed Session") ||
   !appPage.includes("Logout") ||
+  !appPage.includes("/api/workspaces/${workspaceId}/invites") ||
+  !appPage.includes("/api/invites/accept") ||
+  !appPage.includes("Create Invite") ||
+  !appPage.includes("Accept Invite") ||
   !appPage.includes("NEXT_PUBLIC_COLLABFLOW_USER_ID") ||
   !appPage.includes("/sync-contract") ||
   !appPage.includes("WebSocket Messages") ||
@@ -80,6 +84,12 @@ if (
   !apiFile.includes("identity_from_headers") ||
   !apiFile.includes("require_membership") ||
   !apiFile.includes("/api/workspaces/{workspace_id}/members") ||
+  !apiFile.includes("/api/workspaces/{workspace_id}/invites") ||
+  !apiFile.includes("/api/invites/accept") ||
+  !apiFile.includes("collabflow_workspace_invites") ||
+  !apiFile.includes("COLLABFLOW_INVITE_TTL_HOURS") ||
+  !apiFile.includes("InviteResponse") ||
+  !apiFile.includes("persist_invite") ||
   !apiFile.includes("collabflow_yjs_updates") ||
   !apiFile.includes("append_sync_update") ||
   !apiFile.includes("create_compaction_checkpoint") ||
@@ -111,6 +121,8 @@ if (
   !schemaFile.includes("collabflow_yjs_updates") ||
   !schemaFile.includes("collabflow_compaction_checkpoints") ||
   !schemaFile.includes("collabflow_workspace_memberships") ||
+  !schemaFile.includes("collabflow_workspace_invites") ||
+  !schemaFile.includes("idx_collabflow_workspace_invites_workspace") ||
   !schemaFile.includes("idx_collabflow_snapshots_workspace_created") ||
   !schemaFile.includes("idx_collabflow_yjs_updates_workspace_seq") ||
   !schemaFile.includes("idx_collabflow_yjs_updates_compacted_at") ||
@@ -166,6 +178,8 @@ if (
   !membershipNotes.includes("editor") ||
   !membershipNotes.includes("viewer") ||
   !membershipNotes.includes("Non-member workspace access: `404`") ||
+  !membershipNotes.includes("POST /api/workspaces/{workspace_id}/invites") ||
+  !membershipNotes.includes("POST /api/invites/accept") ||
   !membershipNotes.includes("only `editor` or `owner` may send `yjs_update`")
 ) {
   throw new Error("Membership authorization notes must define identity headers, roles, storage, privacy, and websocket update rules.");

@@ -6,10 +6,11 @@ Tasks should stay small enough for one focused session.
 
 ### Ready
 
-- [ ] Add CollabFlow invite token membership flow.
+- [ ] Add CollabFlow member list and role management UI.
 
 ### Completed
 
+- [x] Add CollabFlow invite token membership flow.
 - [x] Add CollabFlow session issuance and logout flow.
 - [x] Add CollabFlow signed session runtime enforcement.
 - [x] Add CollabFlow signed session identity notes.

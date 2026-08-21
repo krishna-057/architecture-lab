@@ -1,5 +1,37 @@
 # Daily Log
 
+## 2026-08-21
+
+Added CollabFlow invite token membership flow.
+
+Added:
+- Owner-only `POST /api/workspaces/{workspace_id}/invites` for time-limited `viewer` or `editor` invite tokens.
+- Signed-user `POST /api/invites/accept` to redeem a valid unused token into a workspace membership.
+- File and PostgreSQL persistence for `collabflow_workspace_invites`.
+- `COLLABFLOW_INVITE_TTL_HOURS` configuration with a 24-hour default.
+- Web controls to create an invite token for the current workspace and accept a pasted token.
+- README, architecture, membership authorization, decision, interview-note, schema, env, validation-marker, daily-log, and task-queue updates.
+
+Validated the work by running:
+- `npm run check` from `projects/04-collabflow`
+- `python -m compileall services\api\app` from `projects/04-collabflow`
+- Direct FastAPI smoke test for owner session creation, workspace creation, invite creation, second signed session acceptance, member-scoped workspace visibility, and single-use reuse rejection
+- `docker compose -f compose.yaml config --quiet` from `projects/04-collabflow`
+- `npm run build -w @collabflow/web` from `projects/04-collabflow`
+- `npx tsc --noEmit -p apps/web/tsconfig.json` from `projects/04-collabflow`
+- `git diff --check`
+
+Notes:
+- Invite tokens support `viewer` and `editor` roles only; owners can promote members after join.
+- Email delivery, resend, and invite audit UI remain deferred.
+- A K: venv at `K:\AutoPilot_Projects\.venvs\collabflow-api` was used for FastAPI smoke tests.
+- The first TypeScript no-emit run raced the Next build's `.next/types` generation; rerunning after the build passed.
+- The generated `apps/web/tsconfig.tsbuildinfo` build artifact was removed before commit.
+- `git diff --check` reported only line-ending normalization warnings for touched text files.
+
+Next recommended task:
+- Add CollabFlow member list and role management UI.
+
 ## 2026-08-20
 
 Added CollabFlow session issuance and logout flow.

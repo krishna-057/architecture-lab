@@ -21,6 +21,8 @@ These headers are not production authentication. They are a stable local identit
 
 Cookie-backed mutating HTTP requests require the double-submit CSRF token: `X-CollabFlow-CSRF` must match the `collabflow_csrf` cookie. Read routes do not require that header.
 
+Invite tokens allow owners to add collaborators without manually entering another user's identity. `POST /api/workspaces/{workspace_id}/invites` creates a single-use token for `viewer` or `editor` access. `POST /api/invites/accept` lets the signed-in user redeem the token and creates their membership.
+
 ## Roles
 
 | Role | Can read | Can edit | Can export snapshot | Can manage members |
@@ -60,6 +62,8 @@ This table is intentionally separate from Yjs update history. Membership decides
 | `WS /ws/collabflow` `sync_request` | `viewer`, `editor`, or `owner` to join; only `editor` or `owner` may send `yjs_update`. |
 | `GET /api/workspaces/{workspace_id}/snapshots` | `viewer`, `editor`, or `owner`. |
 | `POST /api/workspaces/{workspace_id}/snapshots` | `editor` or `owner`. |
+| `POST /api/workspaces/{workspace_id}/invites` | `owner`; creates a time-limited `viewer` or `editor` token. |
+| `POST /api/invites/accept` | Signed-in user; creates membership from a valid token. |
 | `POST /api/workspaces/{workspace_id}/members` | `owner`. |
 | `PATCH /api/workspaces/{workspace_id}/members/{user_id}` | `owner`. |
 | `DELETE /api/workspaces/{workspace_id}/members/{user_id}` | `owner`, while preserving at least one owner. |
@@ -71,9 +75,11 @@ Viewer websocket sessions may receive replay and presence but must not broadcast
 - Missing or invalid session, or missing local identity fallback: `401` for HTTP routes and `sync_error` for websocket joins.
 - Missing or invalid CSRF token on cookie-backed mutation: `403`.
 - Non-member workspace access: `404` rather than `403`, so private workspace ids are not confirmed.
+- Missing or expired invite token: `404`.
+- Already accepted invite token: `409`.
 - Member without enough role: `403`.
 - Attempt to remove or demote the last owner: `409`.
 
 ## Deferred Account Management
 
-Signed session enforcement and local issuance are documented in `docs/signed-session-identity.md`. OAuth, password login, invite tokens, and user registration remain deferred. The contract should survive that migration because route authorization depends on `user_id` and role, not on how the user was authenticated.
+Signed session enforcement and local issuance are documented in `docs/signed-session-identity.md`. OAuth, password login, email delivery, and user registration remain deferred. The contract should survive that migration because route authorization depends on `user_id` and role, not on how the user was authenticated.

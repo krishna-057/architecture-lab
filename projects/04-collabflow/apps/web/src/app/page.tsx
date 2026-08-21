@@ -57,6 +57,17 @@ type Session = {
   auth_mode: "signed_cookie";
 };
 
+type WorkspaceInvite = {
+  workspace_id: string;
+  invite_token: string;
+  role: "editor" | "viewer";
+  created_by: string;
+  created_at: string;
+  expires_at: string;
+  accepted_by: string | null;
+  accepted_at: string | null;
+};
+
 type PresenceState = {
   client_id: string;
   display_name: string;
@@ -234,6 +245,9 @@ export default function CollabFlowHome() {
   const [syncedUpdateCount, setSyncedUpdateCount] = useState(0);
   const [peerPresence, setPeerPresence] = useState<PresenceState[]>([]);
   const [session, setSession] = useState<Session | null>(null);
+  const [inviteRole, setInviteRole] = useState<WorkspaceInvite["role"]>("viewer");
+  const [inviteToken, setInviteToken] = useState("");
+  const [latestInvite, setLatestInvite] = useState<WorkspaceInvite | null>(null);
   const ydocRef = useRef<Y.Doc | null>(null);
   const syncSocketRef = useRef<WebSocket | null>(null);
   const ydocUpdateHandlerRef = useRef<((update: Uint8Array, origin: unknown) => void) | null>(null);
@@ -447,6 +461,41 @@ export default function CollabFlowHome() {
       setStatusMessage("Signed session cleared. Development headers remain available for local fallback.");
     } catch (error) {
       setStatusMessage(error instanceof Error ? error.message : "Could not clear the signed session.");
+    }
+  }
+
+  async function createInvite() {
+    if (!workspaceId) {
+      return;
+    }
+
+    try {
+      const invite = await requestJson<WorkspaceInvite>(`/api/workspaces/${workspaceId}/invites`, {
+        method: "POST",
+        body: JSON.stringify({ role: inviteRole })
+      });
+      setLatestInvite(invite);
+      setInviteToken(invite.invite_token);
+      setStatusMessage(`Invite token created for ${invite.role} access.`);
+    } catch (error) {
+      setStatusMessage(error instanceof Error ? error.message : "Could not create the invite token.");
+    }
+  }
+
+  async function acceptInvite() {
+    const token = inviteToken.trim();
+    if (!token) {
+      return;
+    }
+
+    try {
+      const membership = await requestJson<{ workspace_id: string; role: string }>("/api/invites/accept", {
+        method: "POST",
+        body: JSON.stringify({ invite_token: token })
+      });
+      setStatusMessage(`Invite accepted with ${membership.role} access.`);
+    } catch (error) {
+      setStatusMessage(error instanceof Error ? error.message : "Could not accept the invite token.");
     }
   }
 
@@ -795,6 +844,37 @@ export default function CollabFlowHome() {
           ) : (
             <p>No durable snapshots yet. Local IndexedDB saves happen automatically after edits.</p>
           )}
+        </section>
+
+        <section className="panel-block">
+          <div className="panel-header">
+            <span>Invite Token</span>
+            <strong>{latestInvite?.role ?? inviteRole}</strong>
+          </div>
+          <label className="field-block">
+            <span>Role</span>
+            <select value={inviteRole} onChange={(event) => setInviteRole(event.target.value as WorkspaceInvite["role"])}>
+              <option value="viewer">viewer</option>
+              <option value="editor">editor</option>
+            </select>
+          </label>
+          <label className="field-block">
+            <span>Token</span>
+            <input
+              value={inviteToken}
+              onChange={(event) => setInviteToken(event.target.value)}
+              placeholder="Create or paste an invite token"
+            />
+          </label>
+          <div className="action-stack">
+            <button type="button" onClick={createInvite} disabled={!workspaceId}>
+              Create Invite
+            </button>
+            <button type="button" onClick={acceptInvite} disabled={inviteToken.trim().length === 0}>
+              Accept Invite
+            </button>
+          </div>
+          {latestInvite ? <p>Expires at {formatClock(latestInvite.expires_at)}.</p> : null}
         </section>
 
         <section className="panel-block">

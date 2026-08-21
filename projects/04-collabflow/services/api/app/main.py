@@ -87,6 +87,25 @@ class UpdateMembershipRequest(BaseModel):
     role: Literal["owner", "editor", "viewer"]
 
 
+class CreateInviteRequest(BaseModel):
+    role: Literal["editor", "viewer"] = "viewer"
+
+
+class AcceptInviteRequest(BaseModel):
+    invite_token: str = Field(min_length=16, max_length=160)
+
+
+class InviteResponse(BaseModel):
+    workspace_id: UUID
+    invite_token: str
+    role: Literal["editor", "viewer"]
+    created_by: str
+    created_at: datetime
+    expires_at: datetime
+    accepted_by: str | None = None
+    accepted_at: datetime | None = None
+
+
 class SyncMessageContract(BaseModel):
     message_type: Literal["sync_request", "yjs_update", "awareness_update", "snapshot_offer"]
     sender: Literal["browser", "sync_server"]
@@ -148,6 +167,7 @@ SYNC_WEBSOCKET_URL = os.getenv("SYNC_WEBSOCKET_URL", "ws://localhost:8300/ws/col
 DATABASE_URL = os.getenv("DATABASE_URL")
 SNAPSHOT_STORAGE_MODE = "postgres" if DATABASE_URL and psycopg is not None else "file"
 COMPACTED_UPDATE_RETENTION_HOURS = int(os.getenv("COMPACTED_UPDATE_RETENTION_HOURS", "72"))
+COLLABFLOW_INVITE_TTL_HOURS = int(os.getenv("COLLABFLOW_INVITE_TTL_HOURS", "24"))
 COLLABFLOW_SESSION_COOKIE_NAME = os.getenv("COLLABFLOW_SESSION_COOKIE_NAME", "collabflow_session")
 COLLABFLOW_CSRF_COOKIE_NAME = os.getenv("COLLABFLOW_CSRF_COOKIE_NAME", "collabflow_csrf")
 COLLABFLOW_SESSION_SIGNING_SECRET = os.getenv("COLLABFLOW_SESSION_SIGNING_SECRET", "")
@@ -168,6 +188,7 @@ COLLABFLOW_DEV_IDENTITY_HEADERS = os.getenv("COLLABFLOW_DEV_IDENTITY_HEADERS", "
 
 workspaces: dict[UUID, WorkspaceResponse] = {}
 memberships: dict[UUID, dict[str, MembershipResponse]] = {}
+invites: dict[str, InviteResponse] = {}
 snapshots: dict[UUID, list[SnapshotResponse]] = {}
 sync_update_log: dict[UUID, list[str]] = {}
 sync_update_sequences: dict[UUID, int] = {}
@@ -283,6 +304,26 @@ def init_postgres_store() -> None:
                 );
                 """
             )
+            cursor.execute(
+                """
+                create table if not exists collabflow_workspace_invites (
+                  invite_token text primary key,
+                  workspace_id uuid not null references collabflow_workspaces(workspace_id) on delete cascade,
+                  role text not null check (role in ('editor', 'viewer')),
+                  created_by text not null,
+                  created_at timestamptz not null,
+                  expires_at timestamptz not null,
+                  accepted_by text,
+                  accepted_at timestamptz
+                );
+                """
+            )
+            cursor.execute(
+                """
+                create index if not exists idx_collabflow_workspace_invites_workspace
+                  on collabflow_workspace_invites(workspace_id, created_at);
+                """
+            )
 
 
 def load_postgres_snapshots() -> None:
@@ -319,6 +360,17 @@ def load_postgres_snapshots() -> None:
             for row in cursor.fetchall():
                 membership = MembershipResponse(**row)
                 memberships.setdefault(membership.workspace_id, {})[membership.user_id] = membership
+
+            cursor.execute(
+                """
+                select workspace_id, invite_token, role, created_by, created_at, expires_at, accepted_by, accepted_at
+                from collabflow_workspace_invites
+                order by created_at
+                """
+            )
+            for row in cursor.fetchall():
+                invite = InviteResponse(**row)
+                invites[invite.invite_token] = invite
 
             cursor.execute(
                 """
@@ -382,6 +434,10 @@ def load_file_snapshots() -> None:
         membership = MembershipResponse(**raw_membership)
         memberships.setdefault(membership.workspace_id, {})[membership.user_id] = membership
 
+    for raw_invite in raw_payload.get("invites", []):
+        invite = InviteResponse(**raw_invite)
+        invites[invite.invite_token] = invite
+
 
 def persist_file_snapshots() -> None:
     SNAPSHOT_STORE_PATH.parent.mkdir(parents=True, exist_ok=True)
@@ -399,6 +455,10 @@ def persist_file_snapshots() -> None:
             model_as_json_dict(membership)
             for workspace_memberships in memberships.values()
             for membership in sorted(workspace_memberships.values(), key=lambda item: item.created_at)
+        ],
+        "invites": [
+            model_as_json_dict(invite)
+            for invite in sorted(invites.values(), key=lambda item: item.created_at)
         ],
     }
     tmp_path = SNAPSHOT_STORE_PATH.with_suffix(".tmp")
@@ -468,6 +528,40 @@ def persist_membership(membership: MembershipResponse) -> None:
                     membership.role,
                     membership.created_at,
                     membership.updated_at,
+                ),
+            )
+
+
+def persist_invite(invite: InviteResponse) -> None:
+    if SNAPSHOT_STORAGE_MODE == "file":
+        persist_file_snapshots()
+        return
+
+    connection = postgres_connection()
+    if connection is None:
+        return
+
+    with connection:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                """
+                insert into collabflow_workspace_invites (
+                  invite_token, workspace_id, role, created_by, created_at, expires_at, accepted_by, accepted_at
+                )
+                values (%s, %s, %s, %s, %s, %s, %s, %s)
+                on conflict (invite_token) do update
+                set accepted_by = excluded.accepted_by,
+                    accepted_at = excluded.accepted_at
+                """,
+                (
+                    invite.invite_token,
+                    invite.workspace_id,
+                    invite.role,
+                    invite.created_by,
+                    invite.created_at,
+                    invite.expires_at,
+                    invite.accepted_by,
+                    invite.accepted_at,
                 ),
             )
 
@@ -1379,6 +1473,80 @@ def list_members(
     identity = identity_from_request(request, x_collabflow_user_id, x_collabflow_display_name)
     require_membership(workspace_id, identity, "viewer")
     return sorted(memberships.get(workspace_id, {}).values(), key=lambda membership: membership.created_at)
+
+
+@app.post("/api/workspaces/{workspace_id}/invites", response_model=InviteResponse)
+def create_invite(
+    request: Request,
+    workspace_id: UUID,
+    payload: CreateInviteRequest,
+    x_collabflow_user_id: str | None = Header(default=None),
+    x_collabflow_display_name: str | None = Header(default=None),
+    x_collabflow_csrf: str | None = Header(default=None),
+) -> InviteResponse:
+    require_csrf_token(request, x_collabflow_csrf)
+    identity = identity_from_request(request, x_collabflow_user_id, x_collabflow_display_name)
+    require_membership(workspace_id, identity, "owner")
+    created_at = now_utc()
+    invite = InviteResponse(
+        workspace_id=workspace_id,
+        invite_token=f"cfi_{secrets.token_urlsafe(24)}",
+        role=payload.role,
+        created_by=identity.user_id,
+        created_at=created_at,
+        expires_at=created_at + timedelta(hours=COLLABFLOW_INVITE_TTL_HOURS),
+    )
+    invites[invite.invite_token] = invite
+    persist_invite(invite)
+    return invite
+
+
+@app.post("/api/invites/accept", response_model=MembershipResponse)
+def accept_invite(
+    request: Request,
+    payload: AcceptInviteRequest,
+    x_collabflow_user_id: str | None = Header(default=None),
+    x_collabflow_display_name: str | None = Header(default=None),
+    x_collabflow_csrf: str | None = Header(default=None),
+) -> MembershipResponse:
+    require_csrf_token(request, x_collabflow_csrf)
+    identity = identity_from_request(request, x_collabflow_user_id, x_collabflow_display_name)
+    invite = invites.get(payload.invite_token)
+    if invite is None or invite.expires_at <= now_utc():
+        raise HTTPException(status_code=404, detail="Workspace invite not found.")
+    if invite.accepted_at is not None:
+        raise HTTPException(status_code=409, detail="Workspace invite was already accepted.")
+
+    existing = get_membership(invite.workspace_id, identity.user_id)
+    if existing is not None:
+        accepted = (
+            invite.model_copy(update={"accepted_by": identity.user_id, "accepted_at": now_utc()})
+            if hasattr(invite, "model_copy")
+            else invite.copy(update={"accepted_by": identity.user_id, "accepted_at": now_utc()})
+        )
+        invites[invite.invite_token] = accepted
+        persist_invite(accepted)
+        return existing
+
+    now = now_utc()
+    membership = MembershipResponse(
+        workspace_id=invite.workspace_id,
+        user_id=identity.user_id,
+        display_name=identity.display_name,
+        role=invite.role,
+        created_at=now,
+        updated_at=now,
+    )
+    memberships.setdefault(invite.workspace_id, {})[identity.user_id] = membership
+    accepted = (
+        invite.model_copy(update={"accepted_by": identity.user_id, "accepted_at": now})
+        if hasattr(invite, "model_copy")
+        else invite.copy(update={"accepted_by": identity.user_id, "accepted_at": now})
+    )
+    invites[invite.invite_token] = accepted
+    persist_membership(membership)
+    persist_invite(accepted)
+    return membership
 
 
 @app.post("/api/workspaces/{workspace_id}/members", response_model=MembershipResponse)

@@ -194,3 +194,17 @@ Rejected alternatives:
 - Add password login now. That would require storage, reset flows, and threat modeling that are outside the collaboration architecture slice.
 - Keep using only manually crafted cookies. That proves verification in tests, but it leaves the browser workflow stuck on development headers.
 - Make logout a client-only cookie deletion. The server should own the cookie attributes and CSRF validation so clearing the session follows the same boundary as issuing it.
+
+## Add invite tokens before email delivery
+
+Decision:
+CollabFlow now lets workspace owners create time-limited invite tokens for `viewer` or `editor` access. A signed-in user can redeem a valid, unused token through `POST /api/invites/accept`, which creates their `collabflow_workspace_memberships` row and marks the token accepted.
+
+Why:
+The project needed a collaborator onboarding path after sessions and membership enforcement. Token redemption proves the important authorization transition without adding email sending, notification jobs, or a full organization directory.
+
+Rejected alternatives:
+
+- Keep only owner-managed member creation. That works for tests, but it does not model how a second user joins from their own session.
+- Add email invites now. Delivery status, resend, bounce, and abuse controls are a separate product slice.
+- Allow owner invite tokens. Owner elevation is too sensitive for a bearer token in this portfolio slice; owners can still promote a member after they join.

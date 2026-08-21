@@ -56,3 +56,17 @@ create table if not exists collabflow_workspace_memberships (
   updated_at timestamptz not null,
   primary key (workspace_id, user_id)
 );
+
+create table if not exists collabflow_workspace_invites (
+  invite_token text primary key,
+  workspace_id uuid not null references collabflow_workspaces(workspace_id) on delete cascade,
+  role text not null check (role in ('editor', 'viewer')),
+  created_by text not null,
+  created_at timestamptz not null,
+  expires_at timestamptz not null,
+  accepted_by text,
+  accepted_at timestamptz
+);
+
+create index if not exists idx_collabflow_workspace_invites_workspace
+  on collabflow_workspace_invites(workspace_id, created_at);
