@@ -53,6 +53,10 @@ if (
   !appPage.includes("/api/invites/accept") ||
   !appPage.includes("Create Invite") ||
   !appPage.includes("Accept Invite") ||
+  !appPage.includes("/api/workspaces/${workspaceId}/members") ||
+  !appPage.includes("updateMemberRole") ||
+  !appPage.includes("removeMember") ||
+  !appPage.includes("Members") ||
   !appPage.includes("NEXT_PUBLIC_COLLABFLOW_USER_ID") ||
   !appPage.includes("/sync-contract") ||
   !appPage.includes("WebSocket Messages") ||
@@ -139,6 +143,11 @@ if (
   !composeFile.includes("./db/schema.sql")
 ) {
   throw new Error("Compose stack must keep PostgreSQL state under the project .data folder.");
+}
+
+const stylesFile = readFileSync("apps/web/src/app/styles.css", "utf8");
+if (!stylesFile.includes(".member-row") || !stylesFile.includes(".member-list")) {
+  throw new Error("Web styles must include stable member management rows.");
 }
 
 const syncContract = readFileSync("SYNC_CONTRACT.md", "utf8");

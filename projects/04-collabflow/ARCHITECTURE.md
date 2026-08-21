@@ -61,6 +61,8 @@ The signed-session runtime path is documented in `docs/signed-session-identity.m
 
 Invite tokens are a narrow membership lifecycle, not an email system. Owners create rows in `collabflow_workspace_invites` with a viewer/editor role and expiry; a signed-in user redeems the token through `POST /api/invites/accept`, which creates their workspace membership and marks the token accepted.
 
+The web shell now exposes the existing member management API directly. Members are listed from `GET /api/workspaces/{workspace_id}/members`; owners can patch roles or remove members, while the API still preserves the last-owner invariant.
+
 ## Snapshot Storage
 
 The snapshot API chooses storage at startup. If `DATABASE_URL` is set and `psycopg` is installed, FastAPI initializes `collabflow_workspaces` and `collabflow_snapshots`, loads existing rows, and writes new workspaces/snapshots to PostgreSQL. Otherwise it keeps the original `.data/snapshots.json` fallback. This gives restart-safe exported checkpoints without making PostgreSQL the live merge engine for CRDT updates.

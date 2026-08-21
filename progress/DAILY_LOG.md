@@ -1,5 +1,34 @@
 # Daily Log
 
+## 2026-08-22
+
+Added CollabFlow member list and role management UI.
+
+Added:
+- Web member list backed by `GET /api/workspaces/{workspace_id}/members`.
+- Role update controls backed by owner-only `PATCH /api/workspaces/{workspace_id}/members/{user_id}`.
+- Member removal controls backed by owner-only `DELETE /api/workspaces/{workspace_id}/members/{user_id}`.
+- Member refresh after workspace creation and invite acceptance.
+- Stable member-row styling for role and removal controls.
+- README, architecture, membership authorization, decision, interview-note, validation-marker, daily-log, and task-queue updates.
+
+Validated the work by running:
+- `npm run check` from `projects/04-collabflow`
+- `python -m compileall services\api\app` from `projects/04-collabflow`
+- `npx tsc --noEmit -p apps/web/tsconfig.json` from `projects/04-collabflow`
+- Direct FastAPI smoke test for member listing, role update, last-owner demotion rejection, and member removal
+- `docker compose -f compose.yaml config --quiet` from `projects/04-collabflow`
+- `npm run build -w @collabflow/web` from `projects/04-collabflow`
+- `git diff --check`
+
+Notes:
+- The UI delegates all permission checks to the existing API; it does not try to enforce owner rules client-side.
+- The generated `apps/web/tsconfig.tsbuildinfo` build artifact was removed before commit.
+- `git diff --check` reported only line-ending normalization warnings for touched text files.
+
+Next recommended task:
+- Add CollabFlow invite audit and resend notes.
+
 ## 2026-08-21
 
 Added CollabFlow invite token membership flow.

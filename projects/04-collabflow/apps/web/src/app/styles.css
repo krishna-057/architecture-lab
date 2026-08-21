@@ -162,6 +162,7 @@ textarea {
 }
 
 .task-list,
+.member-list,
 .snapshot-list {
   display: grid;
   gap: 8px;
@@ -183,6 +184,40 @@ textarea {
 .task-row button {
   min-width: 76px;
   background: var(--focus);
+}
+
+.member-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 116px 84px;
+  align-items: center;
+  gap: 8px;
+  min-height: 48px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 8px;
+  background: #fbfcfc;
+}
+
+.member-row div {
+  min-width: 0;
+}
+
+.member-row strong,
+.member-row span {
+  display: block;
+  overflow-wrap: anywhere;
+}
+
+.member-row span {
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.member-row button {
+  min-width: 0;
+  padding: 0 10px;
+  background: var(--accent);
 }
 
 .panel-block {
@@ -298,7 +333,8 @@ textarea {
   }
 
   .task-form,
-  .action-stack {
+  .action-stack,
+  .member-row {
     grid-template-columns: 1fr;
   }
 

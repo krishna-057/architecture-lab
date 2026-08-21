@@ -31,7 +31,7 @@ Invite tokens allow owners to add collaborators without manually entering anothe
 | `editor` | Yes | Yes | Yes | No |
 | `viewer` | Yes | No | No | No |
 
-The creator of a workspace becomes its first `owner`. Owners can invite members and change roles. A workspace must always have at least one owner.
+The creator of a workspace becomes its first `owner`. Owners can invite members and change roles. A workspace must always have at least one owner. The web shell lists members and calls the same owner-only role/update routes; it does not duplicate authorization rules client-side.
 
 ## Membership Table
 

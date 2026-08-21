@@ -68,6 +68,15 @@ type WorkspaceInvite = {
   accepted_at: string | null;
 };
 
+type WorkspaceMember = {
+  workspace_id: string;
+  user_id: string;
+  display_name: string;
+  role: "owner" | "editor" | "viewer";
+  created_at: string;
+  updated_at: string;
+};
+
 type PresenceState = {
   client_id: string;
   display_name: string;
@@ -248,6 +257,7 @@ export default function CollabFlowHome() {
   const [inviteRole, setInviteRole] = useState<WorkspaceInvite["role"]>("viewer");
   const [inviteToken, setInviteToken] = useState("");
   const [latestInvite, setLatestInvite] = useState<WorkspaceInvite | null>(null);
+  const [members, setMembers] = useState<WorkspaceMember[]>([]);
   const ydocRef = useRef<Y.Doc | null>(null);
   const syncSocketRef = useRef<WebSocket | null>(null);
   const ydocUpdateHandlerRef = useRef<((update: Uint8Array, origin: unknown) => void) | null>(null);
@@ -434,6 +444,11 @@ export default function CollabFlowHome() {
     setSnapshots(nextSnapshots);
   }
 
+  async function refreshMembers(targetWorkspaceId: string) {
+    const nextMembers = await requestJson<WorkspaceMember[]>(`/api/workspaces/${targetWorkspaceId}/members`);
+    setMembers(nextMembers);
+  }
+
   async function createSignedSession() {
     try {
       const nextSession = await requestJson<Session>("/api/session", {
@@ -458,6 +473,7 @@ export default function CollabFlowHome() {
       setWorkspace(null);
       setContract(null);
       setSnapshots([]);
+      setMembers([]);
       setStatusMessage("Signed session cleared. Development headers remain available for local fallback.");
     } catch (error) {
       setStatusMessage(error instanceof Error ? error.message : "Could not clear the signed session.");
@@ -493,6 +509,7 @@ export default function CollabFlowHome() {
         method: "POST",
         body: JSON.stringify({ invite_token: token })
       });
+      await refreshMembers(membership.workspace_id);
       setStatusMessage(`Invite accepted with ${membership.role} access.`);
     } catch (error) {
       setStatusMessage(error instanceof Error ? error.message : "Could not accept the invite token.");
@@ -526,10 +543,42 @@ export default function CollabFlowHome() {
       setVersionVector(Y.encodeStateVector(doc).length);
       await writeLocalSnapshot(created.workspace_id, seed);
       await refreshSnapshots(created.workspace_id);
+      await refreshMembers(created.workspace_id);
       connectSyncProvider(created, nextContract, doc);
       setStatusMessage(saved ? "Workspace restored from IndexedDB." : "Workspace ready with a new local Yjs document.");
     } catch (error) {
       setStatusMessage(error instanceof Error ? error.message : "Could not create the workspace.");
+    }
+  }
+
+  async function updateMemberRole(userId: string, role: WorkspaceMember["role"]) {
+    if (!workspaceId) {
+      return;
+    }
+
+    try {
+      const updated = await requestJson<WorkspaceMember>(`/api/workspaces/${workspaceId}/members/${userId}`, {
+        method: "PATCH",
+        body: JSON.stringify({ role })
+      });
+      setMembers((current) => current.map((member) => (member.user_id === userId ? updated : member)));
+      setStatusMessage(`${updated.display_name} is now ${updated.role}.`);
+    } catch (error) {
+      setStatusMessage(error instanceof Error ? error.message : "Could not update the member role.");
+    }
+  }
+
+  async function removeMember(userId: string) {
+    if (!workspaceId) {
+      return;
+    }
+
+    try {
+      await requestJson<{ status: string }>(`/api/workspaces/${workspaceId}/members/${userId}`, { method: "DELETE" });
+      setMembers((current) => current.filter((member) => member.user_id !== userId));
+      setStatusMessage("Workspace member removed.");
+    } catch (error) {
+      setStatusMessage(error instanceof Error ? error.message : "Could not remove the member.");
     }
   }
 
@@ -875,6 +924,35 @@ export default function CollabFlowHome() {
             </button>
           </div>
           {latestInvite ? <p>Expires at {formatClock(latestInvite.expires_at)}.</p> : null}
+        </section>
+
+        <section className="panel-block">
+          <div className="panel-header">
+            <span>Members</span>
+            <strong>{members.length}</strong>
+          </div>
+          <div className="member-list">
+            {members.length === 0 ? <p className="empty-state">Create a workspace to load members.</p> : null}
+            {members.map((member) => (
+              <article className="member-row" key={member.user_id}>
+                <div>
+                  <strong>{member.display_name}</strong>
+                  <span>{member.user_id}</span>
+                </div>
+                <select
+                  value={member.role}
+                  onChange={(event) => void updateMemberRole(member.user_id, event.target.value as WorkspaceMember["role"])}
+                >
+                  <option value="owner">owner</option>
+                  <option value="editor">editor</option>
+                  <option value="viewer">viewer</option>
+                </select>
+                <button type="button" onClick={() => void removeMember(member.user_id)}>
+                  Remove
+                </button>
+              </article>
+            ))}
+          </div>
         </section>
 
         <section className="panel-block">

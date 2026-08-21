@@ -208,3 +208,17 @@ Rejected alternatives:
 - Keep only owner-managed member creation. That works for tests, but it does not model how a second user joins from their own session.
 - Add email invites now. Delivery status, resend, bounce, and abuse controls are a separate product slice.
 - Allow owner invite tokens. Owner elevation is too sensitive for a bearer token in this portfolio slice; owners can still promote a member after they join.
+
+## Expose member management through the existing API
+
+Decision:
+CollabFlow now shows workspace members in the web shell and lets owners change roles or remove members through the existing member endpoints.
+
+Why:
+Invite redemption made it possible for additional users to join. The next useful slice is making those memberships visible and operable without inventing new authorization rules. The API remains the source of truth for owner-only checks and last-owner protection.
+
+Rejected alternatives:
+
+- Add a separate admin service. Membership management is still workspace-local and does not need another runtime.
+- Let the client enforce owner permissions. The client can render controls, but the API must remain authoritative.
+- Build a full organization directory. This project needs workspace collaboration semantics, not a company-wide identity product.
