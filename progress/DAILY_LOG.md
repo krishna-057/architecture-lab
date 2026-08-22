@@ -1,5 +1,33 @@
 # Daily Log
 
+## 2026-08-23
+
+Added CollabFlow invite audit and resend notes.
+
+Added:
+- Owner-only `GET /api/workspaces/{workspace_id}/invites` to list workspace invite audit rows.
+- Owner-only `POST /api/workspaces/{workspace_id}/invites/{invite_token}/resend-note` to record resend intent without email delivery.
+- `resend_count`, `last_resend_at`, and `last_resend_note` invite fields in file and PostgreSQL storage.
+- Web invite audit list showing open, expired, accepted, and resend state.
+- Stable invite-row styling, schema updates, docs, validation markers, daily-log, and task-queue updates.
+
+Validated the work by running:
+- `npm run check` from `projects/04-collabflow`
+- `python -m compileall services\api\app` from `projects/04-collabflow`
+- `npx tsc --noEmit -p apps/web/tsconfig.json` from `projects/04-collabflow`
+- Direct FastAPI smoke test for invite creation, invite audit listing, resend-note recording, invite acceptance, and accepted audit state
+- `docker compose -f compose.yaml config --quiet` from `projects/04-collabflow`
+- `npm run build -w @collabflow/web` from `projects/04-collabflow`
+- `git diff --check`
+
+Notes:
+- Resend is intentionally a note/audit action only; outbound email delivery remains deferred until account management and notification providers are designed.
+- The generated `apps/web/tsconfig.tsbuildinfo` build artifact was removed before commit.
+- `git diff --check` reported only line-ending normalization warnings for touched text files.
+
+Next recommended task:
+- Add CollabFlow final scaling notes and portfolio completion summary.
+
 ## 2026-08-22
 
 Added CollabFlow member list and role management UI.

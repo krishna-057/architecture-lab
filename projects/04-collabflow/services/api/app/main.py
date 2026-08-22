@@ -91,6 +91,10 @@ class CreateInviteRequest(BaseModel):
     role: Literal["editor", "viewer"] = "viewer"
 
 
+class ResendInviteRequest(BaseModel):
+    note: str = Field(default="", max_length=500)
+
+
 class AcceptInviteRequest(BaseModel):
     invite_token: str = Field(min_length=16, max_length=160)
 
@@ -104,6 +108,9 @@ class InviteResponse(BaseModel):
     expires_at: datetime
     accepted_by: str | None = None
     accepted_at: datetime | None = None
+    resend_count: int = Field(default=0, ge=0)
+    last_resend_at: datetime | None = None
+    last_resend_note: str | None = None
 
 
 class SyncMessageContract(BaseModel):
@@ -314,10 +321,16 @@ def init_postgres_store() -> None:
                   created_at timestamptz not null,
                   expires_at timestamptz not null,
                   accepted_by text,
-                  accepted_at timestamptz
+                  accepted_at timestamptz,
+                  resend_count integer not null default 0,
+                  last_resend_at timestamptz,
+                  last_resend_note text
                 );
                 """
             )
+            cursor.execute("alter table collabflow_workspace_invites add column if not exists resend_count integer not null default 0")
+            cursor.execute("alter table collabflow_workspace_invites add column if not exists last_resend_at timestamptz")
+            cursor.execute("alter table collabflow_workspace_invites add column if not exists last_resend_note text")
             cursor.execute(
                 """
                 create index if not exists idx_collabflow_workspace_invites_workspace
@@ -363,7 +376,18 @@ def load_postgres_snapshots() -> None:
 
             cursor.execute(
                 """
-                select workspace_id, invite_token, role, created_by, created_at, expires_at, accepted_by, accepted_at
+                select
+                  workspace_id,
+                  invite_token,
+                  role,
+                  created_by,
+                  created_at,
+                  expires_at,
+                  accepted_by,
+                  accepted_at,
+                  resend_count,
+                  last_resend_at,
+                  last_resend_note
                 from collabflow_workspace_invites
                 order by created_at
                 """
@@ -546,12 +570,25 @@ def persist_invite(invite: InviteResponse) -> None:
             cursor.execute(
                 """
                 insert into collabflow_workspace_invites (
-                  invite_token, workspace_id, role, created_by, created_at, expires_at, accepted_by, accepted_at
+                  invite_token,
+                  workspace_id,
+                  role,
+                  created_by,
+                  created_at,
+                  expires_at,
+                  accepted_by,
+                  accepted_at,
+                  resend_count,
+                  last_resend_at,
+                  last_resend_note
                 )
-                values (%s, %s, %s, %s, %s, %s, %s, %s)
+                values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 on conflict (invite_token) do update
                 set accepted_by = excluded.accepted_by,
-                    accepted_at = excluded.accepted_at
+                    accepted_at = excluded.accepted_at,
+                    resend_count = excluded.resend_count,
+                    last_resend_at = excluded.last_resend_at,
+                    last_resend_note = excluded.last_resend_note
                 """,
                 (
                     invite.invite_token,
@@ -562,6 +599,9 @@ def persist_invite(invite: InviteResponse) -> None:
                     invite.expires_at,
                     invite.accepted_by,
                     invite.accepted_at,
+                    invite.resend_count,
+                    invite.last_resend_at,
+                    invite.last_resend_note,
                 ),
             )
 
@@ -1499,6 +1539,62 @@ def create_invite(
     invites[invite.invite_token] = invite
     persist_invite(invite)
     return invite
+
+
+@app.get("/api/workspaces/{workspace_id}/invites", response_model=list[InviteResponse])
+def list_invites(
+    request: Request,
+    workspace_id: UUID,
+    x_collabflow_user_id: str | None = Header(default=None),
+    x_collabflow_display_name: str | None = Header(default=None),
+) -> list[InviteResponse]:
+    identity = identity_from_request(request, x_collabflow_user_id, x_collabflow_display_name)
+    require_membership(workspace_id, identity, "owner")
+    return sorted(
+        [invite for invite in invites.values() if invite.workspace_id == workspace_id],
+        key=lambda invite: invite.created_at,
+        reverse=True,
+    )
+
+
+@app.post("/api/workspaces/{workspace_id}/invites/{invite_token}/resend-note", response_model=InviteResponse)
+def record_invite_resend_note(
+    request: Request,
+    workspace_id: UUID,
+    invite_token: str,
+    payload: ResendInviteRequest,
+    x_collabflow_user_id: str | None = Header(default=None),
+    x_collabflow_display_name: str | None = Header(default=None),
+    x_collabflow_csrf: str | None = Header(default=None),
+) -> InviteResponse:
+    require_csrf_token(request, x_collabflow_csrf)
+    identity = identity_from_request(request, x_collabflow_user_id, x_collabflow_display_name)
+    require_membership(workspace_id, identity, "owner")
+    invite = invites.get(invite_token)
+    if invite is None or invite.workspace_id != workspace_id:
+        raise HTTPException(status_code=404, detail="Workspace invite not found.")
+
+    note = payload.note.strip() or "Resend requested outside CollabFlow email delivery."
+    updated = (
+        invite.model_copy(
+            update={
+                "resend_count": invite.resend_count + 1,
+                "last_resend_at": now_utc(),
+                "last_resend_note": note,
+            }
+        )
+        if hasattr(invite, "model_copy")
+        else invite.copy(
+            update={
+                "resend_count": invite.resend_count + 1,
+                "last_resend_at": now_utc(),
+                "last_resend_note": note,
+            }
+        )
+    )
+    invites[invite_token] = updated
+    persist_invite(updated)
+    return updated
 
 
 @app.post("/api/invites/accept", response_model=MembershipResponse)

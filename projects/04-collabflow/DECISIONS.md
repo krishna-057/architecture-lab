@@ -222,3 +222,17 @@ Rejected alternatives:
 - Add a separate admin service. Membership management is still workspace-local and does not need another runtime.
 - Let the client enforce owner permissions. The client can render controls, but the API must remain authoritative.
 - Build a full organization directory. This project needs workspace collaboration semantics, not a company-wide identity product.
+
+## Record invite audit and resend notes before email delivery
+
+Decision:
+CollabFlow now keeps owner-visible invite audit rows and lets owners record resend notes against a token. The resend action increments `resend_count` and stores the latest note/timestamp, but it does not send email.
+
+Why:
+Invite tokens became operational in the previous slices, so owners need visibility into open, expired, accepted, and resent invites. Recording resend intent gives a truthful product workflow without introducing mail providers, bounce handling, or notification jobs before account management exists.
+
+Rejected alternatives:
+
+- Send email now. That would require provider credentials, templates, delivery retries, and unsubscribe/abuse decisions beyond the collaboration architecture slice.
+- Create a separate invite-events table immediately. A full append-only audit trail is useful later, but the current portfolio UI only needs the token row plus latest resend metadata.
+- Allow editors to resend invites. Invite lifecycle changes remain owner-only because they grant workspace access.

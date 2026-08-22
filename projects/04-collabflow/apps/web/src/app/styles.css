@@ -162,6 +162,7 @@ textarea {
 }
 
 .task-list,
+.invite-list,
 .member-list,
 .snapshot-list {
   display: grid;
@@ -218,6 +219,47 @@ textarea {
   min-width: 0;
   padding: 0 10px;
   background: var(--accent);
+}
+
+.invite-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 128px 112px;
+  align-items: center;
+  gap: 8px;
+  min-height: 64px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 8px;
+  background: #fbfcfc;
+}
+
+.invite-row div,
+.invite-row p {
+  min-width: 0;
+}
+
+.invite-row strong,
+.invite-row span,
+.invite-row time {
+  display: block;
+  overflow-wrap: anywhere;
+}
+
+.invite-row span,
+.invite-row time,
+.invite-row p {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.invite-row p {
+  grid-column: 1 / -1;
+  margin-top: 0;
+}
+
+.invite-row button {
+  min-width: 0;
+  padding: 0 10px;
 }
 
 .panel-block {
@@ -334,6 +376,7 @@ textarea {
 
   .task-form,
   .action-stack,
+  .invite-row,
   .member-row {
     grid-template-columns: 1fr;
   }

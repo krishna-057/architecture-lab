@@ -66,6 +66,9 @@ type WorkspaceInvite = {
   expires_at: string;
   accepted_by: string | null;
   accepted_at: string | null;
+  resend_count: number;
+  last_resend_at: string | null;
+  last_resend_note: string | null;
 };
 
 type WorkspaceMember = {
@@ -257,6 +260,8 @@ export default function CollabFlowHome() {
   const [inviteRole, setInviteRole] = useState<WorkspaceInvite["role"]>("viewer");
   const [inviteToken, setInviteToken] = useState("");
   const [latestInvite, setLatestInvite] = useState<WorkspaceInvite | null>(null);
+  const [inviteAudit, setInviteAudit] = useState<WorkspaceInvite[]>([]);
+  const [resendNote, setResendNote] = useState("Manual resend outside email delivery");
   const [members, setMembers] = useState<WorkspaceMember[]>([]);
   const ydocRef = useRef<Y.Doc | null>(null);
   const syncSocketRef = useRef<WebSocket | null>(null);
@@ -473,6 +478,7 @@ export default function CollabFlowHome() {
       setWorkspace(null);
       setContract(null);
       setSnapshots([]);
+      setInviteAudit([]);
       setMembers([]);
       setStatusMessage("Signed session cleared. Development headers remain available for local fallback.");
     } catch (error) {
@@ -492,6 +498,7 @@ export default function CollabFlowHome() {
       });
       setLatestInvite(invite);
       setInviteToken(invite.invite_token);
+      await refreshInvites(invite.workspace_id);
       setStatusMessage(`Invite token created for ${invite.role} access.`);
     } catch (error) {
       setStatusMessage(error instanceof Error ? error.message : "Could not create the invite token.");
@@ -510,6 +517,7 @@ export default function CollabFlowHome() {
         body: JSON.stringify({ invite_token: token })
       });
       await refreshMembers(membership.workspace_id);
+      await refreshInvites(membership.workspace_id);
       setStatusMessage(`Invite accepted with ${membership.role} access.`);
     } catch (error) {
       setStatusMessage(error instanceof Error ? error.message : "Could not accept the invite token.");
@@ -544,6 +552,7 @@ export default function CollabFlowHome() {
       await writeLocalSnapshot(created.workspace_id, seed);
       await refreshSnapshots(created.workspace_id);
       await refreshMembers(created.workspace_id);
+      await refreshInvites(created.workspace_id);
       connectSyncProvider(created, nextContract, doc);
       setStatusMessage(saved ? "Workspace restored from IndexedDB." : "Workspace ready with a new local Yjs document.");
     } catch (error) {
@@ -614,6 +623,32 @@ export default function CollabFlowHome() {
 
     await writeLocalSnapshot(workspaceId, localState);
     setStatusMessage("Saved current Yjs projection into IndexedDB.");
+  }
+
+  async function refreshInvites(targetWorkspaceId: string) {
+    const nextInvites = await requestJson<WorkspaceInvite[]>(`/api/workspaces/${targetWorkspaceId}/invites`);
+    setInviteAudit(nextInvites);
+  }
+
+  async function recordInviteResend(invite: WorkspaceInvite) {
+    if (!workspaceId) {
+      return;
+    }
+
+    try {
+      const updated = await requestJson<WorkspaceInvite>(
+        `/api/workspaces/${workspaceId}/invites/${invite.invite_token}/resend-note`,
+        {
+          method: "POST",
+          body: JSON.stringify({ note: resendNote })
+        }
+      );
+      setLatestInvite(updated);
+      setInviteAudit((current) => current.map((item) => (item.invite_token === updated.invite_token ? updated : item)));
+      setStatusMessage("Invite resend note recorded.");
+    } catch (error) {
+      setStatusMessage(error instanceof Error ? error.message : "Could not record the invite resend note.");
+    }
   }
 
   async function exportSnapshot() {
@@ -924,6 +959,34 @@ export default function CollabFlowHome() {
             </button>
           </div>
           {latestInvite ? <p>Expires at {formatClock(latestInvite.expires_at)}.</p> : null}
+          <label className="field-block">
+            <span>Resend note</span>
+            <input value={resendNote} onChange={(event) => setResendNote(event.target.value)} />
+          </label>
+          <div className="invite-list">
+            {inviteAudit.length === 0 ? <p className="empty-state">No invite audit rows yet.</p> : null}
+            {inviteAudit.map((invite) => {
+              const isExpired = new Date(invite.expires_at).getTime() <= Date.now();
+              const state = invite.accepted_at ? "accepted" : isExpired ? "expired" : "open";
+              return (
+                <article className="invite-row" key={invite.invite_token}>
+                  <div>
+                    <strong>{invite.role}</strong>
+                    <span>{state}</span>
+                    <time>{formatClock(invite.created_at)}</time>
+                  </div>
+                  <div>
+                    <span>resends {invite.resend_count}</span>
+                    <span>{invite.last_resend_at ? formatClock(invite.last_resend_at) : "not resent"}</span>
+                  </div>
+                  <button type="button" onClick={() => void recordInviteResend(invite)} disabled={state === "accepted"}>
+                    Note Resend
+                  </button>
+                  {invite.last_resend_note ? <p>{invite.last_resend_note}</p> : null}
+                </article>
+              );
+            })}
+          </div>
         </section>
 
         <section className="panel-block">

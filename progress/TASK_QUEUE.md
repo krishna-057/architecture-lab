@@ -6,10 +6,11 @@ Tasks should stay small enough for one focused session.
 
 ### Ready
 
-- [ ] Add CollabFlow invite audit and resend notes.
+- [ ] Add CollabFlow final scaling notes and portfolio completion summary.
 
 ### Completed
 
+- [x] Add CollabFlow invite audit and resend notes.
 - [x] Add CollabFlow member list and role management UI.
 - [x] Add CollabFlow invite token membership flow.
 - [x] Add CollabFlow session issuance and logout flow.

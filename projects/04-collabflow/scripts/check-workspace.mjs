@@ -50,9 +50,12 @@ if (
   !appPage.includes("Use Signed Session") ||
   !appPage.includes("Logout") ||
   !appPage.includes("/api/workspaces/${workspaceId}/invites") ||
+  !appPage.includes("/api/workspaces/${workspaceId}/invites/${invite.invite_token}/resend-note") ||
   !appPage.includes("/api/invites/accept") ||
   !appPage.includes("Create Invite") ||
   !appPage.includes("Accept Invite") ||
+  !appPage.includes("Note Resend") ||
+  !appPage.includes("inviteAudit") ||
   !appPage.includes("/api/workspaces/${workspaceId}/members") ||
   !appPage.includes("updateMemberRole") ||
   !appPage.includes("removeMember") ||
@@ -89,10 +92,13 @@ if (
   !apiFile.includes("require_membership") ||
   !apiFile.includes("/api/workspaces/{workspace_id}/members") ||
   !apiFile.includes("/api/workspaces/{workspace_id}/invites") ||
+  !apiFile.includes("/api/workspaces/{workspace_id}/invites/{invite_token}/resend-note") ||
   !apiFile.includes("/api/invites/accept") ||
   !apiFile.includes("collabflow_workspace_invites") ||
   !apiFile.includes("COLLABFLOW_INVITE_TTL_HOURS") ||
   !apiFile.includes("InviteResponse") ||
+  !apiFile.includes("ResendInviteRequest") ||
+  !apiFile.includes("last_resend_note") ||
   !apiFile.includes("persist_invite") ||
   !apiFile.includes("collabflow_yjs_updates") ||
   !apiFile.includes("append_sync_update") ||
@@ -126,6 +132,8 @@ if (
   !schemaFile.includes("collabflow_compaction_checkpoints") ||
   !schemaFile.includes("collabflow_workspace_memberships") ||
   !schemaFile.includes("collabflow_workspace_invites") ||
+  !schemaFile.includes("resend_count") ||
+  !schemaFile.includes("last_resend_note") ||
   !schemaFile.includes("idx_collabflow_workspace_invites_workspace") ||
   !schemaFile.includes("idx_collabflow_snapshots_workspace_created") ||
   !schemaFile.includes("idx_collabflow_yjs_updates_workspace_seq") ||
@@ -146,8 +154,13 @@ if (
 }
 
 const stylesFile = readFileSync("apps/web/src/app/styles.css", "utf8");
-if (!stylesFile.includes(".member-row") || !stylesFile.includes(".member-list")) {
-  throw new Error("Web styles must include stable member management rows.");
+if (
+  !stylesFile.includes(".member-row") ||
+  !stylesFile.includes(".member-list") ||
+  !stylesFile.includes(".invite-row") ||
+  !stylesFile.includes(".invite-list")
+) {
+  throw new Error("Web styles must include stable member and invite audit rows.");
 }
 
 const syncContract = readFileSync("SYNC_CONTRACT.md", "utf8");
@@ -188,6 +201,8 @@ if (
   !membershipNotes.includes("viewer") ||
   !membershipNotes.includes("Non-member workspace access: `404`") ||
   !membershipNotes.includes("POST /api/workspaces/{workspace_id}/invites") ||
+  !membershipNotes.includes("GET /api/workspaces/{workspace_id}/invites") ||
+  !membershipNotes.includes("POST /api/workspaces/{workspace_id}/invites/{invite_token}/resend-note") ||
   !membershipNotes.includes("POST /api/invites/accept") ||
   !membershipNotes.includes("only `editor` or `owner` may send `yjs_update`")
 ) {

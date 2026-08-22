@@ -59,7 +59,7 @@ Authorization must protect both HTTP and websocket boundaries. Viewers may read 
 
 The signed-session runtime path is documented in `docs/signed-session-identity.md`. Sessions identify the user, not workspace roles; every request still loads membership from `collabflow_workspace_memberships`. `POST /api/session` issues the local portfolio session and CSRF cookie, `DELETE /api/session` clears them, cookie-backed mutations require the double-submit CSRF token, and websocket joins bind to the verified session identity instead of trusting a browser-sent `user_id`.
 
-Invite tokens are a narrow membership lifecycle, not an email system. Owners create rows in `collabflow_workspace_invites` with a viewer/editor role and expiry; a signed-in user redeems the token through `POST /api/invites/accept`, which creates their workspace membership and marks the token accepted.
+Invite tokens are a narrow membership lifecycle, not an email system. Owners create rows in `collabflow_workspace_invites` with a viewer/editor role and expiry; a signed-in user redeems the token through `POST /api/invites/accept`, which creates their workspace membership and marks the token accepted. Owners can list invite audit rows and record resend notes against a token, but no email leaves the API in this portfolio slice.
 
 The web shell now exposes the existing member management API directly. Members are listed from `GET /api/workspaces/{workspace_id}/members`; owners can patch roles or remove members, while the API still preserves the last-owner invariant.
 

@@ -70,3 +70,5 @@ Session issuance is intentionally local and boring. `POST /api/session` turns a 
 Invite tokens complete the first collaboration onboarding loop. Owners mint a time-limited token for viewer/editor access, and the joining user redeems it from their own signed session. That demonstrates the distinction between authentication, invitation, and membership authorization without pretending email delivery or organization administration exists yet.
 
 The member management UI is intentionally thin. It lists the API's membership rows and sends role-change or removal requests back to owner-guarded endpoints. That is the right split for this lab: the browser gives operators visibility, while the server still owns authorization and last-owner safety.
+
+Invite audit and resend notes are deliberately scoped to the membership lifecycle. Owners can inspect token state and record that they resent an invite elsewhere, but the API does not claim to deliver email. That keeps the architecture honest until account registration, outbound notification providers, and delivery failure handling are designed.

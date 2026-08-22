@@ -65,7 +65,10 @@ create table if not exists collabflow_workspace_invites (
   created_at timestamptz not null,
   expires_at timestamptz not null,
   accepted_by text,
-  accepted_at timestamptz
+  accepted_at timestamptz,
+  resend_count integer not null default 0,
+  last_resend_at timestamptz,
+  last_resend_note text
 );
 
 create index if not exists idx_collabflow_workspace_invites_workspace

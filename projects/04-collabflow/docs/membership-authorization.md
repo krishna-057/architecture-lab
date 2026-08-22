@@ -21,7 +21,7 @@ These headers are not production authentication. They are a stable local identit
 
 Cookie-backed mutating HTTP requests require the double-submit CSRF token: `X-CollabFlow-CSRF` must match the `collabflow_csrf` cookie. Read routes do not require that header.
 
-Invite tokens allow owners to add collaborators without manually entering another user's identity. `POST /api/workspaces/{workspace_id}/invites` creates a single-use token for `viewer` or `editor` access. `POST /api/invites/accept` lets the signed-in user redeem the token and creates their membership.
+Invite tokens allow owners to add collaborators without manually entering another user's identity. `POST /api/workspaces/{workspace_id}/invites` creates a single-use token for `viewer` or `editor` access. `GET /api/workspaces/{workspace_id}/invites` lists owner-visible invite audit rows. `POST /api/workspaces/{workspace_id}/invites/{invite_token}/resend-note` records resend intent and notes without sending email. `POST /api/invites/accept` lets the signed-in user redeem the token and creates their membership.
 
 ## Roles
 
@@ -63,6 +63,8 @@ This table is intentionally separate from Yjs update history. Membership decides
 | `GET /api/workspaces/{workspace_id}/snapshots` | `viewer`, `editor`, or `owner`. |
 | `POST /api/workspaces/{workspace_id}/snapshots` | `editor` or `owner`. |
 | `POST /api/workspaces/{workspace_id}/invites` | `owner`; creates a time-limited `viewer` or `editor` token. |
+| `GET /api/workspaces/{workspace_id}/invites` | `owner`; lists invite audit rows for the workspace. |
+| `POST /api/workspaces/{workspace_id}/invites/{invite_token}/resend-note` | `owner`; records resend intent without external email delivery. |
 | `POST /api/invites/accept` | Signed-in user; creates membership from a valid token. |
 | `POST /api/workspaces/{workspace_id}/members` | `owner`. |
 | `PATCH /api/workspaces/{workspace_id}/members/{user_id}` | `owner`. |
