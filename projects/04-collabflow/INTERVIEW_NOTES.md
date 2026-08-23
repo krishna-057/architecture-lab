@@ -72,3 +72,9 @@ Invite tokens complete the first collaboration onboarding loop. Owners mint a ti
 The member management UI is intentionally thin. It lists the API's membership rows and sends role-change or removal requests back to owner-guarded endpoints. That is the right split for this lab: the browser gives operators visibility, while the server still owns authorization and last-owner safety.
 
 Invite audit and resend notes are deliberately scoped to the membership lifecycle. Owners can inspect token state and record that they resent an invite elsewhere, but the API does not claim to deliver email. That keeps the architecture honest until account registration, outbound notification providers, and delivery failure handling are designed.
+
+## Final Portfolio Talking Points
+
+The final project is intentionally complete at the architecture-boundary level, not at the SaaS-product level. It demonstrates browser-owned CRDT state, offline persistence, websocket sync, durable snapshots, PostgreSQL update replay primitives, compaction checkpoints, signed sessions, role authorization, invite onboarding, member operations, and scaling notes.
+
+The most important interview framing is scope discipline. CollabFlow names the production hardening work directly: real account management, outbound invite email, shared websocket fanout, scheduled compaction, browser end-to-end tests, observability, and deployment operations. Those are not ignored; they are documented as next steps because the portfolio goal is to prove the collaboration architecture without burying it under unrelated product surface.

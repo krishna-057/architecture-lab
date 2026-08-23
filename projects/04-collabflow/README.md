@@ -14,6 +14,8 @@ The current slice is a local-first workspace shell with a small realtime sync pa
 - `docs/update-log-compaction.md` for the next durable update-log and compaction design
 - `docs/membership-authorization.md` for the workspace membership roles and route authorization contract
 - `docs/signed-session-identity.md` for signed cookie identity, CSRF, websocket session binding, and the remaining account-management gaps
+- `docs/scaling-notes.md` for production scaling pressure points and explicit non-goals
+- `PORTFOLIO_SUMMARY.md` for the final interview/demo summary
 
 ## Architecture Focus
 
@@ -93,3 +95,7 @@ The first realtime contract is documented in `SYNC_CONTRACT.md` and returned by 
 ## Why This Project Matters
 
 This project demonstrates consistency models beyond normal CRUD. It gives strong interview material around collaboration, conflict handling, and offline-first design.
+
+## Portfolio Completion
+
+CollabFlow is complete for the 30-day architecture lab. The implemented slice covers the local-first editor, IndexedDB persistence, websocket sync, presence, snapshots, PostgreSQL-backed durable replay primitives, compaction checkpoints, signed sessions, workspace membership authorization, invite lifecycle, member management, scaling notes, and interview summary. Remaining work is production hardening: real account management, outbound invite email delivery, shared websocket fanout, scheduled compaction, browser end-to-end tests, observability, and deployment operations.

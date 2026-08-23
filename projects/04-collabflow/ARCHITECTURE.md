@@ -106,3 +106,9 @@ PostgreSQL stores workspace metadata and exported snapshots.
 ```
 
 Presence should remain ephemeral awareness state. It should not be written into durable document snapshots because it describes who is currently connected, not the workspace content.
+
+## Scaling And Completion Notes
+
+Production scaling pressure points are documented in `docs/scaling-notes.md`. The main constraints are websocket room fanout across processes, update-tail replay cost before compaction, semantic conflict visibility for offline edits, account-management replacement for local session issuance, and storage growth from snapshots, updates, checkpoints, invites, and membership history.
+
+The final portfolio summary is in `PORTFOLIO_SUMMARY.md`. For the architecture lab, CollabFlow is complete once those tradeoffs are explicit: it proves local-first CRDT collaboration and its durable/auth boundaries, while leaving production hardening as named follow-up work rather than hidden scope.

@@ -2,14 +2,17 @@
 
 Tasks should stay small enough for one focused session.
 
-## Active Project: CollabFlow
+## Active Project: Portfolio Completion
 
 ### Ready
 
-- [ ] Add CollabFlow final scaling notes and portfolio completion summary.
+- [ ] Add final cross-project portfolio index and demo order.
+
+## Completed Project: CollabFlow
 
 ### Completed
 
+- [x] Add CollabFlow final scaling notes and portfolio completion summary.
 - [x] Add CollabFlow invite audit and resend notes.
 - [x] Add CollabFlow member list and role management UI.
 - [x] Add CollabFlow invite token membership flow.
@@ -51,10 +54,6 @@ Tasks should stay small enough for one focused session.
 - [x] Add HookRelay receiver verification example and replay authorization contract.
 - [x] Add HookRelay PostgreSQL schema and BullMQ delivery worker boundary.
 - [x] Add HookRelay scaffold.
-
-## Completed Project: CollabFlow
-
-### Completed
 
 - [x] Implement CollabFlow websocket sync server and browser provider shell.
 - [x] Define CollabFlow websocket sync and presence contract.

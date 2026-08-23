@@ -1,5 +1,27 @@
 # Daily Log
 
+## 2026-08-24
+
+Added CollabFlow final scaling notes and portfolio completion summary.
+
+Added:
+- `docs/scaling-notes.md` with current scale envelope, websocket fanout, durable replay, offline conflict, identity, storage-growth, and production-readiness notes.
+- `PORTFOLIO_SUMMARY.md` with completed capabilities, interview signals, intentional non-goals, demo flow, and final state.
+- README, architecture, decision, interview-note, validation-marker, daily-log, and task-queue updates.
+- Task queue transition marking CollabFlow completed and moving the active queue to the final cross-project portfolio index.
+
+Validated the work by running:
+- `npm run check` from `projects/04-collabflow`
+- `docker compose -f compose.yaml config --quiet` from `projects/04-collabflow`
+- `git diff --check`
+
+Notes:
+- This slice intentionally marks CollabFlow complete at the architecture proof boundary; production account management, shared websocket fanout, scheduled compaction, email delivery, observability, and deployment hardening remain documented follow-up work.
+- `git diff --check` reported only line-ending normalization warnings for touched text files.
+
+Next recommended task:
+- Add final cross-project portfolio index and demo order.
+
 ## 2026-08-23
 
 Added CollabFlow invite audit and resend notes.

@@ -13,9 +13,11 @@ const requiredFiles = [
   "services/api/requirements.txt",
   "services/api/app/main.py",
   "SYNC_CONTRACT.md",
+  "PORTFOLIO_SUMMARY.md",
   "docs/update-log-compaction.md",
   "docs/membership-authorization.md",
-  "docs/signed-session-identity.md"
+  "docs/signed-session-identity.md",
+  "docs/scaling-notes.md"
 ];
 
 const rootPackage = JSON.parse(readFileSync("package.json", "utf8"));
@@ -222,6 +224,28 @@ if (
   !signedSessionNotes.includes("COLLABFLOW_DEV_IDENTITY_HEADERS=true")
 ) {
   throw new Error("Signed session notes must define cookie identity, membership role lookup, CSRF, websocket trust, and dev-header fallback.");
+}
+
+const scalingNotes = readFileSync("docs/scaling-notes.md", "utf8");
+if (
+  !scalingNotes.includes("Websocket Fanout") ||
+  !scalingNotes.includes("Durable Replay And Compaction") ||
+  !scalingNotes.includes("Offline Conflicts") ||
+  !scalingNotes.includes("Membership And Identity") ||
+  !scalingNotes.includes("Production Readiness Checklist")
+) {
+  throw new Error("Scaling notes must define websocket, replay, offline, identity, and production-readiness tradeoffs.");
+}
+
+const portfolioSummary = readFileSync("PORTFOLIO_SUMMARY.md", "utf8");
+if (
+  !portfolioSummary.includes("What Is Complete") ||
+  !portfolioSummary.includes("Main Interview Signals") ||
+  !portfolioSummary.includes("What Is Intentionally Not Included") ||
+  !portfolioSummary.includes("How To Demo") ||
+  !portfolioSummary.includes("portfolio-complete")
+) {
+  throw new Error("Portfolio summary must describe completion, interview signals, non-goals, and demo flow.");
 }
 
 console.log("CollabFlow scaffold and sync contract check passed.");

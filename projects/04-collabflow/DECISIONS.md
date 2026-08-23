@@ -236,3 +236,17 @@ Rejected alternatives:
 - Send email now. That would require provider credentials, templates, delivery retries, and unsubscribe/abuse decisions beyond the collaboration architecture slice.
 - Create a separate invite-events table immediately. A full append-only audit trail is useful later, but the current portfolio UI only needs the token row plus latest resend metadata.
 - Allow editors to resend invites. Invite lifecycle changes remain owner-only because they grant workspace access.
+
+## Mark CollabFlow complete at the architecture proof boundary
+
+Decision:
+CollabFlow is now marked portfolio-complete for the 30-day architecture lab after adding final scaling notes and a portfolio summary.
+
+Why:
+The project has proven the intended architecture signals: browser-owned Yjs state, offline IndexedDB persistence, websocket update fanout, ephemeral presence, durable snapshots, PostgreSQL update replay primitives, compaction checkpoints, signed sessions, workspace roles, invites, member management, and documented scaling pressure points. Continuing into production account management or infrastructure would be useful, but it would move beyond the lab's goal of focused, defensible architecture slices.
+
+Rejected alternatives:
+
+- Add OAuth before marking complete. OAuth is important for production, but the project already proves session verification and role authorization without provider setup.
+- Build a websocket cluster now. Shared fanout is documented as the next scale step; implementing it would add operational machinery beyond the portfolio scope.
+- Add a rich text editor. Rich text would improve product feel, but it is not needed to demonstrate CRDT ownership, durable replay, and authorization boundaries.
