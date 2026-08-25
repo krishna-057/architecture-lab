@@ -6,7 +6,11 @@ Tasks should stay small enough for one focused session.
 
 ### Ready
 
-- [ ] Add final cross-project portfolio index and demo order.
+- [ ] Archive daily automation plan and identify post-lab maintenance cadence.
+
+### Completed
+
+- [x] Add final cross-project portfolio index and demo order.
 
 ## Completed Project: CollabFlow
 

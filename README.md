@@ -2,6 +2,8 @@
 
 Five full-stack architecture projects built over 30 days, focused on interview-grade engineering depth without unnecessary overengineering.
 
+Use `PORTFOLIO_INDEX.md` for the recommended demo order, project repository map, cross-project themes, and interview positioning.
+
 ## Projects
 
 1. `FlashReserve`: high-concurrency flash sale reservations.

@@ -1,5 +1,26 @@
 # Daily Log
 
+## 2026-08-25
+
+Added final cross-project portfolio index and demo order.
+
+Added:
+- `PORTFOLIO_INDEX.md` with recommended demo order, project map, interview positioning, cross-project themes, and final demo checklist.
+- Root README pointer to the portfolio index.
+- `scripts/check-portfolio-index.mjs` to validate required portfolio files, repository links, project markers, and README linkage.
+- Task queue update moving the portfolio index task to completed and queuing post-lab automation maintenance.
+
+Validated the work by running:
+- `node scripts/check-portfolio-index.mjs`
+- `git diff --check`
+
+Notes:
+- The index presents the five projects as architecture proofs and names intentional non-goals to avoid overclaiming production completeness.
+- `git diff --check` reported only line-ending normalization warnings for touched text files.
+
+Next recommended task:
+- Archive daily automation plan and identify post-lab maintenance cadence.
+
 ## 2026-08-24
 
 Added CollabFlow final scaling notes and portfolio completion summary.
