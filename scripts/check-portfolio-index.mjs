@@ -3,6 +3,7 @@ import { existsSync, readFileSync } from "node:fs";
 const requiredFiles = [
   "PORTFOLIO_INDEX.md",
   "MASTER_PLAN.md",
+  "docs/post-lab-maintenance.md",
   "docs/project-repositories.md",
   "projects/01-flashreserve/README.md",
   "projects/02-pocketsentinel/README.md",
@@ -42,8 +43,24 @@ for (const marker of requiredMarkers) {
 }
 
 const readme = readFileSync("README.md", "utf8");
-if (!readme.includes("PORTFOLIO_INDEX.md")) {
-  throw new Error("Root README must link to PORTFOLIO_INDEX.md.");
+if (!readme.includes("PORTFOLIO_INDEX.md") || !readme.includes("docs/post-lab-maintenance.md")) {
+  throw new Error("Root README must link to PORTFOLIO_INDEX.md and docs/post-lab-maintenance.md.");
+}
+
+const maintenance = readFileSync("docs/post-lab-maintenance.md", "utf8");
+const maintenanceMarkers = [
+  "Recommended Cadence",
+  "Weekly Review",
+  "Monthly Maintenance",
+  "Before An Interview",
+  "Stop Conditions For Daily Automation",
+  "Future Task Intake"
+];
+
+for (const marker of maintenanceMarkers) {
+  if (!maintenance.includes(marker)) {
+    throw new Error(`Post-lab maintenance plan is missing marker: ${marker}`);
+  }
 }
 
 console.log("Portfolio index check passed.");

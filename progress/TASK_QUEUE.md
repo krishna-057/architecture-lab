@@ -6,10 +6,11 @@ Tasks should stay small enough for one focused session.
 
 ### Ready
 
-- [ ] Archive daily automation plan and identify post-lab maintenance cadence.
+No active Ready tasks. The 30-day architecture lab is archived; add future work only when there is a specific portfolio-hardening goal.
 
 ### Completed
 
+- [x] Archive daily automation plan and identify post-lab maintenance cadence.
 - [x] Add final cross-project portfolio index and demo order.
 
 ## Completed Project: CollabFlow

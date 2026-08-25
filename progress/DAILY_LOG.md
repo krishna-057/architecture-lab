@@ -1,5 +1,26 @@
 # Daily Log
 
+## 2026-08-26
+
+Archived daily automation plan and identified post-lab maintenance cadence.
+
+Added:
+- `docs/post-lab-maintenance.md` with weekly review, monthly maintenance, pre-interview prep, daily automation stop conditions, and future task intake rules.
+- Root README pointer to the maintenance plan.
+- Portfolio validation markers for the maintenance plan.
+- Task queue update closing the final Ready task and leaving no active Ready tasks.
+
+Validated the work by running:
+- `node scripts/check-portfolio-index.mjs`
+- `git diff --check`
+
+Notes:
+- The daily build cadence should stop after this archive commit is pushed; future automation should be created only for a specific portfolio-hardening goal.
+- `git diff --check` reported only line-ending normalization warnings for touched text files.
+
+Next recommended task:
+- No active Ready task. Use the post-lab maintenance cadence instead of daily churn.
+
 ## 2026-08-25
 
 Added final cross-project portfolio index and demo order.
